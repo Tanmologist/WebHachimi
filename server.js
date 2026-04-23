@@ -6,14 +6,22 @@
 //   GET  /                      → 重定向到 index.html
 //   GET  /<file>                → 静态文件
 //   GET  /api/scene             → 返回当前 scene.json（首次为空）
+//   GET  /api/scenes            → 列出所有 scene-*.json 文件
+//   GET  /api/scene/:id         → 加载指定 scene-<id>.json
+//   POST /api/scene/:id/save    → 保存到指定 scene-<id>.json
 //   POST /api/save              → 接收完整场景，自动拆分附件到 assets/，写 scene.json
 //   GET  /api/health            → 健康检查
+//   WS   /ws                    → WebSocket 广播总线（所有客户端互发消息）
 'use strict';
 const http = require('http');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
 const url = require('url');
+
+// WebSocket 支持（需要 npm install ws）
+let WebSocketServer = null;
+try { WebSocketServer = require('ws').WebSocketServer; } catch (e) {}
 
 const ROOT = __dirname;
 const ASSETS_DIR = path.join(ROOT, 'assets');
@@ -195,6 +203,37 @@ const server = http.createServer(async (req, res) => {
       if (!r.ok) return send(res, 500, { ok: false, error: r.error });
       return send(res, 200, { ok: true, scene: r.scene, empty: !!r.empty });
     }
+    // === 多场景管理 ===
+    // GET /api/scenes → 列出所有 scene-*.json
+    if (pathname === '/api/scenes' && req.method === 'GET') {
+      const files = fs.readdirSync(ROOT).filter(f => /^scene(-\w+)?\.json$/.test(f));
+      const scenes = files.map(f => ({ id: f.replace(/^scene-?(.*)\.json$/, '$1') || 'default', file: f }));
+      return send(res, 200, { ok: true, scenes });
+    }
+    // GET /api/scene/:id → 加载 scene-<id>.json
+    const sceneLoadMatch = pathname.match(/^\/api\/scene\/([a-zA-Z0-9_-]+)$/);
+    if (sceneLoadMatch && req.method === 'GET') {
+      const sceneId = sceneLoadMatch[1];
+      const file = path.join(ROOT, 'scene-' + sceneId + '.json');
+      if (!fs.existsSync(file)) return send(res, 404, { ok: false, error: '场景 ' + sceneId + ' 不存在' });
+      try {
+        const raw = await fsp.readFile(file, 'utf8');
+        return send(res, 200, { ok: true, scene: JSON.parse(raw), sceneId });
+      } catch (e) { return send(res, 500, { ok: false, error: e.message }); }
+    }
+    // POST /api/scene/:id/save → 保存到 scene-<id>.json
+    const sceneSaveMatch = pathname.match(/^\/api\/scene\/([a-zA-Z0-9_-]+)\/save$/);
+    if (sceneSaveMatch && req.method === 'POST') {
+      const sceneId = sceneSaveMatch[1];
+      const file = path.join(ROOT, 'scene-' + sceneId + '.json');
+      const buf = await readBody(req, 200 * 1024 * 1024);
+      let payload;
+      try { payload = JSON.parse(buf.toString('utf8')); }
+      catch (e) { return send(res, 400, { ok: false, error: 'JSON 解析失败' }); }
+      const scene = payload && payload.scene ? payload.scene : payload;
+      await fsp.writeFile(file, JSON.stringify(scene, null, 2), 'utf8');
+      return send(res, 200, { ok: true, saved: 'scene-' + sceneId + '.json' });
+    }
     if (pathname === '/api/save' && req.method === 'POST') {
       const buf = await readBody(req, 200 * 1024 * 1024); // 200MB cap
       let payload;
@@ -240,6 +279,44 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { ok: true, entries: [] });
       }
     }
+    // POST /api/inject-objects  { objects: [...], tasks?: [...] }
+    // 把 objects 合并进 scene.json（ID 已存在则跳过），可选更新 globalTasks
+    if (pathname === '/api/inject-objects' && req.method === 'POST') {
+      const buf = await readBody(req, 5 * 1024 * 1024);
+      let payload;
+      try { payload = JSON.parse(buf.toString('utf8')); }
+      catch (e) { return send(res, 400, { ok: false, error: 'JSON 解析失败' }); }
+      const r = await loadScene();
+      if (!r.ok) return send(res, 500, { ok: false, error: r.error });
+      const scene = r.scene || { kind: 'webhachimi-scene', version: 2, objects: [], globalTasks: [], nextId: 1 };
+      if (!Array.isArray(scene.objects)) scene.objects = [];
+      const existing = new Set(scene.objects.map(o => o.id));
+      let added = 0;
+      for (const obj of (payload.objects || [])) {
+        if (!existing.has(obj.id)) {
+          scene.objects.push(obj);
+          existing.add(obj.id);
+          added++;
+        }
+      }
+      // 更新 nextId 以反映新对象
+      const maxNum = scene.objects.reduce((m, o) => {
+        const n = parseInt((o.id || '').replace(/\D/g, ''), 10);
+        return isNaN(n) ? m : Math.max(m, n);
+      }, 0);
+      if (maxNum >= (scene.nextId || 0)) scene.nextId = maxNum + 1;
+      // 可选：合并更新 globalTasks
+      if (Array.isArray(payload.tasks)) {
+        if (!Array.isArray(scene.globalTasks)) scene.globalTasks = [];
+        for (const t of payload.tasks) {
+          const idx = scene.globalTasks.findIndex(x => x.id === t.id);
+          if (idx >= 0) Object.assign(scene.globalTasks[idx], t);
+          else scene.globalTasks.push(t);
+        }
+      }
+      await fsp.writeFile(SCENE_FILE, JSON.stringify(scene, null, 2), 'utf8');
+      return send(res, 200, { ok: true, added, nextId: scene.nextId });
+    }
 
     // === 静态文件 ===
     let target = pathname === '/' ? '/index.html' : pathname;
@@ -265,6 +342,28 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log('  仅监听 127.0.0.1（外网无法访问）');
   console.log('  按 Ctrl+C 停止');
   console.log('═══════════════════════════════════════════');
+
+  // ─── WebSocket 广播总线 ───
+  if (WebSocketServer) {
+    const wss = new WebSocketServer({ server });
+    const clients = new Set();
+    wss.on('connection', function (ws) {
+      clients.add(ws);
+      ws.on('message', function (msg) {
+        // 广播给所有其他客户端
+        clients.forEach(function (c) {
+          if (c !== ws && c.readyState === 1 /* OPEN */) c.send(msg);
+        });
+      });
+      ws.on('close', function () { clients.delete(ws); });
+      ws.on('error', function () { clients.delete(ws); });
+      ws.send(JSON.stringify({ type: 'hello', port: PORT }));
+    });
+    console.log('  WebSocket: ws://localhost:' + PORT + '/ws (通过 server upgrade)');
+  } else {
+    console.log('  WebSocket 未启用（运行 npm install 可启用）');
+  }
+
   // 自动开浏览器
   if (!process.env.WEBHACHIMI_NO_BROWSER) {
     const { exec } = require('child_process');

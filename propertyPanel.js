@@ -79,6 +79,35 @@
       const v = Number(e.target.value);
       updateSelected({ opacity: Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1 });
     });
+    if (refs.uiSpaceInput) {
+      refs.uiSpaceInput.addEventListener('change', function (e) {
+        updateSelected({ uiSpace: e.target.checked });
+      });
+    }
+    if (refs.anchorXInput) {
+      refs.anchorXInput.addEventListener('input', function (e) {
+        const v = e.target.value.trim();
+        updateSelected({ anchorX: v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null) });
+      });
+    }
+    if (refs.anchorYInput) {
+      refs.anchorYInput.addEventListener('input', function (e) {
+        const v = e.target.value.trim();
+        updateSelected({ anchorY: v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null) });
+      });
+    }
+    if (refs.widthPctInput) {
+      refs.widthPctInput.addEventListener('input', function (e) {
+        const v = e.target.value.trim();
+        updateSelected({ widthPct: v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null) });
+      });
+    }
+    if (refs.heightPctInput) {
+      refs.heightPctInput.addEventListener('input', function (e) {
+        const v = e.target.value.trim();
+        updateSelected({ heightPct: v === '' ? null : (Number.isFinite(Number(v)) ? Number(v) : null) });
+      });
+    }
   }
 
   function updateSelected(patch) {
@@ -143,11 +172,17 @@
       '<label class="field"><span>描边色</span><input id="strokeInput" type="color" /></label>' +
       '<label class="field"><span>描边</span><input id="strokeWidthInput" type="number" min="0" max="20" step="1" /></label>' +
       '<label class="field"><span>不透明度</span><input id="opacityInput" type="number" min="0" max="1" step="0.05" /></label>' +
-      '<label class="field"><span>X</span><input id="xInput" type="number" step="1" /></label>' +
-      '<label class="field"><span>Y</span><input id="yInput" type="number" step="1" /></label>' +
+      '<label class="field"><span>X 偏移</span><input id="xInput" type="number" step="1" /></label>' +
+      '<label class="field"><span>Y 偏移</span><input id="yInput" type="number" step="1" /></label>' +
       '<label class="field"><span>宽</span><input id="widthInput" type="number" min="40" step="1" /></label>' +
       '<label class="field"><span>高</span><input id="heightInput" type="number" min="40" step="1" /></label>' +
-      '<label class="field"><span>旋转°</span><input id="rotationInput" type="number" step="1" /></label>';
+      '<label class="field"><span>旋转°</span><input id="rotationInput" type="number" step="1" /></label>' +
+      '<div class="props-section-head">锚点布局 (UI)</div>' +
+      '<label class="field"><span>屏幕空间</span><input id="uiSpaceInput" type="checkbox" /></label>' +
+      '<label class="field"><span>锚 X <small>0~1</small></span><input id="anchorXInput" type="number" min="0" max="1" step="0.05" placeholder="不使用" /></label>' +
+      '<label class="field"><span>锚 Y <small>0~1</small></span><input id="anchorYInput" type="number" min="0" max="1" step="0.05" placeholder="不使用" /></label>' +
+      '<label class="field"><span>宽% <small>0~1</small></span><input id="widthPctInput" type="number" min="0" max="1" step="0.05" placeholder="不使用" /></label>' +
+      '<label class="field"><span>高% <small>0~1</small></span><input id="heightPctInput" type="number" min="0" max="1" step="0.05" placeholder="不使用" /></label>';
     dom.propsBody.appendChild(form);
 
     const saveBar = document.createElement('div');
@@ -178,6 +213,11 @@
       widthInput: form.querySelector('#widthInput'),
       heightInput: form.querySelector('#heightInput'),
       rotationInput: form.querySelector('#rotationInput'),
+      uiSpaceInput: form.querySelector('#uiSpaceInput'),
+      anchorXInput: form.querySelector('#anchorXInput'),
+      anchorYInput: form.querySelector('#anchorYInput'),
+      widthPctInput: form.querySelector('#widthPctInput'),
+      heightPctInput: form.querySelector('#heightPctInput'),
     };
     refs.nameInput.value = sel.name;
     refs.fillInput.value = (typeof sel.fill === 'string' && /^#[0-9a-fA-F]{6}$/.test(sel.fill)) ? sel.fill : '#9ca3af';
@@ -189,6 +229,11 @@
     refs.widthInput.value = String(Math.round(S.getShapeWidth(sel)));
     refs.heightInput.value = String(Math.round(S.getShapeHeight(sel)));
     refs.rotationInput.value = String(Math.round(sel.rotation || 0));
+    refs.uiSpaceInput.checked = Boolean(sel.uiSpace);
+    refs.anchorXInput.value = sel.anchorX !== null && sel.anchorX !== undefined ? String(sel.anchorX) : '';
+    refs.anchorYInput.value = sel.anchorY !== null && sel.anchorY !== undefined ? String(sel.anchorY) : '';
+    refs.widthPctInput.value = sel.widthPct !== null && sel.widthPct !== undefined ? String(sel.widthPct) : '';
+    refs.heightPctInput.value = sel.heightPct !== null && sel.heightPct !== undefined ? String(sel.heightPct) : '';
     bindPropertyInputs(refs);
 
     const children = S.getChildren(sel.id);

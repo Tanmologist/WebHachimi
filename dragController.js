@@ -22,6 +22,7 @@
     startWidth: 0, startHeight: 0,
     startPivotX: 0.5, startPivotY: 0.5,
     startAngle: 0, startRotation: 0,
+    multiOffsets: {},  // 多选联动：{ id: {dx, dy} } 相对主对象的偏移
   };
 
   function init(deps) {
@@ -48,9 +49,15 @@
     };
   }
 
-  function onShapeClick(shape) {
+  function onShapeClick(shape, event) {
     if (!S.state.editMode) return;
-    S.state.selectedId = shape.id;
+    if (event && (event.shiftKey || event.ctrlKey || event.metaKey)) {
+      // Shift/Ctrl 点击：切换进/出多选集合
+      S.toggleSelection(shape.id);
+    } else {
+      // 普通点击：单选
+      S.setSelection(shape.id);
+    }
     requestRender();
   }
 
@@ -60,14 +67,28 @@
 
   function onShapePointerDown(shape, event, node) {
     S.recordUndo('拖动');
-    const pointer = E.screenToWorld(event.clientX, event.clientY);
+    const pointer = shape.uiSpace ? E.screenToStage(event.clientX, event.clientY) : E.screenToWorld(event.clientX, event.clientY);
     dragState.active = true;
     dragState.objectId = shape.id;
     dragState.mode = 'move';
     dragState.offsetX = pointer.x - shape.x;
     dragState.offsetY = pointer.y - shape.y;
+    // 如果当前对象不在多选集合里（或没按 Shift），先单选它
+    if (!event.shiftKey && !S.state.selectedIds.has(shape.id)) {
+      S.setSelection(shape.id);
+    } else if (!S.state.selectedIds.has(shape.id)) {
+      S.addToSelection(shape.id);
+    } else {
+      S.state.selectedId = shape.id;
+    }
+    // 记录其它选中对象相对主对象的偏移（联动移动用）
+    dragState.multiOffsets = {};
+    S.state.selectedIds.forEach(function (id) {
+      if (id === shape.id) return;
+      var obj = S.getObjectById(id);
+      if (obj) dragState.multiOffsets[id] = { dx: obj.x - shape.x, dy: obj.y - shape.y };
+    });
     if (node.setPointerCapture) node.setPointerCapture(event.pointerId);
-    S.state.selectedId = shape.id;
     requestRender();
   }
 
@@ -109,7 +130,7 @@
     if (!dragState.active || !dragState.objectId || !S.state.editMode) return false;
     const target = S.getObjectById(dragState.objectId);
     if (!target) return false;
-    const pointer = E.screenToWorld(e.clientX, e.clientY);
+    const pointer = target.uiSpace ? E.screenToStage(e.clientX, e.clientY) : E.screenToWorld(e.clientX, e.clientY);
 
     if (dragState.mode === 'resize') {
       const ref = {
@@ -158,8 +179,21 @@
 
     // move
     const next = E.snapMove(target, pointer.x - dragState.offsetX, pointer.y - dragState.offsetY);
+    const prevX = target.x, prevY = target.y;
     target.x = next.x; target.y = next.y;
     S.ensureObjectInStage(target);
+    // 联动移动其它选中对象
+    const moveDx = target.x - prevX;
+    const moveDy = target.y - prevY;
+    if (moveDx !== 0 || moveDy !== 0) {
+      Object.keys(dragState.multiOffsets).forEach(function (id) {
+        var obj = S.getObjectById(id);
+        if (!obj) return;
+        obj.x = Math.round(obj.x + moveDx);
+        obj.y = Math.round(obj.y + moveDy);
+        S.ensureObjectInStage(obj);
+      });
+    }
     requestStageRender();
     return true;
   }

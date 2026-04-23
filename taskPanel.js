@@ -8,11 +8,28 @@
   let setMessage;
   let requestRender;
 
+  // 是否显示已完成任务（默认隐藏）
+  let showDone = false;
+  // 动态注入的"显示已完成"切换按钮
+  let doneToggleBtn = null;
+
   function init(deps) {
     dom = deps.dom;
     setMessage = deps.setMessage;
     requestRender = deps.requestRender;
     bindEvents();
+    // 注入"显示已完成"切换按钮（紧靠 addTaskBtn）
+    doneToggleBtn = document.createElement('button');
+    doneToggleBtn.type = 'button';
+    doneToggleBtn.className = 'inline-mini-button';
+    doneToggleBtn.style.fontSize = '0.68rem';
+    doneToggleBtn.title = '显示/隐藏已完成任务';
+    doneToggleBtn.textContent = '显示完成';
+    dom.addTaskBtn.insertAdjacentElement('afterend', doneToggleBtn);
+    doneToggleBtn.addEventListener('click', function () {
+      showDone = !showDone;
+      requestRender();
+    });
   }
 
   function bindEvents() {
@@ -22,6 +39,20 @@
       const value = dom.commandInput.value.trim();
       if (!value) { setMessage('先写一段备注或任务。', 'error'); return; }
       S.recordUndo('新建任务');
+      if (ctx.scope === 'group') {
+        // 群体：命令记录到所有选中对象
+        ctx.selectedObjects.forEach(function (obj) {
+          obj.tasks = obj.tasks || [];
+          const t = createTask(getNextTopLevelTaskPath(obj.tasks));
+          t.text = value;
+          obj.tasks.push(t);
+        });
+        dom.commandInput.value = '';
+        S.captureBaseline();
+        requestRender();
+        setMessage('已记录到 ' + ctx.selectedObjects.length + ' 个对象。');
+        return;
+      }
       const task = createTask(getNextTopLevelTaskPath(ctx.tasks));
       task.text = value;
       ctx.tasks.push(task);
@@ -68,6 +99,17 @@
   }
 
   function getCurrentContext() {
+    const selectedObjs = S.getSelectedObjects ? S.getSelectedObjects() : [];
+    // 群体模式：2 个或以上对象同时选中
+    if (selectedObjs.length > 1) {
+      return {
+        scope: 'group',
+        label: selectedObjs.length + ' 个对象（群体）',
+        subtitle: '添加任务会同时写入所有选中对象。',
+        tasks: [],
+        selectedObjects: selectedObjs,
+      };
+    }
     const sel = S.getSelectedObject();
     if (sel) {
       sel.tasks = sel.tasks || [];
@@ -90,6 +132,19 @@
 
   function addTopLevelTask() {
     const ctx = getCurrentContext();
+    if (ctx.scope === 'group') {
+      // 群体任务：同步添加到所有选中对象
+      S.recordUndo('群体新建任务');
+      ctx.selectedObjects.forEach(function (obj) {
+        obj.tasks = obj.tasks || [];
+        const t = createTask(getNextTopLevelTaskPath(obj.tasks));
+        obj.tasks.push(t);
+      });
+      S.captureBaseline();
+      requestRender();
+      setMessage('已向 ' + ctx.selectedObjects.length + ' 个对象各添加一条任务。');
+      return;
+    }
     S.recordUndo('新建任务');
     const t = createTask(getNextTopLevelTaskPath(ctx.tasks));
     ctx.tasks.push(t);
@@ -121,23 +176,74 @@
   }
 
   function renderHeader(ctx) {
-    dom.drawerEyebrow.textContent = ctx.scope === 'global' ? '全局' : '对象';
+    dom.drawerEyebrow.textContent = ctx.scope === 'global' ? '全局' : ctx.scope === 'group' ? '群体' : '对象';
     dom.drawerTitle.textContent = ctx.label;
     dom.drawerSubtitle.textContent = ctx.subtitle;
     dom.commandInput.placeholder = ctx.scope === 'global'
       ? '例如：整个页面需要支持暗色主题…'
-      : '例如：' + ctx.label + ' 还需要支持锁定';
+      : ctx.scope === 'group'
+        ? '例如：所有选中对象都需要支持点击反馈…'
+        : '例如：' + ctx.label + ' 还需要支持锁定';
+    // 更新"显示已完成"按钮文字
+    if (doneToggleBtn) {
+      const tasks = ctx.scope === 'group'
+        ? ctx.selectedObjects.reduce(function (acc, o) { return acc.concat(o.tasks || []); }, [])
+        : ctx.tasks || [];
+      const doneCount = tasks.filter(function (t) { return t.done; }).length;
+      doneToggleBtn.textContent = showDone ? '隐藏完成' : ('显示完成' + (doneCount ? ' (' + doneCount + ')' : ''));
+      doneToggleBtn.style.opacity = doneCount ? '1' : '0.4';
+    }
   }
 
   function renderList(ctx) {
     dom.contextTaskList.innerHTML = '';
-    const ordered = sortTasks(ctx.tasks);
+    // 群体模式
+    if (ctx.scope === 'group') {
+      const allTasks = [];
+      ctx.selectedObjects.forEach(function (obj) {
+        (obj.tasks || []).forEach(function (t) {
+          if (!showDone && t.done) return;
+          allTasks.push({ obj: obj, task: t });
+        });
+      });
+      if (!allTasks.length) {
+        const empty = document.createElement('div');
+        empty.className = 'task-empty';
+        empty.textContent = showDone
+          ? '所有选中对象都没有任务。点"添加任务"会同时写入所有对象。'
+          : '没有未完成任务。点"显示完成"查看已完成。';
+        dom.contextTaskList.appendChild(empty);
+      } else {
+        allTasks.forEach(function (entry) {
+          const row = document.createElement('div');
+          row.className = 'task-card' + (entry.task.done ? ' done' : '');
+          row.style.marginLeft = '0';
+          const badge = document.createElement('strong');
+          badge.className = 'task-card-title';
+          badge.style.display = 'block';
+          badge.textContent = entry.obj.name + ' · ' + entry.task.path;
+          const text = document.createElement('p');
+          text.style.cssText = 'margin:2px 0 0;font-size:0.72rem;color:var(--muted);';
+          text.textContent = entry.task.text || '（无内容）';
+          row.append(badge, text);
+          dom.contextTaskList.appendChild(row);
+        });
+      }
+      return;
+    }
+    // 过滤
+    const source = sortTasks(ctx.tasks);
+    const ordered = showDone ? source : source.filter(function (t) { return !t.done; });
     if (!ordered.length) {
       const empty = document.createElement('div');
       empty.className = 'task-empty';
-      empty.textContent = ctx.scope === 'global'
-        ? '还没有全局任务。可以在上面输入框写一句保存。'
-        : '这个对象还没有任务。可以在上面输入框写一句保存。';
+      if (source.length && !showDone) {
+        empty.textContent = '所有任务均已完成 ✓  点"显示完成"查看。';
+      } else {
+        empty.textContent = ctx.scope === 'global'
+          ? '还没有全局任务。可以在上面输入框写一句保存。'
+          : '这个对象还没有任务。可以在上面输入框写一句保存。';
+      }
       dom.contextTaskList.appendChild(empty);
       return;
     }
@@ -269,6 +375,75 @@
       ingestFiles(task, files, attachBox);
     });
 
+    // ── 追问区 ──────────────────────────────────────────
+    const replySection = document.createElement('div');
+    replySection.className = 'task-reply-section';
+    // 已有回复列表
+    const replyList = document.createElement('div');
+    replyList.className = 'task-reply-list';
+    function renderReplies() {
+      replyList.innerHTML = '';
+      (task.replies || []).forEach(function (r) {
+        const rRow = document.createElement('div');
+        rRow.className = 'task-reply-row';
+        const rTs = document.createElement('span');
+        rTs.className = 'task-reply-ts';
+        rTs.textContent = r.ts ? new Date(r.ts).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+        const rText = document.createElement('span');
+        rText.className = 'task-reply-text';
+        rText.textContent = r.text;
+        rRow.append(rTs, rText);
+        replyList.appendChild(rRow);
+      });
+    }
+    renderReplies();
+    // 追问按钮 + 输入行
+    const replyToggleBtn = document.createElement('button');
+    replyToggleBtn.type = 'button';
+    replyToggleBtn.className = 'inline-mini-button';
+    replyToggleBtn.style.fontSize = '0.68rem';
+    replyToggleBtn.textContent = '＋ 追问';
+    const replyInputRow = document.createElement('div');
+    replyInputRow.className = 'task-reply-input-row';
+    replyInputRow.style.display = 'none';
+    const replyInput = document.createElement('textarea');
+    replyInput.className = 'task-text';
+    replyInput.rows = 1;
+    replyInput.placeholder = '追问或补充说明…';
+    replyInput.style.cssText = 'min-height:28px;resize:vertical;';
+    const replySubmit = document.createElement('button');
+    replySubmit.type = 'button';
+    replySubmit.className = 'primary-pill';
+    replySubmit.style.fontSize = '0.72rem';
+    replySubmit.textContent = '发送';
+    replyInputRow.append(replyInput, replySubmit);
+    replyToggleBtn.addEventListener('click', function () {
+      const visible = replyInputRow.style.display !== 'none';
+      replyInputRow.style.display = visible ? 'none' : 'flex';
+      if (!visible) {
+        replyInput.focus();
+        // 展开后滚动到可见区域
+        requestAnimationFrame(function () {
+          replyInputRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+      }
+    });
+    replySubmit.addEventListener('click', function () {
+      const text = replyInput.value.trim();
+      if (!text) return;
+      task.replies = task.replies || [];
+      task.replies.push({ id: 'r-' + Date.now(), text: text, ts: new Date().toISOString() });
+      replyInput.value = '';
+      replyInputRow.style.display = 'none';
+      S.persistState();
+      renderReplies();
+    });
+    replyInput.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') replySubmit.click();
+    });
+    replySection.append(replyList, replyToggleBtn, replyInputRow);
+    card.append(replySection);
+
     return card;
   }
 
@@ -334,6 +509,21 @@
         img.src = att.dataUrl;
         img.alt = att.name;
         img.className = 'attach-thumb';
+        img.style.cursor = 'zoom-in';
+        img.title = '点击预览';
+        img.addEventListener('click', function () {
+          const backdrop = document.createElement('div');
+          backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:zoom-out;gap:10px;';
+          const bigImg = document.createElement('img');
+          bigImg.src = att.dataUrl;
+          bigImg.style.cssText = 'max-width:90vw;max-height:85vh;object-fit:contain;border-radius:6px;box-shadow:0 8px 48px rgba(0,0,0,0.6);';
+          const label = document.createElement('p');
+          label.textContent = att.name;
+          label.style.cssText = 'color:rgba(255,255,255,0.6);font-size:0.78rem;margin:0;';
+          backdrop.append(bigImg, label);
+          backdrop.addEventListener('click', function () { document.body.removeChild(backdrop); });
+          document.body.appendChild(backdrop);
+        });
         item.appendChild(img);
       } else {
         const icon = document.createElement('span');

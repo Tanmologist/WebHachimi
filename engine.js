@@ -9,12 +9,13 @@
   const getShapePivotX = S.getShapePivotX;
   const getShapePivotY = S.getShapePivotY;
 
-  let stage, world, zoomBadge;
+  let stage, world, zoomBadge, uiLayer;
 
   function bindDom(refs) {
     stage = refs.stage;
     world = refs.world;
     zoomBadge = refs.zoomBadge;
+    uiLayer = refs.uiLayer || null;
   }
 
   function getObjectCenter(shape) {
@@ -113,6 +114,12 @@
     };
   }
 
+  // uiSpace 对象用：屏幕坐标直接映射到舒台内坐标（不除摄像机偏移）
+  function screenToStage(clientX, clientY) {
+    const rect = getStageRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
   function getViewportCenterWorld() {
     const rect = getStageRect();
     return screenToWorld(rect.left + rect.width / 2, rect.top + rect.height / 2);
@@ -132,35 +139,67 @@
   }
 
   function getShapeStyle(shape) {
-    return {
-      background: shape.fill || '#9ca3af',
+    const style = {
       borderStyle: 'solid',
       borderColor: shape.stroke || '#1f2937',
       borderWidth: (Number.isFinite(shape.strokeWidth) ? shape.strokeWidth : 1) + 'px',
       opacity: String(Number.isFinite(shape.opacity) ? shape.opacity : 1),
     };
+    if (shape.sprite) {
+      // 精灵图 / 静态图 / GIF（浏览器自动播放 GIF）
+      style.backgroundImage = 'url("' + shape.sprite + '")';
+      style.backgroundSize   = shape.spriteFit || 'cover';
+      style.backgroundPosition = 'center';
+      style.backgroundRepeat   = 'no-repeat';
+      style.backgroundColor    = shape.fill || 'transparent';
+    } else {
+      style.background = shape.fill || '#9ca3af';
+    }
+    return style;
   }
 
   function renderStage(handlers) {
     if (!world) return;
     world.innerHTML = '';
+    if (uiLayer) uiLayer.innerHTML = '';
     S.state.objects.forEach(function (shape) {
       const width = getShapeWidth(shape);
       const height = getShapeHeight(shape);
       const pivotX = getShapePivotX(shape);
       const pivotY = getShapePivotY(shape);
+      const isUI = shape.uiSpace === true;
       const node = document.createElement('button');
       node.type = 'button';
       node.className = 'shape-node';
       if (shape.id === S.state.selectedId && S.state.editMode) node.classList.add('selected');
+      if (S.state.editMode && S.state.selectedIds && S.state.selectedIds.has(shape.id)) node.classList.add('selected');
       if (shape.isHitbox) node.classList.add('is-hitbox');
       if (shape.parentId) node.classList.add('is-child');
+      if (isUI) node.classList.add('is-ui-space');
 
       node.dataset.id = shape.id;
-      node.style.left = shape.x + 'px';
-      node.style.top = shape.y + 'px';
-      node.style.width = width + 'px';
-      node.style.height = height + 'px';
+      // 锚点定位（仅 uiSpace 对象支持）
+      if (isUI && Number.isFinite(shape.anchorX)) {
+        node.style.left = 'calc(' + (shape.anchorX * 100) + '% + ' + (shape.x || 0) + 'px)';
+      } else {
+        node.style.left = shape.x + 'px';
+      }
+      if (isUI && Number.isFinite(shape.anchorY)) {
+        node.style.top = 'calc(' + (shape.anchorY * 100) + '% + ' + (shape.y || 0) + 'px)';
+      } else {
+        node.style.top = shape.y + 'px';
+      }
+      // 百分比宽高（仅 uiSpace 对象支持）
+      if (isUI && shape.widthPct) {
+        node.style.width = 'calc(' + (shape.widthPct * 100) + '%)';
+      } else {
+        node.style.width = width + 'px';
+      }
+      if (isUI && shape.heightPct) {
+        node.style.height = 'calc(' + (shape.heightPct * 100) + '%)';
+      } else {
+        node.style.height = height + 'px';
+      }
       node.style.transform = 'rotate(' + (shape.rotation || 0) + 'deg)';
       node.style.transformOrigin = (pivotX * 100) + '% ' + (pivotY * 100) + '%';
       node.style.setProperty('--pivot-x', (pivotX * 100) + '%');
@@ -177,6 +216,14 @@
       }
 
       Object.assign(node.style, getShapeStyle(shape));
+
+      // 内容文本（shape.text 字段）
+      if (shape.text) {
+        const textEl = document.createElement('div');
+        textEl.className = 'shape-text-content';
+        textEl.textContent = shape.text;
+        node.appendChild(textEl);
+      }
 
       const label = document.createElement('span');
       label.className = 'shape-name-pill';
@@ -240,7 +287,11 @@
         node.append(rotateGuide, rotateHandle, pivotHandle);
       }
 
-      world.appendChild(node);
+      if (isUI && uiLayer) {
+        uiLayer.appendChild(node);
+      } else {
+        world.appendChild(node);
+      }
     });
     applyViewportTransform();
   }
@@ -257,6 +308,7 @@
     snapMove: snapMove,
     getStageRect: getStageRect,
     screenToWorld: screenToWorld,
+    screenToStage: screenToStage,
     getViewportCenterWorld: getViewportCenterWorld,
     formatZoomPercent: formatZoomPercent,
     applyViewportTransform: applyViewportTransform,

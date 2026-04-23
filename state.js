@@ -43,6 +43,7 @@
     objects: [],
     baseline: null,
     selectedId: null,
+    selectedIds: new Set(),   // 多选集合（始终与 selectedId 保持同步）
     nextId: 1,
     nextTaskId: 1,
     globalTasks: [],
@@ -101,6 +102,15 @@
               dataUrl: a.dataUrl,
             }))
         : [],
+      replies: Array.isArray(task?.replies)
+        ? task.replies.filter(function (r) { return r && typeof r.text === 'string'; }).map(function (r) {
+            return {
+              id: typeof r.id === 'string' ? r.id : 'r-' + Date.now(),
+              text: r.text,
+              ts: typeof r.ts === 'string' ? r.ts : null,
+            };
+          })
+        : [],
     };
   }
 
@@ -153,6 +163,16 @@
       isHitbox,
       lifetime: Number.isFinite(Number(raw?.lifetime)) ? Number(raw.lifetime) : null,
       points: Array.isArray(raw?.points) ? raw.points.slice() : null,
+      // 精灵 / 文本内容（由 AIEngine 或手动赋值）
+      sprite: typeof raw?.sprite === 'string' ? raw.sprite : null,
+      spriteFit: typeof raw?.spriteFit === 'string' ? raw.spriteFit : null,
+      text: typeof raw?.text === 'string' ? raw.text : null,
+      // 锚点系统（uiSpace=true 时生效）
+      uiSpace: Boolean(raw?.uiSpace),
+      anchorX: (raw?.anchorX !== null && raw?.anchorX !== undefined && Number.isFinite(Number(raw.anchorX))) ? Number(raw.anchorX) : null,
+      anchorY: (raw?.anchorY !== null && raw?.anchorY !== undefined && Number.isFinite(Number(raw.anchorY))) ? Number(raw.anchorY) : null,
+      widthPct: (raw?.widthPct !== null && raw?.widthPct !== undefined && Number.isFinite(Number(raw.widthPct))) ? Number(raw.widthPct) : null,
+      heightPct: (raw?.heightPct !== null && raw?.heightPct !== undefined && Number.isFinite(Number(raw.heightPct))) ? Number(raw.heightPct) : null,
     };
   }
 
@@ -375,6 +395,33 @@
     return ok ? { ok: true } : { ok: false, error: '应用快照失败' };
   }
 
+  // ===== 多选辅助 =====
+  function clearSelection() {
+    state.selectedId = null;
+    state.selectedIds = new Set();
+  }
+  function setSelection(id) {
+    state.selectedId = id || null;
+    state.selectedIds = id ? new Set([id]) : new Set();
+  }
+  function addToSelection(id) {
+    state.selectedIds.add(id);
+    state.selectedId = id;
+  }
+  function removeFromSelection(id) {
+    state.selectedIds.delete(id);
+    if (state.selectedId === id) {
+      const arr = Array.from(state.selectedIds);
+      state.selectedId = arr.length ? arr[arr.length - 1] : null;
+    }
+  }
+  function toggleSelection(id) {
+    if (state.selectedIds.has(id)) { removeFromSelection(id); } else { addToSelection(id); }
+  }
+  function getSelectedObjects() {
+    return state.objects.filter(function (o) { return state.selectedIds.has(o.id); });
+  }
+
   global.State = {
     state,
     constants: {
@@ -393,5 +440,6 @@
     serializeForAI,
     recordUndo, undo, clearUndo, undoStackSize,
     exportSceneJSON, importSceneJSON,
+    clearSelection, setSelection, addToSelection, removeFromSelection, toggleSelection, getSelectedObjects,
   };
 })(window);

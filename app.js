@@ -5,6 +5,7 @@
   const dom = {
     stage: document.getElementById('stage'),
     world: document.getElementById('world'),
+    uiLayer: document.getElementById('uiLayer'),
     stageHint: document.getElementById('stageHint'),
     statusMessage: document.getElementById('statusMessage'),
     modeBadge: document.getElementById('modeBadge'),
@@ -101,6 +102,28 @@
   Game.setPaused(State.state.editMode);
   Game.start();
 
+  // ─── AI 助手初始化 ───
+  if (window.AIEngine) {
+    AIEngine.init();
+    // 实时把 AI 日志条目追加到面板（如果当前正显示 AI 助手页）
+    AIEngine.onLog(function (entry) {
+      const pane = document.getElementById('paneAI');
+      if (!pane || pane.hasAttribute('hidden')) return;
+      const logDiv = document.getElementById('aiLogDiv');
+      if (!logDiv) return;
+      const icons = { info: '·', warn: '⚠', error: '✗', think: '…', explain: '💬', action: '→' };
+      const div = document.createElement('div');
+      div.className = 'ai-log-entry ai-log-' + entry.type;
+      div.textContent = (icons[entry.type] || '·') + ' ' + entry.text;
+      logDiv.appendChild(div);
+      logDiv.scrollTop = logDiv.scrollHeight;
+      // 执行完成后刷新任务列表（状态可能变化）
+      if (entry.type === 'info' && entry.text.indexOf('─── 完成') === 0) {
+        AIEngine.renderPanel(document.getElementById('aiAssistantPane'));
+      }
+    });
+  }
+
   setMessage('就绪。按 Z 切换编辑/游戏模式；编辑模式下右键对象重命名或删除。');
 
   // ===== 服务器同步检测 =====
@@ -167,6 +190,10 @@
       if (paneId === 'paneProps' && window.Editor) window.Editor.render();
       // 切换到任务管理器时强制重渲
       if (paneId === 'paneTaskMgr' && window.TaskManager) window.TaskManager.render();
+      // 切换到 AI 助手时渲染面板
+      if (paneId === 'paneAI' && window.AIEngine) {
+        AIEngine.renderPanel(document.getElementById('aiAssistantPane'));
+      }
     }
 
     tabs.forEach(function (tab) {

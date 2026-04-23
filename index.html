@@ -14,6 +14,12 @@
       <!-- 世界坐标层（形状节点渲染在这里） -->
       <div id="world" class="world"></div>
 
+      <!-- UI 空间层（不受摄像机变换影响，锚点定位） -->
+      <div id="uiLayer" class="ui-layer"></div>
+
+      <!-- 框选矩形（仅编辑模式可见） -->
+      <div id="marquee" class="marquee-select hidden"></div>
+
       <!-- 右上角状态徽章 -->
       <div class="floating-hud">
         <div class="hud-right">
@@ -96,6 +102,7 @@
           <button class="panel-tab is-active" data-pane="paneTasks" role="tab" aria-selected="true" type="button">任务</button>
           <button class="panel-tab" data-pane="paneTaskMgr" role="tab" type="button">任务列表</button>
           <button class="panel-tab" data-pane="paneConsole" role="tab" type="button">控制台</button>
+          <button class="panel-tab" data-pane="paneAI" role="tab" type="button">AI助手</button>
           <div class="panel-tabbar-spacer"></div>
           <button id="panelMinimizeBtn" class="panel-minimize-btn" type="button" title="最小化 / 展开面板">—</button>
         </div>
@@ -140,6 +147,11 @@
               </div>
             </div>
             <div id="taskMgrList" class="tmgr-list"></div>
+          </div>
+
+          <!-- AI 助手面板 -->
+          <div id="paneAI" class="panel-pane" hidden>
+            <div id="aiAssistantPane" class="ai-assistant-pane"></div>
           </div>
 
           <!-- 控制台面板 -->
@@ -195,7 +207,11 @@
     <script src="/sceneIO.js"></script>
     <script src="/serverSync.js"></script>
     <script src="/editor.js"></script>
+    <script src="/audioEngine.js"></script>
+    <script src="/networkEngine.js"></script>
+    <script src="/sceneManager.js"></script>
     <script src="/game.js"></script>
+    <script src="/aiEngine.js"></script>
     <script src="/app.js"></script>
 
   </body>

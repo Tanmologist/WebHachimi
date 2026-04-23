@@ -31,6 +31,19 @@
   function setPaused(p) { clock.paused = !!p; }
   function isPaused()  { return clock.paused; }
 
+  // ─── 行为钩子：AI 可通过 Game.addUpdateHook(name, fn) 注入每帧逻辑 ───
+  const _updateHooks = Object.create(null);
+
+  // ─── 物理扩展：可选重力系统（默认关闭，通过 Game.enableGravity(true) 开启）───
+  const _gravity = {
+    enabled: false,
+    g:         700,   // 重力加速度 px/s²
+    jumpForce: 560,   // 跳跃初速度（负向，向上）
+    maxFall:   1200,  // 最大下落速度
+    vy:        Object.create(null),   // {[objectId]: velocityY}
+    grounded:  Object.create(null),   // {[objectId]: bool}
+  };
+
   let dom, renderStageOnly;
   let lastReal = performance.now();
   let running = false;
@@ -54,6 +67,15 @@
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       keys[e.key.toLowerCase()] = true;
       if (e.key.toLowerCase() === 'q') trySlideAttack();
+      // 跳跃：Space 键，仅在重力开启且角色落地时生效
+      if (e.key === ' ' && _gravity.enabled) {
+        const player = findPlayer();
+        if (player && _gravity.grounded[player.id]) {
+          _gravity.vy[player.id] = -_gravity.jumpForce;
+          _gravity.grounded[player.id] = false;
+          e.preventDefault();
+        }
+      }
     });
     window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
     dom.stage.addEventListener('mousemove', function (e) {
@@ -102,6 +124,17 @@
     const aw = S.getShapeWidth(a), ah = S.getShapeHeight(a);
     const bw = S.getShapeWidth(b), bh = S.getShapeHeight(b);
     return a.x < b.x + bw && a.x + aw > b.x && a.y < b.y + bh && a.y + ah > b.y;
+  }
+
+  // 检查对象是否落地（底部刚好接触某个 floor 顶面）
+  function isGrounded(obj) {
+    const floors = findFloors();
+    const ph = S.getShapeHeight(obj), pw = S.getShapeWidth(obj);
+    return floors.some(function (f) {
+      const fw = S.getShapeWidth(f);
+      return Math.abs((obj.y + ph) - f.y) <= 2 &&
+             obj.x + pw > f.x + 2 && obj.x < f.x + fw - 2;
+    });
   }
 
   function tryMove(player, dx, dy) {
@@ -205,6 +238,27 @@
   // update 只在游戏时间流动时被调用；不再自己判断 editMode。
   function update(dt) {
     const player = findPlayer();
+
+    // ── 重力物理（可选，Game.enableGravity(true) 开启）──
+    if (_gravity.enabled && player) {
+      const id = player.id;
+      if (_gravity.vy[id] === undefined) _gravity.vy[id] = 0;
+      _gravity.vy[id] = Math.min(_gravity.vy[id] + _gravity.g * dt, _gravity.maxFall);
+      const prevY = player.y;
+      tryMove(player, 0, _gravity.vy[id] * dt);
+      if (_gravity.vy[id] > 0 && player.y < prevY + _gravity.vy[id] * dt - 0.5) {
+        // 被地板挡住了：归零速度，标记落地
+        _gravity.vy[id] = 0;
+        _gravity.grounded[id] = true;
+      } else if (_gravity.vy[id] < 0 && player.y > prevY + _gravity.vy[id] * dt + 0.5) {
+        // 被天花板挡住了
+        _gravity.vy[id] = 0;
+        _gravity.grounded[id] = false;
+      } else {
+        _gravity.grounded[id] = isGrounded(player);
+      }
+    }
+
     if (player) {
       let mx = 0, my = 0;
       if (keys['w']) my -= 1;
@@ -229,6 +283,34 @@
       return o.lifetime > 0;
     });
     if (player) S.ensureObjectInStage(player);
+
+    // ── 精灵帧动画（sprite sheet 自动循环） ──
+    // 对象设置 spriteSheet + frameCount + frameWidth[px] + fps[帧/秒] 即可
+    S.state.objects.forEach(function (obj) {
+      if (!obj.spriteSheet || !obj.frameCount || obj.frameCount <= 1) return;
+      obj._spriteTime = (obj._spriteTime || 0) + dt;
+      const dur = 1 / (obj.fps || 8);
+      if (obj._spriteTime >= dur) {
+        obj._spriteTime -= dur;
+        obj._spriteFrame = ((obj._spriteFrame || 0) + 1) % obj.frameCount;
+        // 直接操作 DOM，避免全量 re-render
+        const el = dom && dom.world && dom.world.querySelector('[data-id="' + obj.id + '"]');
+        if (el) {
+          const fw = obj.frameWidth || S.getShapeWidth(obj);
+          const fh = obj.frameHeight || S.getShapeHeight(obj);
+          el.style.backgroundImage    = 'url("' + obj.spriteSheet + '")';
+          el.style.backgroundSize     = (fw * obj.frameCount) + 'px ' + fh + 'px';
+          el.style.backgroundPosition = '-' + (obj._spriteFrame * fw) + 'px 0';
+          el.style.backgroundRepeat   = 'no-repeat';
+        }
+      }
+    });
+
+    // 运行 AI 注入的行为钩子
+    const hookNames = Object.keys(_updateHooks);
+    for (let i = 0; i < hookNames.length; i++) {
+      try { _updateHooks[hookNames[i]](dt, S.state); } catch (e) { console.error('[hook:' + hookNames[i] + ']', e); }
+    }
   }
 
   function loop(now) {
@@ -250,5 +332,10 @@
     isPaused: isPaused,
     gameTime: gameTime,
     clock: clock,
+    addUpdateHook:    function (name, fn) { _updateHooks[name] = fn; },
+    removeUpdateHook: function (name)     { delete _updateHooks[name]; },
+    enableGravity:    function (on) { _gravity.enabled = !!on; },
+    isGravityEnabled: function ()   { return _gravity.enabled; },
+    gravity:          _gravity,
   };
 })(window);
