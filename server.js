@@ -19,6 +19,8 @@ const ROOT = __dirname;
 const ASSETS_DIR = path.join(ROOT, 'assets');
 const SCENE_FILE = path.join(ROOT, 'scene.json');
 const PORT = Number(process.env.WEBHACHIMI_PORT) || 5577;
+const CONSOLE_LOG_FILE = path.join(ROOT, 'console-log.json');
+const MAX_LOG_ENTRIES = 500;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -202,6 +204,41 @@ const server = http.createServer(async (req, res) => {
       if (!scene || typeof scene !== 'object') return send(res, 400, { ok: false, error: '请求体缺少 scene 对象' });
       const r = await saveScene(scene);
       return send(res, 200, r);
+    }
+    if (pathname === '/api/activate-task' && req.method === 'POST') {
+      const buf = await readBody(req, 5 * 1024 * 1024); // 5MB cap
+      let payload;
+      try { payload = JSON.parse(buf.toString('utf8')); }
+      catch (e) { return send(res, 400, { ok: false, error: 'JSON 解析失败：' + e.message }); }
+      if (!payload || typeof payload !== 'object') return send(res, 400, { ok: false, error: '无效的请求体' });
+      const activeTaskFile = path.join(ROOT, 'active-task.json');
+      await fsp.writeFile(activeTaskFile, JSON.stringify(payload, null, 2), 'utf8');
+      return send(res, 200, { ok: true, path: 'active-task.json', activatedAt: payload.activatedAt });
+    }
+    if (pathname === '/api/log' && req.method === 'POST') {
+      const buf = await readBody(req, 64 * 1024); // 64KB cap per entry
+      let entry;
+      try { entry = JSON.parse(buf.toString('utf8')); }
+      catch (e) { return send(res, 400, { ok: false, error: 'JSON 解析失败' }); }
+      let logEntries = [];
+      try {
+        const existing = await fsp.readFile(CONSOLE_LOG_FILE, 'utf8');
+        logEntries = JSON.parse(existing);
+        if (!Array.isArray(logEntries)) logEntries = [];
+      } catch (e) { logEntries = []; }
+      logEntries.push(entry);
+      if (logEntries.length > MAX_LOG_ENTRIES) logEntries = logEntries.slice(-MAX_LOG_ENTRIES);
+      await fsp.writeFile(CONSOLE_LOG_FILE, JSON.stringify(logEntries, null, 2), 'utf8');
+      return send(res, 200, { ok: true });
+    }
+    if (pathname === '/api/console-log' && req.method === 'GET') {
+      try {
+        const text = await fsp.readFile(CONSOLE_LOG_FILE, 'utf8');
+        const data = JSON.parse(text);
+        return send(res, 200, { ok: true, entries: Array.isArray(data) ? data : [] });
+      } catch (e) {
+        return send(res, 200, { ok: true, entries: [] });
+      }
     }
 
     // === 静态文件 ===

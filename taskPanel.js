@@ -37,7 +37,7 @@
   }
 
   // —— 纯工具 ——
-  function createTask(path) { return { id: S.generateTaskId(), path: path, text: '', done: false }; }
+  function createTask(path) { return { id: S.generateTaskId(), path: path, text: '', done: false, createdAt: new Date().toISOString() }; }
   function getTaskSegments(path) { return String(path).split('.').map(Number); }
   function compareTaskPaths(a, b) {
     const A = getTaskSegments(a); const B = getTaskSegments(b);
@@ -179,7 +179,15 @@
     const checkText = document.createElement('span');
     checkText.textContent = '完成';
     checkLabel.append(checkbox, checkText);
-    actions.append(childBtn, checkLabel);
+
+    const execBtn = document.createElement('button');
+    execBtn.type = 'button';
+    execBtn.className = 'inline-mini-button task-exec-btn';
+    execBtn.textContent = '执行';
+    execBtn.title = '激活此任务：写入 active-task.json，AI 可直接读取';
+    execBtn.addEventListener('click', function () { executeTask(task, ctx); });
+
+    actions.append(childBtn, checkLabel, execBtn);
     top.append(title, actions);
 
     const textarea = document.createElement('textarea');
@@ -357,6 +365,37 @@
     if (n < 1024) return n + 'B';
     if (n < 1024 * 1024) return (n / 1024).toFixed(1) + 'KB';
     return (n / 1024 / 1024).toFixed(2) + 'MB';
+  }
+
+  // ===== 任务执行：写入 active-task.json 供 AI 读取 =====
+  function executeTask(task, ctx) {
+    const payload = {
+      taskId: task.id,
+      taskPath: task.path,
+      taskText: task.text,
+      done: task.done,
+      scope: ctx.scope,
+      contextLabel: ctx.label,
+      objects: S.state.objects,
+      globalTasks: S.state.globalTasks,
+      activatedAt: new Date().toISOString(),
+    };
+    fetch('/api/activate-task', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (r) {
+        if (r.ok) {
+          setMessage('✓ 任务已激活（active-task.json）：' + (task.text || '').slice(0, 40) + '…', 'info');
+        } else {
+          setMessage('激活失败：' + (r.error || '未知'), 'error');
+        }
+      })
+      .catch(function (e) {
+        setMessage('激活失败（离线模式不支持此功能）：' + e.message, 'error');
+      });
   }
 
   function render() {

@@ -1,106 +1,202 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WebHachimi · 编辑+游戏一体化</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <title>WebHachimi · 空间化 Prompt 原型工具</title>
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body class="play-mode">
-    <main class="canvas-app">
-      <div id="stage" class="stage" aria-label="场景区域">
-        <div id="world" class="world"></div>
-      </div>
 
+    <!-- 主舞台 -->
+    <div id="stage" class="canvas-app stage">
+
+      <!-- 世界坐标层（形状节点渲染在这里） -->
+      <div id="world" class="world"></div>
+
+      <!-- 右上角状态徽章 -->
       <div class="floating-hud">
         <div class="hud-right">
           <span id="modeBadge" class="hud-chip mode-chip">游戏模式</span>
           <span id="zoomBadge" class="hud-chip zoom-chip">100%</span>
-          <span class="hud-chip tip-chip">按 <kbd>Z</kbd> 切换 · <kbd>Ctrl</kbd>+<kbd>R</kbd> 重置</span>
         </div>
-        <p id="statusMessage" class="status-message" data-tone="info"></p>
       </div>
 
-      <div id="stageHint" class="stage-hint hidden">按 <kbd>Z</kbd> 进入编辑，再点左侧形状创建对象</div>
+      <!-- 状态消息（右上飘字） -->
+      <p id="statusMessage" class="status-message"></p>
 
-      <aside id="toolDock" class="tool-dock" aria-hidden="true">
-        <button id="createSquareBtn" class="dock-button" type="button"><span class="dock-icon">□</span><span class="dock-label">正方形</span></button>
-        <button id="createCircleBtn" class="dock-button" type="button"><span class="dock-icon">○</span><span class="dock-label">圆形</span></button>
-        <button id="createTriangleBtn" class="dock-button" type="button"><span class="dock-icon">△</span><span class="dock-label">三角形</span></button>
-        <button id="createPenBtn" class="dock-button" type="button"><span class="dock-icon">✒</span><span class="dock-label">钢笔</span></button>
-        <button id="createBrushBtn" class="dock-button" type="button"><span class="dock-icon">✎</span><span class="dock-label">柳叶笔</span></button>
+      <!-- 舞台空白提示 -->
+      <div id="stageHint" class="stage-hint hidden"></div>
+
+      <!-- 左侧工具栏（编辑模式可见） -->
+      <div id="toolDock" class="tool-dock floating-panel" aria-hidden="true">
+        <button id="createSquareBtn" class="dock-button" type="button" title="创建方块">
+          <span class="dock-icon">□</span>
+          <span class="dock-label">方块</span>
+        </button>
+        <button id="createCircleBtn" class="dock-button" type="button" title="创建圆形">
+          <span class="dock-icon">○</span>
+          <span class="dock-label">圆形</span>
+        </button>
+        <button id="createTriangleBtn" class="dock-button" type="button" title="创建三角形">
+          <span class="dock-icon">△</span>
+          <span class="dock-label">三角</span>
+        </button>
         <div class="dock-sep"></div>
-        <button id="superSketchBtn" class="dock-button alt" type="button" title="超智能画笔：在画布上画出大致规划，然后写一段说明给 AI（包工头比划）"><span class="dock-icon">🖌</span><span class="dock-label">超画笔</span></button>
-        <button id="snapshotForAiBtn" class="dock-button" type="button" title="把当前画布渲染成 PNG + 上下文描述，复制到剪贴板可粘贴给 ChatGPT/Claude（按住 Shift 点击 = 下载 PNG 文件）"><span class="dock-icon">📸</span><span class="dock-label">给AI</span></button>
-        <button id="undoBtn" class="dock-button" type="button" title="撤销最近一步（Ctrl+Z）"><span class="dock-icon">↶</span><span class="dock-label">撤销</span></button>
-        <button id="exportSceneBtn" class="dock-button" type="button" title="导出整个场景为 .zip（含 scene.json + assets/），可解压到仓库 git 追踪"><span class="dock-icon">💾</span><span class="dock-label">导出</span></button>
-        <button id="importSceneBtn" class="dock-button" type="button" title="从场景文件导入（.zip 或 .json，覆盖当前）"><span class="dock-icon">📂</span><span class="dock-label">导入</span></button>
-        <input id="importSceneInput" type="file" accept=".zip,.json,application/zip,application/json" style="display:none" />
-        <button id="resetGameBtn" class="dock-button danger" type="button" title="还原到上一次蓝图（Ctrl+R）"><span class="dock-icon">↺</span><span class="dock-label">重置</span></button>
-      </aside>
+        <button id="createPenBtn" class="dock-button" type="button" title="钢笔曲线">
+          <span class="dock-icon">✒</span>
+          <span class="dock-label">钢笔</span>
+        </button>
+        <button id="createBrushBtn" class="dock-button" type="button" title="柳叶笔">
+          <span class="dock-icon">🖊</span>
+          <span class="dock-label">柳叶</span>
+        </button>
+        <button id="superSketchBtn" class="dock-button alt" type="button" title="超画笔模式">
+          <span class="dock-icon">✨</span>
+          <span class="dock-label">超笔</span>
+        </button>
+        <div class="dock-sep"></div>
+        <button id="snapshotForAiBtn" class="dock-button" type="button"
+          title="AI 快照：点击复制到剪贴板 / Shift+点击 下载 PNG">
+          <span class="dock-icon">📷</span>
+          <span class="dock-label">快照</span>
+        </button>
+        <div class="dock-sep"></div>
+        <button id="undoBtn" class="dock-button" type="button" title="撤销 (Ctrl+Z)">
+          <span class="dock-icon">↩</span>
+          <span class="dock-label">撤销</span>
+        </button>
+        <div class="dock-sep"></div>
+        <button id="exportSceneBtn" class="dock-button" type="button" title="导出场景包 (.zip)">
+          <span class="dock-icon">⬇</span>
+          <span class="dock-label">导出</span>
+        </button>
+        <button id="importSceneBtn" class="dock-button" type="button" title="导入场景包 (.zip)">
+          <span class="dock-icon">⬆</span>
+          <span class="dock-label">导入</span>
+        </button>
+        <input id="importSceneInput" type="file" accept=".zip" class="hidden" />
+        <div class="dock-sep"></div>
+        <button id="resetGameBtn" class="dock-button danger" type="button" title="重置游戏到蓝图 (Ctrl+R)">
+          <span class="dock-icon">↺</span>
+          <span class="dock-label">重置</span>
+        </button>
+      </div>
 
-      <section id="taskDrawer" class="floating-panel task-drawer" aria-hidden="true">
-        <button id="drawerHandle" class="drawer-handle" type="button" aria-label="调整面板高度"></button>
+      <!-- 底部活动面板（编辑模式可见） -->
+      <div id="taskDrawer" class="activity-panel floating-panel" aria-hidden="true">
 
-        <div class="drawer-left">
-          <div class="drawer-header">
-            <div>
-              <p class="panel-eyebrow">属性 / 实体</p>
-              <h2 id="drawerLeftTitle">对象属性</h2>
-              <p class="subtle-text">没选中对象时显示全部实体；选中后可在这里改属性、跳到子实体。</p>
-            </div>
-          </div>
-          <div id="propsBody" class="props-body"></div>
+        <!-- 顶部：拖动把手 -->
+        <div id="drawerHandle" class="panel-resize-handle" title="拖动调整面板高度" role="separator" aria-orientation="horizontal"></div>
+
+        <!-- Tab 栏 -->
+        <div class="panel-tabbar" role="tablist">
+          <button class="panel-tab" data-pane="paneProps" role="tab" type="button">属性</button>
+          <button class="panel-tab" data-pane="paneWorldTree" role="tab" type="button">世界树</button>
+          <button class="panel-tab is-active" data-pane="paneTasks" role="tab" aria-selected="true" type="button">任务</button>
+          <button class="panel-tab" data-pane="paneTaskMgr" role="tab" type="button">任务列表</button>
+          <button class="panel-tab" data-pane="paneConsole" role="tab" type="button">控制台</button>
+          <div class="panel-tabbar-spacer"></div>
+          <button id="panelMinimizeBtn" class="panel-minimize-btn" type="button" title="最小化 / 展开面板">—</button>
         </div>
 
-        <div id="drawerSplitter" class="drawer-vsplit" aria-label="调整左右宽度"></div>
+        <!-- 面板内容区 -->
+        <div class="panel-body">
 
-        <div class="drawer-right">
-          <div class="drawer-header">
-            <div>
-              <p id="drawerEyebrow" class="panel-eyebrow">全局任务</p>
-              <h2 id="drawerTitle">全局任务</h2>
-              <p id="drawerSubtitle" class="subtle-text">这是 AI / 你自己的任务备忘录，按数字 1.2.3 自动编号。</p>
+          <!-- 属性面板 -->
+          <div id="paneProps" class="panel-pane" hidden>
+            <div id="propsBody" class="props-body"></div>
+          </div>
+
+          <!-- 世界树面板 -->
+          <div id="paneWorldTree" class="panel-pane" hidden>
+            <div id="worldTreeList" class="world-tree-list"></div>
+          </div>
+
+          <!-- 任务/备忘录面板 -->
+          <div id="paneTasks" class="panel-pane is-active">
+            <div class="panel-pane-header">
+              <div class="panel-pane-title-group">
+                <p id="drawerEyebrow" class="panel-eyebrow"></p>
+                <h2 id="drawerTitle"></h2>
+                <p id="drawerSubtitle" class="subtle-text"></p>
+              </div>
+              <button id="addTaskBtn" class="mini-icon-button" type="button" title="添加任务">＋</button>
             </div>
-            <button id="addTaskBtn" class="small-action compact" type="button">＋任务</button>
+            <div id="contextTaskList" class="panel-task-list"></div>
+            <div class="command-row panel-command-row">
+              <input id="commandInput" type="text" placeholder="写一段备注或任务，Ctrl+Enter 快速记录…" />
+              <button id="runCommandBtn" class="primary-pill" type="button">记录</button>
+            </div>
           </div>
 
-          <div class="command-row drawer-command">
-            <input id="commandInput" type="text" placeholder="例如：地板太矮，主角 jumps 太短" />
-            <button id="runCommandBtn" class="primary-pill" type="button">保存</button>
+          <!-- 任务管理器面板 -->
+          <div id="paneTaskMgr" class="panel-pane" hidden>
+            <div class="panel-toolbar">
+              <div id="taskMgrFilter" class="filter-bar">
+                <button class="filter-btn is-active" data-filter="all" type="button">全部</button>
+                <button class="filter-btn" data-filter="todo" type="button">未完成</button>
+                <button class="filter-btn" data-filter="done" type="button">已完成</button>
+              </div>
+            </div>
+            <div id="taskMgrList" class="tmgr-list"></div>
           </div>
 
-          <div id="contextTaskList" class="task-list drawer-task-list"></div>
-        </div>
-      </section>
+          <!-- 控制台面板 -->
+          <div id="paneConsole" class="panel-pane" hidden>
+            <div class="panel-toolbar">
+              <div id="consoleFilter" class="filter-bar">
+                <button class="filter-btn is-active" data-filter="all" type="button">全部</button>
+                <button class="filter-btn" data-filter="error" type="button">错误</button>
+                <button class="filter-btn" data-filter="warn" type="button">警告</button>
+                <button class="filter-btn" data-filter="log" type="button">日志</button>
+              </div>
+              <button id="consoleClearBtn" class="filter-btn danger" type="button">清空</button>
+            </div>
+            <div id="consolePanelList" class="console-list"></div>
+          </div>
 
-      <section id="objectContextMenu" class="floating-panel object-context-menu hidden" aria-hidden="true">
+        </div><!-- /.panel-body -->
+
+        <!-- 虚拟分隔条：保持向后兼容，不显示 -->
+        <div id="drawerSplitter" aria-hidden="true" style="display:none"></div>
+
+      </div><!-- /#taskDrawer -->
+
+      <!-- 对象右键菜单（fixed 定位） -->
+      <div id="objectContextMenu" class="object-context-menu hidden"
+           role="dialog" aria-label="对象操作" aria-hidden="true">
         <div class="context-menu-head">
-          <strong id="contextMenuTitle">对象菜单</strong>
-          <span class="context-menu-tip">右键</span>
+          <strong id="contextMenuTitle"></strong>
+          <span class="context-menu-tip">右键菜单</span>
         </div>
-        <label class="field context-menu-field">
-          <span>名称</span>
-          <input id="contextMenuNameInput" type="text" maxlength="40" placeholder="输入对象名称" />
-        </label>
+        <div class="context-menu-field">
+          <input id="contextMenuNameInput" type="text" placeholder="新名称…" />
+        </div>
         <div class="context-menu-actions">
           <button id="renameObjectBtn" class="mini-menu-button" type="button">重命名</button>
           <button id="deleteObjectBtn" class="mini-menu-button danger" type="button">删除</button>
         </div>
-      </section>
-    </main>
+      </div>
 
-    <script src="./state.js"></script>
-    <script src="./engine.js"></script>
-    <script src="./dragController.js"></script>
-    <script src="./taskPanel.js"></script>
-    <script src="./propertyPanel.js"></script>
-    <script src="./sketchTool.js"></script>
-    <script src="./sceneIO.js"></script>
-    <script src="./canvasSnapshot.js"></script>
-    <script src="./serverSync.js"></script>
-    <script src="./editor.js"></script>
-    <script src="./game.js"></script>
-    <script src="./app.js"></script>
+    </div><!-- /#stage -->
+
+    <!-- 脚本（按依赖顺序加载） -->
+    <script src="/consolePanel.js"></script>
+    <script src="/state.js"></script>
+    <script src="/engine.js"></script>
+    <script src="/dragController.js"></script>
+    <script src="/taskPanel.js"></script>
+    <script src="/propertyPanel.js"></script>
+    <script src="/worldTree.js"></script>
+    <script src="/taskManager.js"></script>
+    <script src="/sketchTool.js"></script>
+    <script src="/canvasSnapshot.js"></script>
+    <script src="/sceneIO.js"></script>
+    <script src="/serverSync.js"></script>
+    <script src="/editor.js"></script>
+    <script src="/game.js"></script>
+    <script src="/app.js"></script>
+
   </body>
 </html>

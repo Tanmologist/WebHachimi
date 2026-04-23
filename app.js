@@ -32,6 +32,12 @@
     drawerSubtitle: document.getElementById('drawerSubtitle'),
 
     propsBody: document.getElementById('propsBody'),
+    worldTreeList: document.getElementById('worldTreeList'),
+    taskMgrList: document.getElementById('taskMgrList'),
+    taskMgrFilter: document.getElementById('taskMgrFilter'),
+    consolePanelList: document.getElementById('consolePanelList'),
+    consoleFilter: document.getElementById('consoleFilter'),
+    consoleClearBtn: document.getElementById('consoleClearBtn'),
     contextTaskList: document.getElementById('contextTaskList'),
     addTaskBtn: document.getElementById('addTaskBtn'),
     commandInput: document.getElementById('commandInput'),
@@ -129,6 +135,57 @@
     } catch (e) {
       console.warn('serverSync 启动失败', e);
       setMessage('同步服务连接失败：' + e.message + '，已回退到离线模式。', 'error');
+    }
+  })();
+
+  // ===== 活动面板 Tab 切换 & 最小化 =====
+  (function initPanelTabs() {
+    const panel = dom.taskDrawer;
+    if (!panel) return;
+
+    const tabs = panel.querySelectorAll('.panel-tab[data-pane]');
+    const minimizeBtn = document.getElementById('panelMinimizeBtn');
+
+    function switchTo(paneId) {
+      tabs.forEach(function (t) {
+        const active = t.dataset.pane === paneId;
+        t.classList.toggle('is-active', active);
+        t.setAttribute('aria-selected', String(active));
+      });
+      panel.querySelectorAll('.panel-pane').forEach(function (p) {
+        if (p.id === paneId) {
+          p.removeAttribute('hidden');
+          p.classList.add('is-active');
+        } else {
+          p.setAttribute('hidden', '');
+          p.classList.remove('is-active');
+        }
+      });
+      // 切换到世界树时强制重渲
+      if (paneId === 'paneWorldTree' && window.WorldTree) window.WorldTree.render();
+      // 切换到属性时强制重渲
+      if (paneId === 'paneProps' && window.Editor) window.Editor.render();
+      // 切换到任务管理器时强制重渲
+      if (paneId === 'paneTaskMgr' && window.TaskManager) window.TaskManager.render();
+    }
+
+    tabs.forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        // 如果面板已最小化，先展开
+        if (panel.classList.contains('is-minimized')) {
+          panel.classList.remove('is-minimized');
+          if (minimizeBtn) minimizeBtn.textContent = '—';
+        }
+        switchTo(tab.dataset.pane);
+      });
+    });
+
+    if (minimizeBtn) {
+      minimizeBtn.addEventListener('click', function () {
+        const minimized = panel.classList.toggle('is-minimized');
+        minimizeBtn.textContent = minimized ? '□' : '—';
+        minimizeBtn.title = minimized ? '展开面板' : '最小化面板';
+      });
     }
   })();
 })();

@@ -15,7 +15,6 @@
 
   const panState = { active: false, startX: 0, startY: 0, originX: 0, originY: 0 };
   const drawerState = { active: false, startY: 0, startHeight: 0 };
-  const splitState = { active: false, startX: 0, startRatio: 0.42 };
 
   function init(refs, opts) {
     dom = refs;
@@ -28,6 +27,9 @@
     TP.init({ dom: dom, setMessage: setMessage, requestRender: render });
     PP.init({ dom: dom, setMessage: setMessage, requestRender: render });
     if (global.SketchTool) global.SketchTool.init(dom, { setMessage: setMessage, requestRender: render });
+    if (global.WorldTree) global.WorldTree.init(dom, { requestRender: render });
+    if (global.TaskManager) global.TaskManager.init(dom, { requestRender: render });
+    if (global.ConsolePanel) global.ConsolePanel.init(dom, {});
     bindToolDock();
     bindDrawerHandles();
     bindContextMenu();
@@ -248,17 +250,17 @@
     dom.objectContextMenu.style.top = top + 'px';
   }
 
-  // ===== 抽屉伸缩 =====
-  function getDrawerMaxHeight() { return Math.round(window.innerHeight * 0.55); }
+  // ===== 活动面板高度调整 =====
+  function getDrawerMaxHeight() { return Math.round(window.innerHeight * 0.75); }
   function applyDrawerHeight() {
-    S.state.ui.drawerHeight = clamp(S.state.ui.drawerHeight, 120, getDrawerMaxHeight());
-    dom.taskDrawer.style.height = S.state.ui.drawerHeight + 'px';
+    if (!S.state.ui.drawerHeight) S.state.ui.drawerHeight = 280;
+    S.state.ui.drawerHeight = clamp(S.state.ui.drawerHeight, 80, getDrawerMaxHeight());
+    if (!dom.taskDrawer.classList.contains('is-minimized')) {
+      dom.taskDrawer.style.height = S.state.ui.drawerHeight + 'px';
+    }
   }
-  function applyDrawerSplit() {
-    const ratio = clamp(S.state.ui.drawerSplit, 0.18, 0.82);
-    S.state.ui.drawerSplit = ratio;
-    dom.taskDrawer.style.gridTemplateColumns = (ratio * 100) + '% 6px 1fr';
-  }
+  // 保持向后兼容：split 不再使用
+  function applyDrawerSplit() {}
 
   function bindDrawerHandles() {
     dom.drawerHandle.addEventListener('pointerdown', function (e) {
@@ -266,14 +268,7 @@
       e.preventDefault();
       drawerState.active = true;
       drawerState.startY = e.clientY;
-      drawerState.startHeight = S.state.ui.drawerHeight;
-    });
-    dom.drawerSplitter.addEventListener('pointerdown', function (e) {
-      if (!S.state.editMode || e.button !== 0) return;
-      e.preventDefault();
-      splitState.active = true;
-      splitState.startX = e.clientX;
-      splitState.startRatio = S.state.ui.drawerSplit;
+      drawerState.startHeight = S.state.ui.drawerHeight || 280;
     });
   }
 
@@ -371,12 +366,7 @@
       S.state.ui.drawerHeight = drawerState.startHeight + (drawerState.startY - e.clientY);
       applyDrawerHeight();
     }
-    if (splitState.active) {
-      const rect = dom.taskDrawer.getBoundingClientRect();
-      const dx = e.clientX - splitState.startX;
-      S.state.ui.drawerSplit = clamp(splitState.startRatio + dx / rect.width, 0.18, 0.82);
-      applyDrawerSplit();
-    }
+
     if (panState.active) {
       S.state.view.x = Math.round(panState.originX + (e.clientX - panState.startX));
       S.state.view.y = Math.round(panState.originY + (e.clientY - panState.startY));
@@ -388,10 +378,9 @@
 
   function onPointerUp() {
     const dragWasActive = DC.handlePointerUp();
-    const otherWasActive = drawerState.active || splitState.active || panState.active;
+    const otherWasActive = drawerState.active || panState.active;
     panState.active = false;
     drawerState.active = false;
-    splitState.active = false;
     if (dragWasActive) {
 
       S.captureBaseline();
@@ -420,6 +409,8 @@
     E.renderStage(DC.getStageHandlers());
     PP.render();
     TP.render();
+    if (global.WorldTree) global.WorldTree.render();
+    if (global.TaskManager) global.TaskManager.render();
     renderContextMenu();
     const showHint = S.state.editMode && S.state.objects.length === 0;
     dom.stageHint.classList.toggle('hidden', !showHint);

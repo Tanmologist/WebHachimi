@@ -9,6 +9,7 @@
   const combat = {
     lastDash: -10, dashUntil: -10, dashDx: 0, dashDy: 0,
     lastParry: -10, lastAttack: -10, charging: false, chargeStart: 0,
+    lastSlide: -10, slideUntil: -10, slideDx: 0, slideDy: 0,
   };
   const PLAYER_SPEED = 300;
   const DASH_SPEED = 1200;
@@ -18,6 +19,9 @@
   const PARRY_TIME = 0.5;
   const ATTACK_CD = 0.4;
   const CHARGE_THRESHOLD = 1.0;
+  const SLIDE_SPEED = 1100;
+  const SLIDE_TIME = 0.22;
+  const SLIDE_CD = 1.5;
 
   // ===== 时间作为游戏的一等属性 =====
   // clock.time 只在未暂停时累加，所有依赖时间的判断（CD、lifetime、charge）都读它。
@@ -49,6 +53,7 @@
       const tag = document.activeElement && document.activeElement.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
       keys[e.key.toLowerCase()] = true;
+      if (e.key.toLowerCase() === 'q') trySlideAttack();
     });
     window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
     dom.stage.addEventListener('mousemove', function (e) {
@@ -179,6 +184,24 @@
     spawnHitbox(player, '蓄力', 250, 250, v.dx * 130, v.dy * 130, 0.6, 'purple');
   }
 
+  // 滑斩 —— Q 键触发：玩家向鼠标方向滑刺，同时生成宽幅攻击判定框
+  function trySlideAttack() {
+    if (S.state.editMode) return;
+    const now = gameTime();
+    if (now - combat.lastSlide < SLIDE_CD) return;
+    const player = findPlayer(); if (!player) return;
+    const v = getAimVector(player);
+    combat.lastSlide = now;
+    combat.slideUntil = now + SLIDE_TIME;
+    combat.slideDx = v.dx;
+    combat.slideDy = v.dy;
+    // 生成宽幅横扫判定框（相对于滑动方向的垂直宽度较大）
+    const perpX = -v.dy, perpY = v.dx;
+    const hitW = 160, hitH = 60;
+    spawnHitbox(player, '滑斩', hitW, hitH,
+      v.dx * 70 + perpX * 0, v.dy * 70 + perpY * 0, SLIDE_TIME + 0.1, 'red');
+  }
+
   // update 只在游戏时间流动时被调用；不再自己判断 editMode。
   function update(dt) {
     const player = findPlayer();
@@ -195,6 +218,9 @@
       }
       if (gameTime() < combat.dashUntil) {
         tryMove(player, combat.dashDx * DASH_SPEED * dt, combat.dashDy * DASH_SPEED * dt);
+      }
+      if (gameTime() < combat.slideUntil) {
+        tryMove(player, combat.slideDx * SLIDE_SPEED * dt, combat.slideDy * SLIDE_SPEED * dt);
       }
     }
     S.state.objects = S.state.objects.filter(function (o) {

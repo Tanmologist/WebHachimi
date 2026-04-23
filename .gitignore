@@ -1,10 +1,4 @@
-# 编辑器/系统垃圾
-.DS_Store
-Thumbs.db
-*.log
-.vscode/
-.idea/
-
-# 不要忽略 scene.json 和 assets/ —— 它们就是核心数据，必须 git 追踪
-# !scene.json
-# !assets/
+node_modules/
+dist/
+.vite/
+*.local

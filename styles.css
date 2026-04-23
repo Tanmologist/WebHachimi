@@ -1104,3 +1104,335 @@ body.sketch-active .shape-node { pointer-events: none; }
 .sketch-modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .sketch-modal-actions button { padding: 6px 14px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); background: rgba(255,255,255,0.06); color: var(--text); }
 .sketch-modal-actions button.primary { background: #f59e0b; color: #1f2937; border-color: #f59e0b; font-weight: 600; }
+
+/* =====================================================
+   活动面板系统（替代旧的 task-drawer 三列网格布局）
+   ===================================================== */
+
+/* 外层：绝对定位在底部，初始隐藏 */
+.activity-panel {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 280px;
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel-strong);
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+  z-index: 5;
+}
+body.edit-mode .activity-panel {
+  opacity: 1;
+  pointer-events: auto;
+}
+body.play-mode .activity-panel { display: none !important; }
+
+/* 最小化状态 */
+.activity-panel.is-minimized .panel-body { display: none; }
+.activity-panel.is-minimized { height: auto !important; min-height: 0; }
+
+/* 顶部拖动把手 */
+.panel-resize-handle {
+  width: 100%;
+  height: 6px;
+  flex-shrink: 0;
+  cursor: ns-resize;
+  background: transparent;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  transition: background 120ms;
+}
+.panel-resize-handle:hover { background: rgba(124,58,237,0.35); }
+
+/* Tab 栏 */
+.panel-tabbar {
+  display: flex;
+  align-items: stretch;
+  height: 30px;
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: rgba(9,13,23,0.6);
+}
+.panel-tab {
+  padding: 0 14px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 120ms, border-color 120ms;
+}
+.panel-tab:hover { color: var(--text); }
+.panel-tab.is-active {
+  color: var(--text);
+  border-bottom-color: var(--primary);
+}
+.panel-tabbar-spacer { flex: 1; }
+.panel-minimize-btn {
+  padding: 0 12px;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 1rem;
+  line-height: 30px;
+  transition: color 120ms;
+}
+.panel-minimize-btn:hover { color: var(--text); }
+
+/* 面板内容区：撑满剩余高度 */
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+/* 各面板内容块 */
+.panel-pane {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 12px 16px;
+  gap: 8px;
+}
+.panel-pane[hidden] { display: none; }
+.panel-pane.is-active { display: flex; }
+
+/* 属性面板内 propsBody 可滚动 */
+#paneProps .props-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* 世界树面板 */
+.world-tree-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+.world-tree-empty {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  border: 1px dashed rgba(255,255,255,0.1);
+  border-radius: 6px;
+  text-align: center;
+}
+.world-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--text);
+  transition: background 120ms;
+  user-select: none;
+}
+.world-tree-item:hover { background: rgba(124,58,237,0.18); }
+.world-tree-item.is-selected {
+  background: rgba(124,58,237,0.3);
+  outline: 1px solid var(--primary);
+}
+.world-tree-icon { font-size: 0.9rem; flex-shrink: 0; }
+.world-tree-name { flex: 1; font-weight: 600; }
+.world-tree-meta { font-size: 0.65rem; color: var(--muted); }
+.world-tree-role {
+  font-size: 0.62rem;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(124,58,237,0.2);
+  color: #c4b5fd;
+  border: 1px solid rgba(124,58,237,0.3);
+}
+
+/* 任务面板头部 */
+.panel-pane-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.panel-pane-title-group { min-width: 0; }
+.panel-pane-title-group h2 { margin: 2px 0; font-size: 0.9rem; }
+.panel-pane-title-group .panel-eyebrow { margin: 0 0 1px; font-size: 0.65rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.1em; }
+.panel-pane-title-group .subtle-text { margin: 0; font-size: 0.7rem; color: var(--muted); }
+
+/* 任务列表可滚动 */
+.panel-task-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* 底部命令行 */
+.panel-command-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* 任务执行按钮 */
+.task-exec-btn {
+  border: 1px solid rgba(34,211,238,0.35);
+  border-radius: 4px;
+  background: rgba(34,211,238,0.08);
+  color: #67e8f9;
+  font-size: 0.7rem;
+  padding: 0.15rem 0.35rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms;
+}
+.task-exec-btn:hover { background: rgba(34,211,238,0.2); }
+.task-exec-btn.active {
+  background: rgba(34,211,238,0.3);
+  border-color: #22d3ee;
+  color: #e0f7ff;
+}
+
+/* =====================================================
+   面板工具栏 & 过滤器
+   ===================================================== */
+.panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+.filter-bar {
+  display: flex;
+  gap: 4px;
+}
+.filter-btn {
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: background 120ms, color 120ms;
+}
+.filter-btn:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+.filter-btn.is-active { color: var(--text); background: rgba(124,58,237,0.2); border-color: var(--primary); }
+.filter-btn.danger { color: #fca5a5; border-color: rgba(248,113,113,0.3); }
+.filter-btn.danger:hover { background: rgba(248,113,113,0.15); }
+
+/* =====================================================
+   任务管理器面板
+   ===================================================== */
+.tmgr-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tmgr-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.02);
+  font-size: 0.78rem;
+  transition: background 120ms;
+}
+.tmgr-row:hover { background: rgba(255,255,255,0.05); }
+.tmgr-row.is-done { opacity: 0.55; }
+.tmgr-row.is-done .tmgr-text { text-decoration: line-through; }
+.tmgr-check { flex-shrink: 0; display: flex; align-items: center; }
+.tmgr-badge {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  padding: 1px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.tmgr-badge-global { background: rgba(34,211,238,0.12); color: #67e8f9; border: 1px solid rgba(34,211,238,0.3); }
+.tmgr-badge-object { background: rgba(124,58,237,0.12); color: #c4b5fd; border: 1px solid rgba(124,58,237,0.3); }
+.tmgr-path { flex-shrink: 0; color: var(--muted); font-size: 0.68rem; font-family: monospace; }
+.tmgr-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.tmgr-text:focus {
+  outline: 1px solid var(--primary);
+  white-space: normal;
+  overflow: visible;
+  background: rgba(10,14,24,0.8);
+}
+.tmgr-time { flex-shrink: 0; color: var(--muted); font-size: 0.65rem; font-family: monospace; }
+.tmgr-del {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  border: none; border-radius: 4px;
+  background: transparent; color: var(--muted);
+  font-size: 0.9rem; cursor: pointer; line-height: 1;
+  opacity: 0; transition: opacity 120ms;
+}
+.tmgr-row:hover .tmgr-del { opacity: 1; }
+.tmgr-del:hover { color: #fca5a5; background: rgba(248,113,113,0.12); }
+
+/* =====================================================
+   控制台面板
+   ===================================================== */
+.console-list {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: "Consolas", "JetBrains Mono", monospace;
+  font-size: 0.72rem;
+}
+.console-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  line-height: 1.4;
+  border-left: 2px solid transparent;
+}
+.console-row:hover { background: rgba(255,255,255,0.04); }
+.console-ts { flex-shrink: 0; color: var(--muted); font-size: 0.68rem; }
+.console-type { flex-shrink: 0; width: 14px; text-align: center; }
+.console-msg { flex: 1; white-space: pre-wrap; word-break: break-all; }
+.console-error { border-left-color: #ef4444; }
+.console-error .console-type { color: #ef4444; }
+.console-error .console-msg { color: #fca5a5; }
+.console-warn { border-left-color: #f59e0b; }
+.console-warn .console-type { color: #f59e0b; }
+.console-warn .console-msg { color: #fde68a; }
+.console-log .console-type { color: var(--muted); }
+.console-log .console-msg { color: var(--text); }

@@ -1,7 +1,7 @@
 {
   "kind": "webhachimi-scene",
   "version": 2,
-  "exportedAt": "2026-04-22T12:36:13.252Z",
+  "exportedAt": "2026-04-23T02:31:29.478Z",
   "objects": [
     {
       "id": "shape-1",
@@ -10,8 +10,8 @@
       "role": "player",
       "width": 80,
       "height": 80,
-      "x": 80,
-      "y": -80,
+      "x": 305.94292992265116,
+      "y": -77.44000000000091,
       "pivotX": 0.5,
       "pivotY": 0.5,
       "rotation": 0,
@@ -85,18 +85,40 @@
           "path": "assets/sketch-meta-1776860443670.json"
         }
       ]
+    },
+    {
+      "id": "task-3",
+      "path": "3",
+      "text": "添加一些石头",
+      "done": false,
+      "attachments": [
+        {
+          "id": "sketch-1776910505913",
+          "name": "超画笔规划-3.svg",
+          "mime": "image/svg+xml",
+          "size": 5987,
+          "path": "assets/sketch-1776910505913.svg"
+        },
+        {
+          "id": "sketch-meta-1776910505913",
+          "name": "超画笔结构-3.json",
+          "mime": "application/x-super-sketch+json",
+          "size": 8433,
+          "path": "assets/sketch-meta-1776910505913.json"
+        }
+      ]
     }
   ],
-  "nextId": 3,
-  "nextTaskId": 3,
+  "nextId": 12,
+  "nextTaskId": 4,
   "view": {
-    "x": 166.28712098263728,
-    "y": 306.5486502065254,
-    "scale": 1.109
+    "x": -15,
+    "y": 160,
+    "scale": 1.163
   },
   "ui": {
-    "drawerHeight": 296.571533203125,
-    "drawerSplit": 0.40753463700097514
+    "drawerHeight": 220,
+    "drawerSplit": 0.42
   },
-  "savedAt": "2026-04-22T12:36:13.564Z"
+  "savedAt": "2026-04-23T02:31:29.482Z"
 }
