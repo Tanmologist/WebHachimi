@@ -132,7 +132,7 @@ export function applyDockDrop(input: {
   const floating = { ...input.state.floating };
   delete floating[input.panel];
 
-  const rootWithoutPanel = pruneEmpty(removePanelFromNode(input.state.root, input.panel));
+  const rootWithoutPanel = removePanelFromNode(input.state.root, input.panel);
   if (input.target.kind === "float") {
     return {
       root: rootWithoutPanel,
@@ -145,7 +145,7 @@ export function applyDockDrop(input: {
 
   if (input.target.kind === "root-edge") {
     return {
-      root: insertAtRootEdge(rootWithoutPanel, input.panel, input.target.edge, input.floatingRect, input.workspace),
+      root: insertAtRootEdge(pruneEmpty(rootWithoutPanel), input.panel, input.target.edge, input.floatingRect, input.workspace),
       floating,
     };
   }
@@ -173,7 +173,7 @@ export function applyDockDrop(input: {
       };
     }
     return {
-      root: pruneEmpty(insertAtPanelEdge(rootWithoutPanel, input.panel, input.target.panel, input.target.edge, input.floatingRect, input.workspace)),
+      root: insertAtPanelEdge(rootWithoutPanel, input.panel, input.target.panel, input.target.edge, input.floatingRect, input.workspace),
       floating,
     };
   }
@@ -188,7 +188,7 @@ export function applyDockDrop(input: {
     };
   }
   return {
-    root: pruneEmpty(insertIntoStackCenter(rootWithoutPanel, input.panel, input.target.panel)),
+    root: insertIntoStackCenter(rootWithoutPanel, input.panel, input.target.panel),
     floating,
   };
 }

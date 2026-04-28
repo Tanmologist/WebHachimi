@@ -33,6 +33,7 @@ assertDetectsOverlappedDockedPanelWhenPointerMisses(state);
 assertDetectsOutsideRootEdges(state);
 assertRootBottomDropUsesReasonableBand(state);
 assertPanelEdgeDropDoesNotCollapseTarget(state);
+assertPanelEdgeDropSplitsTargetRectInPlace(state);
 assertFloatingPanelEdgeDropSplitsFloatingTarget(state);
 
 const rootLeftTarget: DockDropTarget = { kind: "root-edge", edge: "left" };
@@ -260,6 +261,36 @@ function assertPanelEdgeDropDoesNotCollapseTarget(state: DockingState): void {
   assert(nextRects.tasks && nextRects.assets, "expected tasks and assets after panel-edge split");
   assert(nextRects.tasks.height > 100, `panel-edge target should not collapse, got ${nextRects.tasks.height}`);
   assert(nextRects.assets.height > 100, `panel-edge inserted panel should not collapse, got ${nextRects.assets.height}`);
+}
+
+function assertPanelEdgeDropSplitsTargetRectInPlace(state: DockingState): void {
+  const beforeRects = resolveDockingRects(state, workspace);
+  const sceneRect = beforeRects.scene;
+  const targetRect = beforeRects.properties;
+  const floatingRect = beforeRects.assets;
+  assert(sceneRect && targetRect && floatingRect, "expected default scene, properties, and assets rects");
+  const next = applyDockDrop({
+    state,
+    panel: "assets",
+    target: { kind: "panel-edge", panel: "properties", edge: "top" },
+    floatingRect,
+    workspace,
+  });
+  const nextRects = resolveDockingRects(next, workspace);
+  const insertedRect = nextRects.assets;
+  const yieldedRect = nextRects.properties;
+  assertRect(nextRects.scene, sceneRect, "panel-edge split should not consume the canvas center slot");
+  assert(insertedRect && yieldedRect, "expected inserted and yielded panels after in-place split");
+  assert(Math.round(insertedRect.x) === Math.round(targetRect.x), "inserted panel should keep target x");
+  assert(Math.round(insertedRect.width) === Math.round(targetRect.width), "inserted panel should keep target width");
+  assert(Math.round(yieldedRect.x) === Math.round(targetRect.x), "yielded target should keep target x");
+  assert(Math.round(yieldedRect.width) === Math.round(targetRect.width), "yielded target should keep target width");
+  assert(Math.round(insertedRect.y) === Math.round(targetRect.y), "top split should place inserted panel at target top");
+  assert(Math.round(yieldedRect.y) > Math.round(insertedRect.y), "target should yield below inserted panel");
+  assert(
+    Math.round(insertedRect.height + yieldedRect.height + 1) === Math.round(targetRect.height),
+    `split panels should fill original target height, got ${insertedRect.height} + ${yieldedRect.height}`,
+  );
 }
 
 function assertFloatingPanelEdgeDropSplitsFloatingTarget(state: DockingState): void {
