@@ -1,8 +1,9 @@
-import { err, ok, type EntityId, type Result, type Vec2 } from "../shared/types";
+import { err, makeId, ok, type EntityId, type Result, type Vec2 } from "../shared/types";
 import type {
   CombatEvent,
   FrameCheck,
   InputScript,
+  InputStep,
   RuntimeSnapshot,
   Scene,
   TargetRef,
@@ -12,7 +13,7 @@ import type {
   TestTiming,
 } from "../project/schema";
 import { RuntimeWorld } from "../runtime/world";
-import { SimulationTestRunner } from "./simulationTestRunner";
+import { InteractiveTestRunner } from "./interactiveTestRunner";
 import { MemoryTraceSink, summarizeTraceForAi } from "./telemetry";
 import type { TaskId, TestRecordId, TransactionId } from "../shared/types";
 
@@ -179,13 +180,16 @@ export function runReactionWindowSweep(options: ReactionWindowSweepRunOptions): 
   const cases = buildReactionWindowSweep(options.config);
   const results = cases.map((testCase) => {
     const traceSink = new MemoryTraceSink();
-    const runner = new SimulationTestRunner({ traceSink });
-    const record = runner.run({
+    const execution = executeInteractiveTimeline({
+      scene: options.scene,
       taskId: options.taskId,
       transactionId: options.transactionId,
-      world: new RuntimeWorld({ scene: options.scene }),
+      traceSink,
+      timeline: testCase.timeline,
       script: testCase.script,
-    }).record;
+      fallbackTarget: options.config.defenderTarget,
+    });
+    const record = execution.record;
 
     return {
       label: testCase.label,
@@ -290,15 +294,15 @@ export function runScriptedReactionPlan(options: {
   const planned = planScriptedReaction(options.scene, options.config);
   if (!planned.ok) return planned;
   const traceSink = new MemoryTraceSink();
-  const runner = new SimulationTestRunner({ traceSink, timeScale: planned.value.script.timeScale });
-  const testWorld = new RuntimeWorld({ scene: options.scene });
-  if (options.config.initialSnapshot) testWorld.restoreSnapshot(options.config.initialSnapshot);
-  const testResult = runner.run({
+  const testResult = executeInteractiveTimeline({
+    scene: options.scene,
     taskId: options.taskId,
     transactionId: options.transactionId,
-    world: testWorld,
+    traceSink,
+    timeline: planned.value.timeline,
     script: planned.value.script,
     initialSnapshot: options.config.initialSnapshot,
+    fallbackTarget: options.config.defenderTarget,
   });
   const record = testResult.record;
   return ok({
@@ -316,6 +320,143 @@ export function runScriptedReactionPlan(options: {
     timeScaleReason: record.timeScaleReason || planned.value.script.timeScaleReason,
     script: planned.value.script,
   });
+}
+
+function executeInteractiveTimeline(options: {
+  scene: Scene;
+  timeline: FrameTimeline;
+  script: InputScript;
+  fallbackTarget: TargetRef;
+  taskId?: TaskId;
+  transactionId?: TransactionId;
+  traceSink?: MemoryTraceSink;
+  initialSnapshot?: RuntimeSnapshot;
+}): { record: TestRecord; snapshots: RuntimeSnapshot[] } {
+  const world = new RuntimeWorld({ scene: options.scene });
+  const controller = new InteractiveTestRunner({
+    world,
+    taskId: options.taskId,
+    transactionId: options.transactionId,
+    traceSink: options.traceSink,
+    initialSnapshot: options.initialSnapshot,
+  });
+  const checks: FrameCheck[] = [];
+  const logs: TestLog[] = [];
+  const timings: TestTiming[] = [];
+  const worldTickRate = Math.round(1000 / world.clock.fixedStepMs);
+  const scriptTickRate = normalizedTickRate(options.script.tickRate) ?? worldTickRate;
+  const timeScale = normalizedTimeScale(options.script.timeScale);
+  const initialSnapshotRef = options.initialSnapshot?.id;
+  let result: TestRecord["result"] = "passed";
+  let failureSnapshotRef = undefined as TestRecord["failureSnapshotRef"];
+  let cursor = controller.frame;
+
+  if (options.script.tickRate !== undefined && scriptTickRate !== worldTickRate) {
+    logs.push({
+      level: "warning",
+      frame: controller.frame,
+      message: `Input script tickRate ${scriptTickRate} was converted to world tickRate ${worldTickRate}.`,
+    });
+  }
+
+  const inputs = [...options.timeline.inputs].sort((left, right) => left.frame - right.frame);
+  const probes = [...options.timeline.probes].sort((left, right) => left.frame - right.frame);
+  const markers = [
+    ...inputs.map((input) => ({ frame: input.frame, input })),
+    ...probes.map((probe) => ({ frame: probe.frame, probe })),
+  ].sort((left, right) => left.frame - right.frame);
+
+  for (const marker of markers) {
+    if (marker.frame > cursor) {
+      const startTick = controller.frame;
+      const startTimeMs = controller.timeMs;
+      controller.step(marker.frame - cursor);
+      timings.push(createTimingRecord({ op: "wait", ticks: marker.frame - cursor }, timings.length, startTick, startTimeMs, controller.frame, controller.timeMs, timeScale));
+      cursor = controller.frame;
+    }
+
+    if ("input" in marker && marker.input) {
+      const startTick = controller.frame;
+      const startTimeMs = controller.timeMs;
+      controller.tap(actorScopedKey(marker.input.actorId, marker.input.key), marker.input.durationFrames);
+      timings.push(
+        createTimingRecord(
+          { op: "tap", key: actorScopedKey(marker.input.actorId, marker.input.key), ticks: marker.input.durationFrames },
+          timings.length,
+          startTick,
+          startTimeMs,
+          controller.frame,
+          controller.timeMs,
+          timeScale,
+        ),
+      );
+      cursor = controller.frame;
+      continue;
+    }
+
+    if ("probe" in marker && marker.probe) {
+      const probeChecks = marker.probe.checks.length
+        ? marker.probe.checks
+        : [{ label: marker.probe.label, target: options.fallbackTarget, expect: { exists: true } }];
+      const startTick = controller.frame;
+      const startTimeMs = controller.timeMs;
+      const evaluation = controller.assert(probeChecks, { freeze: true, label: marker.probe.label });
+      logs.push({
+        level: "info",
+        frame: controller.frame,
+        message: `Frozen for ${probeChecks.length} checks at ${evaluation.snapshot.id}.`,
+      });
+      logs.push(...evaluation.logs);
+      checks.push(...probeChecks);
+      if (!evaluation.passed && result === "passed") {
+        result = "failed";
+        failureSnapshotRef = evaluation.snapshot.id;
+      }
+      controller.resume();
+      timings.push(createTimingRecord({ op: "freezeAndInspect", checks: probeChecks }, timings.length, startTick, startTimeMs, controller.frame, controller.timeMs, timeScale));
+      cursor = controller.frame;
+    }
+  }
+
+  if (options.timeline.totalFrames > cursor) {
+    const startTick = controller.frame;
+    const startTimeMs = controller.timeMs;
+    controller.step(options.timeline.totalFrames - cursor);
+    timings.push(
+      createTimingRecord(
+        { op: "wait", ticks: options.timeline.totalFrames - cursor },
+        timings.length,
+        startTick,
+        startTimeMs,
+        controller.frame,
+        controller.timeMs,
+        timeScale,
+      ),
+    );
+  }
+
+  return {
+    record: {
+      id: makeId<"TestRecordId">("test") as TestRecordId,
+      taskId: options.taskId,
+      transactionId: options.transactionId,
+      script: options.script,
+      result,
+      frameChecks: checks,
+      initialSnapshotRef,
+      failureSnapshotRef,
+      snapshotRefs: controller.recordedSnapshots.map((snapshot) => snapshot.id),
+      logs,
+      timings,
+      tickRate: worldTickRate,
+      scriptTickRate,
+      timeScale,
+      timeScaleMode: options.script.timeScaleMode,
+      timeScaleReason: options.script.timeScaleReason,
+      createdAt: new Date().toISOString(),
+    },
+    snapshots: controller.recordedSnapshots,
+  };
 }
 
 export function compileTimelineToInputScript(timeline: FrameTimeline, fallbackTarget: TargetRef, startFrame = 0): InputScript {
@@ -347,6 +488,50 @@ export function compileTimelineToInputScript(timeline: FrameTimeline, fallbackTa
 
   if (timeline.totalFrames > cursor) steps.push({ op: "wait", ticks: timeline.totalFrames - cursor });
   return { steps };
+}
+
+function normalizedTickRate(value: number | undefined): number | undefined {
+  if (!Number.isFinite(value) || !value || value <= 0) return undefined;
+  return Math.max(1, Math.round(value));
+}
+
+function normalizedTimeScale(value: number | undefined): number {
+  return Number.isFinite(value) && value && value > 0 ? value : 1;
+}
+
+function createTimingRecord(
+  step: InputStep,
+  stepIndex: number,
+  startTick: number,
+  startTimeMs: number,
+  endTick: number,
+  endTimeMs: number,
+  timeScale: number,
+): TestTiming {
+  const durationMs = Math.max(0, endTimeMs - startTimeMs);
+  return {
+    stepIndex,
+    op: step.op,
+    key: "key" in step ? step.key : undefined,
+    label: timingLabel(step),
+    startTick,
+    endTick,
+    durationTicks: Math.max(0, endTick - startTick),
+    startTimeMs,
+    endTimeMs,
+    durationMs,
+    scaledStartTimeMs: startTimeMs * timeScale,
+    scaledEndTimeMs: endTimeMs * timeScale,
+    scaledDurationMs: durationMs * timeScale,
+    timeScale,
+  };
+}
+
+function timingLabel(step: InputStep): string {
+  if (step.op === "wait") return "等待";
+  if (step.op === "hold") return `按住 ${step.key}`;
+  if (step.op === "tap") return `点击 ${step.key}`;
+  return "冻结检查";
 }
 
 export function actorScopedKey(actorId: EntityId, key: string): string {

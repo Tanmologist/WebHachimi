@@ -15,6 +15,10 @@ export type AutonomousTestSuiteOptions = {
   traceLimit?: number;
   maxEntityChecks?: number;
   includeReactionCase?: boolean;
+  reactionPair?: {
+    attackerId: EntityId;
+    defenderId: EntityId;
+  };
 };
 
 export type AutonomousLogSummary = {
@@ -131,9 +135,9 @@ function runAutonomousReactionCase(
   usedFrozenSnapshot: boolean,
   traceLimit: number,
 ): AutonomousTestCaseReport | undefined {
-  const entities = Object.values(options.scene.entities);
-  const player = entities.find((entity) => entity.behavior?.builtin === "playerPlatformer");
-  const enemy = entities.find((entity) => entity.behavior?.builtin === "enemyPatrol");
+  const pair = resolveReactionPair(options);
+  const player = pair?.defender;
+  const enemy = pair?.attacker;
   if (!player || !enemy) return undefined;
 
   const baseFrame = usedFrozenSnapshot && options.initialSnapshot ? options.initialSnapshot.frame : 0;
@@ -194,6 +198,24 @@ function runAutonomousReactionCase(
       result.value.status === "passed" ? "Parry timing matched the generated reaction plan." : "Review combat trace and timing window.",
     ],
   };
+}
+
+function resolveReactionPair(
+  options: AutonomousTestSuiteOptions,
+): { attacker: Scene["entities"][string]; defender: Scene["entities"][string] } | undefined {
+  if (options.reactionPair) {
+    const attacker = options.scene.entities[options.reactionPair.attackerId];
+    const defender = options.scene.entities[options.reactionPair.defenderId];
+    if (attacker?.behavior?.builtin === "enemyPatrol" && defender?.behavior?.builtin === "playerPlatformer") {
+      return { attacker, defender };
+    }
+  }
+
+  const entities = Object.values(options.scene.entities);
+  const defender = entities.find((entity) => entity.behavior?.builtin === "playerPlatformer");
+  const attacker = entities.find((entity) => entity.behavior?.builtin === "enemyPatrol");
+  if (!attacker || !defender) return undefined;
+  return { attacker, defender };
 }
 
 function buildStructureChecks(scene: Scene, maxEntityChecks: number): FrameCheck[] {

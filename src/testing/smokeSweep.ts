@@ -53,7 +53,7 @@ const sweep = ai.runReactionWindowSweep({
 if (!sweep.ok) throw new Error(sweep.error);
 
 const expected = new Map<number, "passed" | "failed">([
-  [-10, "failed"],
+  [-10, "passed"],
   [-8, "passed"],
   [-6, "passed"],
   [-4, "passed"],

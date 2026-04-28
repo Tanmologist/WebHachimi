@@ -1,8 +1,9 @@
-import type { FrameCheck, InputScript, InputStep, RuntimeSnapshot, TargetRef, TestLog, TestRecord, TestTiming } from "../project/schema";
+import type { FrameCheck, InputScript, InputStep, RuntimeSnapshot, TestLog, TestRecord, TestTiming } from "../project/schema";
 import { makeId } from "../shared/types";
 import type { TaskId, TestRecordId, TransactionId } from "../shared/types";
 import type { RuntimeWorld } from "../runtime/world";
 import type { TraceSink } from "./telemetry";
+import { evaluateFrameChecks } from "./testAssertions";
 
 export type SimulationTestOptions = {
   taskId?: TaskId;
@@ -20,11 +21,6 @@ export type SimulationTestResult = {
 export type SimulationTestRunnerOptions = {
   traceSink?: TraceSink;
   timeScale?: number;
-};
-
-type CheckEvaluation = {
-  passed: boolean;
-  logs: TestLog[];
 };
 
 export class SimulationTestRunner {
@@ -86,7 +82,7 @@ export class SimulationTestRunner {
         this.emit(options, "test", "info", `freeze and inspect ${step.checks.length} checks`, {
           snapshotId: snapshot.id,
         });
-        const evaluation = evaluateChecks(snapshot, step.checks, options.world.clock.frame);
+        const evaluation = evaluateFrameChecks(snapshot, step.checks, options.world.clock.frame);
         logs.push(...evaluation.logs);
         if (!evaluation.passed && result === "passed") {
           result = "failed";
@@ -224,60 +220,4 @@ function timingLabel(step: InputStep): string {
   if (step.op === "hold") return `按住 ${step.key}`;
   if (step.op === "tap") return `点击 ${step.key}`;
   return "冻结检查";
-}
-
-function evaluateChecks(snapshot: RuntimeSnapshot, checks: FrameCheck[], frame: number): CheckEvaluation {
-  const logs: TestLog[] = [];
-  let passed = true;
-
-  for (const check of checks) {
-    const context = resolveTarget(snapshot, check.target);
-    for (const [key, expected] of Object.entries(check.expect)) {
-      const expectedValue = key === "combatEvent" ? true : expected;
-      const actual = key === "exists" ? context.exists : key === "combatEvent" ? hasCombatEvent(snapshot, expected) : readPath(context.value, key);
-      if (!matchesExpectation(actual, expectedValue)) {
-        passed = false;
-        logs.push({
-          level: "error",
-          frame,
-          message: `${check.label}: expected ${key} to be ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}.`,
-        });
-      }
-    }
-  }
-
-  return { passed, logs };
-}
-
-function resolveTarget(snapshot: RuntimeSnapshot, target: TargetRef): { exists: boolean; value: unknown } {
-  if (target.kind === "scene") return { exists: target.sceneId === snapshot.sceneId, value: { sceneId: snapshot.sceneId } };
-  if (target.kind === "entity") {
-    const entity = snapshot.entities[target.entityId];
-    return { exists: Boolean(entity), value: entity };
-  }
-  if (target.kind === "area") return { exists: target.sceneId === snapshot.sceneId, value: target.rect };
-  if (target.kind === "runtime") return { exists: !target.sceneId || target.sceneId === snapshot.sceneId, value: snapshot };
-  return { exists: false, value: undefined };
-}
-
-function readPath(value: unknown, path: string): unknown {
-  return path.split(".").reduce<unknown>((current, segment) => {
-    if (!current || typeof current !== "object") return undefined;
-    return (current as Record<string, unknown>)[segment];
-  }, value);
-}
-
-function matchesExpectation(actual: unknown, expected: unknown): boolean {
-  if (typeof expected === "number" && typeof actual === "number") return Math.abs(actual - expected) < 0.0001;
-  return JSON.stringify(actual) === JSON.stringify(expected);
-}
-
-function hasCombatEvent(snapshot: RuntimeSnapshot, expected: unknown): boolean {
-  if (!expected || typeof expected !== "object" || Array.isArray(expected)) return false;
-  const partial = expected as Record<string, unknown>;
-  return snapshot.combatEvents.some((event) => {
-    return Object.entries(partial).every(([key, value]) => {
-      return JSON.stringify((event as unknown as Record<string, unknown>)[key]) === JSON.stringify(value);
-    });
-  });
 }

@@ -12,7 +12,7 @@ import type {
 } from "../project/schema";
 import { createTask } from "../project/tasks";
 import { err, makeId, ok, type Result } from "../shared/types";
-import type { AutonomyRunId, SnapshotId, TaskId, TestRecordId, TransactionId } from "../shared/types";
+import type { AutonomyRunId, EntityId, SnapshotId, TaskId, TestRecordId, TransactionId } from "../shared/types";
 import { runAutonomousTestSuite, type AutonomousTestCaseReport, type AutonomousTestSuiteReport } from "../testing/autonomousTesting";
 import type { TraceSink } from "../testing/telemetry";
 import { AiTaskExecutor, type AiTaskExecutionResult } from "./taskExecutor";
@@ -29,6 +29,10 @@ export type AutonomyCycleOptions = {
   initialSnapshot?: RuntimeSnapshot;
   traceLimit?: number;
   includeReactionCase?: boolean;
+  reactionPair?: {
+    attackerId: EntityId;
+    defenderId: EntityId;
+  };
   maxEntityChecks?: number;
   maxFailureTasks?: number;
 };
@@ -100,6 +104,7 @@ export class AutonomyLoop {
       traceLimit: options.traceLimit ?? this.traceLimit,
       maxEntityChecks: options.maxEntityChecks ?? this.maxEntityChecks,
       includeReactionCase: options.includeReactionCase,
+      reactionPair: options.reactionPair,
     });
 
     const suiteRecordIds = this.recordSuiteResults(suite, readyTask, transaction);
