@@ -97,6 +97,22 @@ export type ReactionWindowBoundsSummary = {
   gapOffsets: number[];
 };
 
+export type ReactionWindowEdgeSearchConfig = ScriptedReactionPlanConfig & {
+  minOffset: number;
+  maxOffset: number;
+  anchorOffset?: number;
+  verifyContiguous?: boolean;
+};
+
+export type ReactionWindowEdgeSearchResult = {
+  status: "passed" | "failed";
+  foundPassingWindow: boolean;
+  anchorOffset: number;
+  anchorStatus?: ScriptedReactionRunResult["status"];
+  bounds: ReactionWindowBoundsSummary;
+  cases: ReactionWindowSweepCaseResult[];
+};
+
 export type ScriptedReactionPlanConfig = {
   attackerId: EntityId;
   defenderId: EntityId;
@@ -286,6 +302,96 @@ export function summarizeReactionWindowBounds(result: ReactionWindowSweepRunResu
     failingOffsets,
     gapOffsets,
   };
+}
+
+export function runReactionWindowEdgeSearch(options: {
+  scene: Scene;
+  config: ReactionWindowEdgeSearchConfig;
+  taskId?: TaskId;
+  transactionId?: TransactionId;
+  traceLimit?: number;
+}): Result<ReactionWindowEdgeSearchResult> {
+  const minOffset = Math.min(options.config.minOffset, options.config.maxOffset);
+  const maxOffset = Math.max(options.config.minOffset, options.config.maxOffset);
+  const anchorOffset = clampOffset(options.config.anchorOffset ?? 0, minOffset, maxOffset);
+  const cache = new Map<number, ReactionWindowSweepCaseResult>();
+
+  const getCase = (defenseOffset: number): Result<ReactionWindowSweepCaseResult> => {
+    if (cache.has(defenseOffset)) return ok(cache.get(defenseOffset)!);
+    const run = runScriptedReactionPlan({
+      scene: options.scene,
+      taskId: options.taskId,
+      transactionId: options.transactionId,
+      traceLimit: options.traceLimit,
+      config: {
+        ...options.config,
+        defenseOffset,
+      },
+    });
+    if (!run.ok) return run;
+    const next: ReactionWindowSweepCaseResult = {
+      label: `defense ${defenseOffset >= 0 ? "+" : ""}${defenseOffset}f`,
+      defenseOffset,
+      status: run.value.status,
+      testRecordId: run.value.testRecordId,
+      failureSnapshotRef: run.value.record.failureSnapshotRef,
+      traceSummary: run.value.traceSummary,
+      logs: run.value.logs,
+      script: run.value.script,
+    };
+    cache.set(defenseOffset, next);
+    return ok(next);
+  };
+
+  const passingAnchor = findPassingAnchor(anchorOffset, minOffset, maxOffset, getCase);
+  if (!passingAnchor.ok) return passingAnchor;
+
+  if (passingAnchor.value === undefined) {
+    const cases = sortedCases(cache);
+    return ok({
+      status: "failed",
+      foundPassingWindow: false,
+      anchorOffset,
+      anchorStatus: cache.get(anchorOffset)?.status,
+      bounds: summarizeReactionWindowBounds({ status: "failed", cases }),
+      cases,
+    });
+  }
+
+  const firstPassingOffsetResult = findTransitionOffset({
+    low: minOffset,
+    high: passingAnchor.value,
+    targetStatus: "passed",
+    getCase,
+    preferLowerPass: true,
+  });
+  if (!firstPassingOffsetResult.ok) return firstPassingOffsetResult;
+
+  const lastPassingOffsetResult = findTransitionOffset({
+    low: passingAnchor.value,
+    high: maxOffset,
+    targetStatus: "passed",
+    getCase,
+    preferLowerPass: false,
+  });
+  if (!lastPassingOffsetResult.ok) return lastPassingOffsetResult;
+
+  if (options.config.verifyContiguous !== false) {
+    for (let offset = firstPassingOffsetResult.value; offset <= lastPassingOffsetResult.value; offset += 1) {
+      const item = getCase(offset);
+      if (!item.ok) return item;
+    }
+  }
+
+  const cases = sortedCases(cache);
+  return ok({
+    status: "passed",
+    foundPassingWindow: true,
+    anchorOffset,
+    anchorStatus: cache.get(anchorOffset)?.status,
+    bounds: summarizeReactionWindowBounds({ status: "passed", cases }),
+    cases,
+  });
 }
 
 export function planScriptedReaction(scene: Scene, config: ScriptedReactionPlanConfig): Result<ScriptedReactionPlan> {
@@ -759,6 +865,72 @@ function findFirstImpactFrame(
   }
 
   return undefined;
+}
+
+function findPassingAnchor(
+  anchorOffset: number,
+  minOffset: number,
+  maxOffset: number,
+  getCase: (defenseOffset: number) => Result<ReactionWindowSweepCaseResult>,
+): Result<number | undefined> {
+  const anchorCase = getCase(anchorOffset);
+  if (!anchorCase.ok) return anchorCase;
+  if (anchorCase.value.status === "passed") return ok(anchorOffset);
+
+  const maxDistance = Math.max(Math.abs(anchorOffset - minOffset), Math.abs(maxOffset - anchorOffset));
+  for (let distance = 1; distance <= maxDistance; distance += 1) {
+    const left = anchorOffset - distance;
+    if (left >= minOffset) {
+      const leftCase = getCase(left);
+      if (!leftCase.ok) return leftCase;
+      if (leftCase.value.status === "passed") return ok(left);
+    }
+
+    const right = anchorOffset + distance;
+    if (right <= maxOffset) {
+      const rightCase = getCase(right);
+      if (!rightCase.ok) return rightCase;
+      if (rightCase.value.status === "passed") return ok(right);
+    }
+  }
+
+  return ok(undefined);
+}
+
+function findTransitionOffset(options: {
+  low: number;
+  high: number;
+  targetStatus: "passed";
+  preferLowerPass: boolean;
+  getCase: (defenseOffset: number) => Result<ReactionWindowSweepCaseResult>;
+}): Result<number> {
+  let low = options.low;
+  let high = options.high;
+
+  while (low < high) {
+    const mid = options.preferLowerPass ? Math.floor((low + high) / 2) : Math.ceil((low + high) / 2);
+    const current = options.getCase(mid);
+    if (!current.ok) return current;
+
+    if (current.value.status === options.targetStatus) {
+      if (options.preferLowerPass) high = mid;
+      else low = mid;
+      continue;
+    }
+
+    if (options.preferLowerPass) low = mid + 1;
+    else high = mid - 1;
+  }
+
+  return ok(low);
+}
+
+function sortedCases(cache: Map<number, ReactionWindowSweepCaseResult>): ReactionWindowSweepCaseResult[] {
+  return [...cache.values()].sort((left, right) => left.defenseOffset - right.defenseOffset);
+}
+
+function clampOffset(value: number, minOffset: number, maxOffset: number): number {
+  return Math.min(maxOffset, Math.max(minOffset, Math.floor(value)));
 }
 
 function scriptedReactionSignature(

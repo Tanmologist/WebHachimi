@@ -5,6 +5,7 @@ import { createStarterProject } from "../v2/starterProject";
 import { SimulationTestRunner } from "./simulationTestRunner";
 import {
   planScriptedReaction,
+  runReactionWindowEdgeSearch,
   runReactionWindowSweep,
   runRepeatedScriptedReactionPlan,
   summarizeReactionWindowBounds,
@@ -62,6 +63,39 @@ runSmoke("wide sweep finds contiguous parry window and failures on both extremes
     firstFailBefore: bounds.firstFailBefore,
     firstFailAfter: bounds.firstFailAfter,
     passingOffsets: bounds.passingOffsets,
+  };
+});
+
+runSmoke("edge search finds the same parry window without a hand-written offset list", () => {
+  const { scene, player, enemy } = combatPair();
+  const edgeSearch = requirePlan(
+    runReactionWindowEdgeSearch({
+      scene,
+      config: {
+        attackerId: enemy.id,
+        defenderId: player.id,
+        attackKey: "attack",
+        defenseKey: "parry",
+        attackStartFrame: 4,
+        defenseOffset: 0,
+        minOffset: -20,
+        maxOffset: 8,
+        anchorOffset: 0,
+        defenderTarget: { kind: "entity", entityId: player.id },
+        successChecks: [parrySuccessCheck(scene, enemy.id, player.id)],
+      },
+    }),
+  );
+
+  assert(edgeSearch.foundPassingWindow, "expected edge search to find a passing window");
+  assert(edgeSearch.bounds.firstPassingOffset === -10, `expected earliest passing offset -10, got ${String(edgeSearch.bounds.firstPassingOffset)}`);
+  assert(edgeSearch.bounds.lastPassingOffset === 0, `expected latest passing offset 0, got ${String(edgeSearch.bounds.lastPassingOffset)}`);
+  assert(edgeSearch.bounds.contiguousPassWindow, "expected edge search pass window to be contiguous");
+
+  return {
+    searchedCases: edgeSearch.cases.map((item) => `${item.defenseOffset}:${item.status}`),
+    firstPassingOffset: edgeSearch.bounds.firstPassingOffset,
+    lastPassingOffset: edgeSearch.bounds.lastPassingOffset,
   };
 });
 

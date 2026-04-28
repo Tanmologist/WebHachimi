@@ -3,7 +3,7 @@ import type { EntityId, TaskId, TransactionId } from "../shared/types";
 import { RuntimeWorld } from "../runtime/world";
 import { SimulationTestRunner } from "./simulationTestRunner";
 import { MemoryTraceSink, summarizeTraceForAi } from "./telemetry";
-import { runScriptedReactionPlan } from "./timingSweep";
+import { runReactionWindowEdgeSearch, runScriptedReactionPlan } from "./timingSweep";
 
 export type AutonomousTestStatus = "passed" | "failed" | "interrupted";
 
@@ -15,6 +15,7 @@ export type AutonomousTestSuiteOptions = {
   traceLimit?: number;
   maxEntityChecks?: number;
   includeReactionCase?: boolean;
+  includeReactionBoundaryCase?: boolean;
   reactionPair?: {
     attackerId: EntityId;
     defenderId: EntityId;
@@ -38,7 +39,7 @@ export type AutonomousTimingSummary = {
 export type AutonomousTestCaseReport = {
   id: string;
   label: string;
-  kind: "structure" | "scriptedReaction";
+  kind: "structure" | "scriptedReaction" | "reactionBoundary";
   status: AutonomousTestStatus;
   record?: TestRecord;
   snapshots: RuntimeSnapshot[];
@@ -69,6 +70,11 @@ export function runAutonomousTestSuite(options: AutonomousTestSuiteOptions): Aut
   if (options.includeReactionCase !== false) {
     const reactionCase = runAutonomousReactionCase(options, usedFrozenSnapshot, traceLimit);
     if (reactionCase) cases.push(reactionCase);
+  }
+
+  if (options.includeReactionBoundaryCase !== false) {
+    const boundaryCase = runAutonomousReactionBoundaryCase(options, usedFrozenSnapshot, traceLimit);
+    if (boundaryCase) cases.push(boundaryCase);
   }
 
   const status = cases.some((testCase) => testCase.status === "failed")
@@ -200,6 +206,91 @@ function runAutonomousReactionCase(
   };
 }
 
+function runAutonomousReactionBoundaryCase(
+  options: AutonomousTestSuiteOptions,
+  usedFrozenSnapshot: boolean,
+  traceLimit: number,
+): AutonomousTestCaseReport | undefined {
+  const pair = resolveReactionPair(options);
+  const player = pair?.defender;
+  const enemy = pair?.attacker;
+  if (!player || !enemy) return undefined;
+
+  const baseFrame = usedFrozenSnapshot && options.initialSnapshot ? options.initialSnapshot.frame : 0;
+  const attackStartFrame = baseFrame + Math.max(1, Math.round((4 * (options.scene.settings.tickRate || 100)) / 60));
+  const result = runReactionWindowEdgeSearch({
+    scene: options.scene,
+    taskId: options.taskId,
+    transactionId: options.transactionId,
+    traceLimit,
+    config: {
+      attackerId: enemy.id,
+      defenderId: player.id,
+      attackKey: "attack",
+      defenseKey: "parry",
+      attackStartFrame,
+      defenseOffset: 0,
+      minOffset: -20,
+      maxOffset: 8,
+      anchorOffset: 0,
+      defenderTarget: { kind: "entity", entityId: player.id },
+      successChecks: [
+        {
+          label: "parry success event exists",
+          target: { kind: "runtime", sceneId: options.scene.id },
+          expect: { combatEvent: { type: "parrySuccess", attackerId: enemy.id, defenderId: player.id } },
+        },
+      ],
+      initialSnapshot: usedFrozenSnapshot ? options.initialSnapshot : undefined,
+      testTimeScale: "auto",
+    },
+  });
+
+  if (!result.ok) {
+    const log: TestLog = { level: "warning", frame: 0, message: result.error };
+    return {
+      id: "reaction-boundary",
+      label: "Autonomous reaction boundary",
+      kind: "reactionBoundary",
+      status: "interrupted",
+      snapshots: [],
+      traceSummary: "",
+      logs: summarizeLogs([log]),
+      timings: summarizeTimings([]),
+      aiNotes: ["Could not search for a stable reaction boundary window."],
+    };
+  }
+
+  const boundaryLogs = result.value.cases.flatMap((item) => item.logs);
+  const boundaryStatus: AutonomousTestStatus =
+    result.value.foundPassingWindow && result.value.bounds.contiguousPassWindow ? "passed" : "failed";
+  const firstFailure = result.value.cases.find((item) => item.status !== "passed");
+  const traceSummary = result.value.cases
+    .map((item) => `${item.label}: ${item.status}${item.failureSnapshotRef ? ` @ ${item.failureSnapshotRef}` : ""}`)
+    .join("\n");
+
+  return {
+    id: "reaction-boundary",
+    label: "Autonomous reaction boundary",
+    kind: "reactionBoundary",
+    status: boundaryStatus,
+    snapshots: [],
+    testRecordId: result.value.cases[0]?.testRecordId,
+    failureSnapshotRef: firstFailure?.failureSnapshotRef,
+    traceSummary,
+    logs: summarizeLogs(boundaryLogs),
+    timings: summarizeTimings([]),
+    aiNotes: [
+      result.value.foundPassingWindow
+        ? `Parry window ${String(result.value.bounds.firstPassingOffset)}f..${String(result.value.bounds.lastPassingOffset)}f`
+        : "No passing reaction window found within configured offset range.",
+      result.value.bounds.contiguousPassWindow
+        ? "Boundary window is contiguous inside the searched range."
+        : `Boundary search found gaps at ${result.value.bounds.gapOffsets.join(", ")}.`,
+    ],
+  };
+}
+
 function resolveReactionPair(
   options: AutonomousTestSuiteOptions,
 ): { attacker: Scene["entities"][string]; defender: Scene["entities"][string] } | undefined {
@@ -230,7 +321,8 @@ function buildStructureChecks(scene: Scene, maxEntityChecks: number): FrameCheck
       expect: { exists: true },
     },
   ];
-  for (const entity of Object.values(scene.entities).slice(0, Math.max(0, maxEntityChecks))) {
+  const runtimeEntities = Object.values(scene.entities).filter((entity) => entity.persistent !== false);
+  for (const entity of runtimeEntities.slice(0, Math.max(0, maxEntityChecks))) {
     checks.push({
       label: `entity exists: ${entity.displayName || entity.internalName || entity.id}`,
       target: { kind: "entity" as const, entityId: entity.id as EntityId },
@@ -309,9 +401,11 @@ function buildNextSteps(
   usedFrozenSnapshot: boolean,
 ): string[] {
   const steps: string[] = [];
+  const boundaryCase = cases.find((testCase) => testCase.kind === "reactionBoundary");
   if (options.initialSnapshot && !usedFrozenSnapshot) steps.push("Capture a fresh frozen snapshot for this scene before rerunning.");
   if (status === "failed") steps.push("Open the first failed case logs and inspect its failureSnapshotRef.");
   if (status === "interrupted") steps.push("Add or tune combat-capable player/enemy behaviors so the reaction planner can derive an impact frame.");
+  if (boundaryCase?.status === "failed") steps.push("Inspect the reaction boundary case to see whether the timing window shifted or developed gaps.");
   if (!cases.some((testCase) => testCase.kind === "scriptedReaction")) steps.push("Add a playerPlatformer and enemyPatrol pair to enable autonomous reaction-window coverage.");
   if (status === "passed") steps.push("Broaden coverage with scene-specific checks for resources, triggers, or task acceptance criteria.");
   return steps;
