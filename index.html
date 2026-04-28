@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebHachimi Engine</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="topbar">
+        <div class="brand">
+          <strong>WebHachimi Engine</strong>
+          <span id="saveState">本地</span>
+        </div>
+        <div class="toolbar" role="toolbar" aria-label="运行控制">
+          <button id="playBtn" class="icon-button primary" type="button" title="运行" aria-label="运行">▶</button>
+          <button id="pauseBtn" class="icon-button" type="button" title="暂停" aria-label="暂停">Ⅱ</button>
+          <button id="stepBtn" class="icon-button" type="button" title="单步" aria-label="单步">▷</button>
+          <button id="resetRuntimeBtn" class="icon-button" type="button" title="重置运行态" aria-label="重置运行态">↺</button>
+          <span id="runtimeBadge" class="status-pill">已暂停</span>
+        </div>
+        <div class="toolbar window-tools" role="toolbar" aria-label="窗口">
+          <button id="windowManagerBtn" class="text-button" type="button" title="窗口管理" aria-label="窗口管理">窗口</button>
+          <button id="resetWindowsBtn" class="icon-button" type="button" title="窗口复位" aria-label="窗口复位">⌂</button>
+          <div id="windowManagerMenu" class="window-manager-menu is-hidden" aria-label="窗口管理菜单"></div>
+        </div>
+        <div class="toolbar right-tools" role="toolbar" aria-label="项目">
+          <button id="forceReloadBtn" class="icon-button" type="button" title="从磁盘刷新" aria-label="从磁盘刷新">⟳</button>
+          <button id="undoBtn" class="icon-button" type="button" title="撤销" aria-label="撤销">↶</button>
+          <button id="redoBtn" class="icon-button" type="button" title="重做" aria-label="重做">↷</button>
+          <button id="exportBtn" class="text-button" type="button">导出</button>
+          <button id="importBtn" class="text-button" type="button">导入</button>
+          <input id="importInput" type="file" accept="application/json,.json" />
+        </div>
+      </header>
+
+      <section class="stage-panel">
+        <canvas id="gameCanvas" aria-label="游戏预览"></canvas>
+        <div class="stage-overlay">
+          <span id="sceneName">主场景</span>
+          <span id="fpsBadge">0 fps</span>
+          <span id="cursorBadge">0, 0</span>
+        </div>
+      </section>
+
+      <footer class="command-strip">
+        <input id="quickCommand" type="text" placeholder="快速指令" />
+        <button id="runQuickCommandBtn" class="text-button primary" type="button">执行</button>
+        <span id="messageLine"></span>
+      </footer>
+
+      <div id="windowLayer" class="window-layer" aria-label="浮动窗口">
+        <aside id="objectsWindow" class="floating-window workspace-window" data-window="objects" aria-label="对象窗口">
+          <header class="window-titlebar" data-window-handle="objects">
+            <div><strong>对象</strong><span>场景对象</span></div>
+            <div class="window-actions">
+              <button data-window-minimize="objects" type="button" title="最小化">−</button>
+              <button data-window-close="objects" type="button" title="关闭">×</button>
+            </div>
+          </header>
+          <div class="window-body panel-window-body">
+            <section class="panel-section">
+              <div class="section-head">
+                <h2>模板</h2>
+                <button id="addEntityBtn" class="icon-button small" type="button" title="添加方块" aria-label="添加方块">+</button>
+              </div>
+              <div class="palette-grid" aria-label="对象模板">
+                <button data-template="player" type="button">玩家</button>
+                <button data-template="platform" type="button">平台</button>
+                <button data-template="coin" type="button">金币</button>
+                <button data-template="enemy" type="button">敌人</button>
+                <button data-template="text" type="button">文字</button>
+                <button data-template="zone" type="button">区域</button>
+              </div>
+              <div id="entityList" class="entity-list"></div>
+            </section>
+          </div>
+        </aside>
+
+        <aside id="propertiesWindow" class="floating-window workspace-window" data-window="properties" aria-label="属性窗口">
+          <header class="window-titlebar" data-window-handle="properties">
+            <div><strong>属性</strong><span>检查器与 AI</span></div>
+            <div class="window-actions">
+              <button data-window-minimize="properties" type="button" title="最小化">−</button>
+              <button data-window-close="properties" type="button" title="关闭">×</button>
+            </div>
+          </header>
+          <div class="window-body panel-window-body stacked-panel-body">
+            <section class="panel-section inspector-section">
+              <div class="section-head">
+                <h2>属性</h2>
+                <button id="deleteEntityBtn" class="icon-button danger small" type="button" title="删除" aria-label="删除">×</button>
+              </div>
+              <form id="inspectorForm" class="inspector-form"></form>
+            </section>
+            <section class="panel-section ai-section">
+              <div class="section-head">
+                <h2>AI 补丁</h2>
+                <button id="copyContextBtn" class="icon-button small" type="button" title="复制上下文" aria-label="复制上下文">⧉</button>
+              </div>
+              <textarea id="promptInput" rows="4" placeholder="例如：做一个横版平台关卡，加金币和敌人"></textarea>
+              <div class="ai-actions">
+                <button id="planBtn" class="text-button" type="button">生成方案</button>
+                <button id="applyPlanBtn" class="text-button primary" type="button">应用</button>
+              </div>
+              <pre id="planOutput" class="plan-output"></pre>
+            </section>
+          </div>
+        </aside>
+
+        <section id="resourceWindow" class="floating-window" data-window="resources" aria-label="资源库窗口">
+          <header class="window-titlebar" data-window-handle="resources">
+            <div><strong>资源库</strong><span id="resourceCount">0 个资源</span></div>
+            <div class="window-actions">
+              <button data-window-minimize="resources" type="button" title="最小化">−</button>
+              <button data-window-close="resources" type="button" title="关闭">×</button>
+            </div>
+          </header>
+          <div class="window-body">
+            <div class="window-row">
+              <input id="resourceNameInput" type="text" placeholder="资源名称" />
+              <select id="resourceTypeSelect" aria-label="资源类型">
+                <option value="sprite">精灵</option>
+                <option value="image">图片</option>
+                <option value="animation">动图</option>
+                <option value="material">材质</option>
+                <option value="audio">音频</option>
+                <option value="script">脚本</option>
+                <option value="note">设定</option>
+              </select>
+            </div>
+            <div class="window-row compact">
+              <button id="addResourceBtn" class="text-button primary" type="button">新建资源</button>
+              <button id="importResourceBtn" class="text-button" type="button">导入文件</button>
+              <input id="resourceFileInput" type="file" accept="image/*,.json,.txt,.md" multiple />
+            </div>
+            <div id="resourceList" class="resource-list"></div>
+          </div>
+        </section>
+
+        <section id="annotationWindow" class="floating-window" data-window="annotations" aria-label="批注窗口">
+          <header class="window-titlebar" data-window-handle="annotations">
+            <div><strong>批注</strong><span id="annotationCount">0 条批注</span></div>
+            <div class="window-actions">
+              <button data-window-minimize="annotations" type="button" title="最小化">−</button>
+              <button data-window-close="annotations" type="button" title="关闭">×</button>
+            </div>
+          </header>
+          <div class="window-body">
+            <textarea id="annotationTextInput" rows="3" placeholder="给选中对象或资源写批注"></textarea>
+            <div class="window-row compact">
+              <select id="annotationResourceSelect" aria-label="关联资源"></select>
+              <button id="addAnnotationBtn" class="text-button primary" type="button">添加批注</button>
+            </div>
+            <div id="annotationList" class="annotation-list"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>

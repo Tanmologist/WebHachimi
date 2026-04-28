@@ -1,0 +1,8 @@
+node_modules/
+dist-v2/
+data/assets/
+v2-screenshot-*.png
+.chrome-profile-v2-check*/
+*.log
+.DS_Store
+Thumbs.db

@@ -1,0 +1,550 @@
+{
+  "kind": "webhachimi-engine-project",
+  "version": 3,
+  "savedAt": "2026-04-26T12:08:20.644Z",
+  "meta": {
+    "name": "未命名游戏"
+  },
+  "scene": {
+    "id": "scene-main",
+    "name": "主场景",
+    "width": 1600,
+    "height": 900,
+    "background": "#151515",
+    "gravity": 1600
+  },
+  "editor": {
+    "selectedId": "ent-ground",
+    "selectedIds": [
+      "ent-ground"
+    ],
+    "camera": {
+      "x": 8.737807407957852,
+      "y": 408.24169063892236,
+      "zoom": 0.9652731252988667
+    }
+  },
+  "entities": [
+    {
+      "id": "ent-player",
+      "name": "玩家",
+      "type": "player",
+      "x": -330,
+      "y": 160,
+      "w": 58,
+      "h": 72,
+      "rotation": 0,
+      "color": "#42c89f",
+      "text": "",
+      "description": "玩家角色，负责移动、跳跃和关卡交互。",
+      "traits": [
+        "键盘控制",
+        "受重力影响",
+        "可以跳跃"
+      ],
+      "resourceRefs": [],
+      "layer": 1,
+      "visible": true,
+      "locked": false,
+      "components": {
+        "body": "dynamic",
+        "collider": true,
+        "controller": true,
+        "gravity": true,
+        "collectible": false,
+        "hazard": false
+      },
+      "tuning": {
+        "speed": 360,
+        "jump": 680,
+        "gravity": 1600,
+        "bounce": 0
+      },
+      "folderId": null
+    },
+    {
+      "id": "ent-ground",
+      "name": "地面",
+      "type": "platform",
+      "x": -381,
+      "y": 310,
+      "w": 720,
+      "h": 51,
+      "rotation": 0,
+      "color": "#8d8d83",
+      "text": "",
+      "description": "平台对象，通常作为地面、墙体或跳台使用。",
+      "traits": [
+        "静态碰撞体",
+        "可以作为落脚点"
+      ],
+      "resourceRefs": [
+        {
+          "resourceId": "res-platform-metal",
+          "slot": "material",
+          "note": "给平台对象套用金属材质外观。",
+          "visualScale": 1,
+          "attachedAt": "2026-04-26T00:00:00.000Z"
+        }
+      ],
+      "layer": 0,
+      "visible": true,
+      "locked": false,
+      "components": {
+        "body": "static",
+        "collider": true,
+        "controller": false,
+        "gravity": false,
+        "collectible": false,
+        "hazard": false
+      },
+      "tuning": {
+        "speed": 360,
+        "jump": 680,
+        "gravity": 1600,
+        "bounce": 0
+      },
+      "folderId": null
+    },
+    {
+      "id": "ent-ledge",
+      "name": "平台 1",
+      "type": "platform",
+      "x": 90,
+      "y": 170,
+      "w": 260,
+      "h": 34,
+      "rotation": 0,
+      "color": "#8d8d83",
+      "text": "",
+      "description": "平台对象，通常作为地面、墙体或跳台使用。",
+      "traits": [
+        "静态碰撞体",
+        "可以作为落脚点"
+      ],
+      "resourceRefs": [],
+      "layer": 0,
+      "visible": true,
+      "locked": false,
+      "components": {
+        "body": "static",
+        "collider": true,
+        "controller": false,
+        "gravity": false,
+        "collectible": false,
+        "hazard": false
+      },
+      "tuning": {
+        "speed": 360,
+        "jump": 680,
+        "gravity": 1600,
+        "bounce": 0
+      },
+      "folderId": null
+    },
+    {
+      "id": "ent-coin-1",
+      "name": "金币 1",
+      "type": "coin",
+      "x": 120,
+      "y": 104,
+      "w": 34,
+      "h": 34,
+      "rotation": 0,
+      "color": "#e6b84a",
+      "text": "",
+      "description": "奖励对象，玩家触碰后会被收集。",
+      "traits": [
+        "可收集",
+        "用于奖励路线"
+      ],
+      "resourceRefs": [],
+      "layer": 1,
+      "visible": true,
+      "locked": false,
+      "components": {
+        "body": "static",
+        "collider": true,
+        "controller": false,
+        "gravity": false,
+        "collectible": true,
+        "hazard": false
+      },
+      "tuning": {
+        "speed": 360,
+        "jump": 680,
+        "gravity": 1600,
+        "bounce": 0
+      },
+      "folderId": null
+    }
+  ],
+  "resources": [
+    {
+      "id": "res-hachimi-spider",
+      "name": "哈基米蜘蛛设定",
+      "type": "sprite",
+      "color": "#ef6666",
+      "tags": [
+        "怪物",
+        "机动"
+      ],
+      "notes": "墙面移动和飞扑攻击的怪物资源。",
+      "linkedEntityId": null,
+      "intent": {
+        "role": "behavior",
+        "usage": "spawn",
+        "timing": "onApproach",
+        "placement": "靠近玩家路线的墙面或天花板",
+        "instruction": "当需要野怪压力时，可把这个素材生成成敌人，并继承爬墙和飞扑批注。"
+      },
+      "uses": [],
+      "attachments": []
+    },
+    {
+      "id": "res-platform-metal",
+      "name": "金属平台材质",
+      "type": "material",
+      "color": "#8d8d83",
+      "tags": [
+        "平台",
+        "材质"
+      ],
+      "notes": "用于静态平台和地面。",
+      "linkedEntityId": "ent-ground",
+      "intent": {
+        "role": "material",
+        "usage": "attach",
+        "timing": "immediate",
+        "placement": "静态平台或地面对象",
+        "instruction": "给平台对象套用金属材质外观。"
+      },
+      "uses": [],
+      "attachments": []
+    }
+  ],
+  "annotations": [
+    {
+      "id": "ann-hachimi-spider",
+      "title": "野怪能力草案",
+      "text": "哈基米蜘蛛可以爬墙，可以飞扑，也可以在玩家靠近时切换追击路线。",
+      "targetId": null,
+      "resourceId": "res-hachimi-spider",
+      "x": 80,
+      "y": -90,
+      "createdAt": "2026-04-26T00:00:00.000Z"
+    }
+  ],
+  "windows": {
+    "objects": {
+      "open": true,
+      "x": 0,
+      "y": 0,
+      "w": 361,
+      "h": 580,
+      "z": 24,
+      "snap": "left",
+      "collapsed": true
+    },
+    "properties": {
+      "open": true,
+      "x": 0,
+      "y": 0,
+      "w": 361,
+      "h": 290,
+      "z": 10,
+      "snap": "left",
+      "collapsed": true
+    },
+    "resources": {
+      "open": true,
+      "x": 0,
+      "y": 0,
+      "w": 383,
+      "h": 760,
+      "z": 35,
+      "snap": "",
+      "collapsed": true
+    },
+    "annotations": {
+      "open": true,
+      "x": 7,
+      "y": 500,
+      "w": 760,
+      "h": 299,
+      "z": 30,
+      "snap": "",
+      "collapsed": false
+    }
+  },
+  "patches": [
+    {
+      "id": "patch-8fa0lie86y",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T09:27:14.938Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ground"
+        }
+      ]
+    },
+    {
+      "id": "patch-q9jawb6zih",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T09:49:36.713Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ledge"
+        }
+      ]
+    },
+    {
+      "id": "patch-g11adb709e",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T09:49:37.682Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-coin-1"
+        }
+      ]
+    },
+    {
+      "id": "patch-gxpvojltgz",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T10:01:08.723Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-coin-1"
+        }
+      ]
+    },
+    {
+      "id": "patch-xpubuumhmx",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T10:01:40.041Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": null
+        }
+      ]
+    },
+    {
+      "id": "patch-3np8flmo94",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T10:01:48.616Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ground"
+        }
+      ]
+    },
+    {
+      "id": "patch-x8q0jh65vx",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T10:16:57.933Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": null
+        }
+      ]
+    },
+    {
+      "id": "patch-1ujupq66f4",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T10:16:58.624Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ground"
+        }
+      ]
+    },
+    {
+      "id": "patch-lnwgc267au",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T10:16:59.766Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ledge"
+        }
+      ]
+    },
+    {
+      "id": "patch-xvwbvy67y5",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T10:17:00.605Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ground"
+        }
+      ]
+    },
+    {
+      "id": "patch-zvqo3c69l6",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T10:17:02.730Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ledge"
+        }
+      ]
+    },
+    {
+      "id": "patch-zh9jnxj5nv",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T10:27:04.171Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ground"
+        }
+      ]
+    },
+    {
+      "id": "patch-mlab2cjjxh",
+      "reason": "框选对象",
+      "createdAt": "2026-04-26T10:27:22.661Z",
+      "operations": [
+        {
+          "op": "selectEntities",
+          "ids": [
+            "ent-player",
+            "ent-ground"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "patch-e8l0584fgl",
+      "reason": "取消选择",
+      "createdAt": "2026-04-26T11:39:35.877Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": null
+        }
+      ]
+    },
+    {
+      "id": "patch-8m95ej4hmu",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T11:39:38.694Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ground"
+        }
+      ]
+    },
+    {
+      "id": "patch-7m64324i44",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T11:39:39.316Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-player"
+        }
+      ]
+    },
+    {
+      "id": "patch-ogtqhu4ina",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T11:39:40.006Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ground"
+        }
+      ]
+    },
+    {
+      "id": "patch-iwj2k54j36",
+      "reason": "取消选择",
+      "createdAt": "2026-04-26T11:39:40.578Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": null
+        }
+      ]
+    },
+    {
+      "id": "patch-0flrk74k3h",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T11:39:41.885Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-player"
+        }
+      ]
+    },
+    {
+      "id": "patch-uvkqjo4kv6",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T11:39:42.882Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ground"
+        }
+      ]
+    },
+    {
+      "id": "patch-0hjnoi4lpv",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T11:39:43.987Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-player"
+        }
+      ]
+    },
+    {
+      "id": "patch-mafcp5e706",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T11:47:11.478Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ground"
+        }
+      ]
+    },
+    {
+      "id": "patch-re9er1i5ar",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T11:50:15.891Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-coin-1"
+        }
+      ]
+    },
+    {
+      "id": "patch-lwhhgaj9fk",
+      "reason": "选择对象",
+      "createdAt": "2026-04-26T11:51:07.904Z",
+      "operations": [
+        {
+          "op": "selectEntity",
+          "id": "ent-ground"
+        }
+      ]
+    }
+  ],
+  "entityFolders": []
+}

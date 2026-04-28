@@ -1,0 +1,35 @@
+{
+  "name": "webhachimi",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "serve": "node server.js",
+    "serve:legacy": "node server.js",
+    "serve:preview": "set WEBHACHIMI_NO_BROWSER=1&& set WEBHACHIMI_PORT=5578&& node server.js",
+    "dev": "vite --host 127.0.0.1",
+    "dev:v2": "vite --host 127.0.0.1 --open /v2.html",
+    "dev:player": "vite --host 127.0.0.1 --open /player.html",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke:persistence": "tsx src/testing/persistenceControllerSmoke.ts",
+    "smoke:persistence-api": "tsx src/testing/persistenceApiSmoke.ts",
+    "smoke:folder-move": "tsx src/testing/folderMoveTransactionSmoke.ts",
+    "smoke:task-workflow": "tsx src/testing/taskWorkflowControllerSmoke.ts",
+    "smoke:autonomy-summary": "tsx src/testing/autonomySummaryModelsSmoke.ts",
+    "smoke:viewport": "tsx src/testing/viewportMathSmoke.ts",
+    "smoke:floating-panels": "tsx src/testing/floatingPanelLayoutSmoke.ts",
+    "smoke:docking-layout": "tsx src/testing/dockingLayoutSmoke.ts",
+    "smoke:runtime-visibility": "tsx src/testing/runtimeVisibilitySmoke.ts",
+    "smoke:transform": "tsx src/testing/transformTransactionSmoke.ts",
+    "smoke:sweep": "tsx src/testing/smokeSweep.ts",
+    "smoke:autonomy": "tsx src/testing/autonomySmoke.ts"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0",
+    "typescript": "6.0.3",
+    "vite": "^8.0.10"
+  },
+  "dependencies": {
+    "pixi.js": "^8.18.1"
+  }
+}

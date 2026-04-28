@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebHachimi 编辑器预览</title>
+    <link rel="stylesheet" href="./editor-preview.css" />
+  </head>
+  <body>
+    <main class="editor-shell">
+      <header class="top-bar">
+        <section class="brand-area">
+          <strong>WebHachimi</strong>
+          <span>网页游戏引擎编辑器</span>
+        </section>
+        <nav class="menu-area" aria-label="主菜单">
+          <button type="button">文件</button>
+          <button type="button">编辑</button>
+          <button type="button">对象</button>
+          <button type="button">资源</button>
+          <button type="button">窗口</button>
+          <button type="button">帮助</button>
+        </nav>
+        <section class="run-area" aria-label="运行控制">
+          <button class="primary" type="button">运行</button>
+          <button type="button">暂停</button>
+          <button type="button">单步</button>
+          <button type="button">重置</button>
+          <span>未运行</span>
+        </section>
+      </header>
+
+      <div class="workspace">
+        <aside class="edge-dock left-edge" aria-label="左侧最小化面板">
+          <button type="button">控制台</button>
+          <button type="button">属性</button>
+          <button type="button">资源</button>
+        </aside>
+
+        <aside class="panel tool-panel" aria-label="工具">
+          <header class="panel-header">
+            <strong>工具</strong>
+            <div class="panel-actions">
+              <button type="button" title="最小化" aria-label="最小化">—</button>
+              <button type="button" title="关闭" aria-label="关闭">×</button>
+            </div>
+          </header>
+          <div class="panel-body">
+            <section class="tool-rail" aria-label="常用工具">
+              <button class="tool-rail-item active" type="button" aria-label="超级画笔" title="超级画笔">
+                <span class="tool-icon super-brush-icon"></span>
+                <span>超级画笔</span>
+              </button>
+              <button class="tool-rail-item" type="button" aria-label="形状" title="形状">
+                <span class="tool-icon square-icon"></span>
+                <span>形状</span>
+              </button>
+              <button class="tool-rail-item" type="button" aria-label="柳叶笔" title="柳叶笔">
+                <span class="tool-icon leaf-icon"></span>
+                <span>柳叶笔</span>
+              </button>
+            </section>
+            <section class="tool-section compact-options">
+              <strong>辅助</strong>
+              <label><input type="checkbox" checked />网格吸附</label>
+              <label><input type="checkbox" checked />相机范围</label>
+              <label><input type="checkbox" />碰撞边界</label>
+            </section>
+          </div>
+        </aside>
+
+        <aside class="panel hierarchy-panel" aria-label="场景层级">
+          <header class="panel-header">
+            <strong>场景层级</strong>
+            <div class="panel-actions">
+              <button type="button" title="最小化" aria-label="最小化">—</button>
+              <button type="button" title="关闭" aria-label="关闭">×</button>
+            </div>
+          </header>
+          <div class="panel-body">
+            <div class="panel-search">搜索显示名或标签</div>
+            <section class="tree-list">
+              <article class="tree-folder open"><span>主场景</span></article>
+              <article class="tree-item dragging-source"><span>世界方块</span><em>拖动中</em></article>
+              <article class="tree-folder open drop-target"><span>地面</span><em>放入这里</em></article>
+              <article class="tree-item child selected"><span>地面平台</span></article>
+              <article class="tree-item child"><span>左侧平台</span></article>
+              <article class="tree-item child"><span>攀爬墙面</span></article>
+              <article class="tree-folder open"><span>角色</span></article>
+              <article class="tree-item child"><span>玩家控制器</span></article>
+              <article class="tree-item child"><span>巡逻敌人</span></article>
+              <article class="tree-folder"><span>收集物</span></article>
+              <article class="tree-folder"><span>触发器</span></article>
+              <article class="tree-item"><span>主相机</span></article>
+            </section>
+          </div>
+        </aside>
+
+        <section class="canvas-panel" aria-label="画布">
+          <header class="panel-header canvas-header">
+            <strong>画布</strong>
+            <div class="panel-actions">
+              <button class="fit-button" type="button">适配</button>
+              <button type="button" title="最小化" aria-label="最小化">—</button>
+              <button type="button" title="关闭" aria-label="关闭">×</button>
+            </div>
+          </header>
+          <div class="canvas-area">
+            <div class="camera-box"><span>相机范围</span></div>
+            <div class="shape player">玩家</div>
+            <div class="shape platform selected">
+              地面平台
+              <span class="core-anchor entity-core" title="实体核心"></span>
+              <span class="core-anchor child-core" title="依附动图核心，默认与父核心重叠"></span>
+              <span class="handle tl"></span>
+              <span class="handle tr"></span>
+              <span class="handle bl"></span>
+              <span class="handle br"></span>
+              <span class="handle top"></span>
+              <span class="handle right"></span>
+              <span class="handle bottom"></span>
+              <span class="handle left"></span>
+              <span class="rotate-line"></span>
+              <span class="rotate-handle">旋转</span>
+            </div>
+            <div class="sprite-attachment selected-sprite">
+              动图视觉
+              <span class="sprite-note">核心默认重叠</span>
+            </div>
+            <div class="attachment-line offset-line"></div>
+            <div class="offset-effect">
+              偏移特效
+              <span class="core-anchor offset-core" title="偏移核心"></span>
+            </div>
+            <div class="shape ledge">左侧平台</div>
+            <div class="shape wall">攀爬墙</div>
+            <div class="shape enemy">敌人</div>
+            <div class="overlap-stack" aria-label="重叠对象选择示意">
+              <span class="overlap-layer lower">宝箱</span>
+              <span class="overlap-layer top">草丛</span>
+              <em>再点选下层</em>
+            </div>
+            <div class="coin coin-one"></div>
+            <div class="coin coin-two"></div>
+            <div class="trigger">胜利触发区</div>
+            <div class="super-brush-region"><span>超级画笔圈选</span></div>
+            <div class="priority-task">优先任务：调整地面并生成落尘特效</div>
+            <div class="note-pin note-a">任务 1</div>
+            <div class="note-pin note-b">任务 2</div>
+          </div>
+          <footer class="canvas-status">
+            <span>坐标 0, 0</span>
+            <span>选中：地面平台</span>
+            <span>核心点移动；控制点缩放；重叠对象可连续点击切换</span>
+          </footer>
+        </section>
+
+        <aside class="panel task-panel" aria-label="任务列表">
+          <header class="panel-header">
+            <strong>任务列表</strong>
+            <div class="panel-actions">
+              <button type="button" title="最小化" aria-label="最小化">—</button>
+              <button type="button" title="关闭" aria-label="关闭">×</button>
+            </div>
+          </header>
+          <div class="panel-body task-body">
+            <section class="task-focus">
+              <strong>当前对象：地面平台</strong>
+              <span>任务、批注、文件输入合并显示</span>
+            </section>
+            <section class="task-section logic-record-section">
+              <header><strong>后端逻辑记录</strong><span>待实现规格</span></header>
+              <article class="task-card logic-card">
+                <div><i class="pending">模式</i><b>Z 键冻结时间并切换编辑 / 游戏模式</b></div>
+                <p>编辑模式保留当前帧：攻击判定方块、位移中角色、速度、计时器和状态机都被捕捉。</p>
+                <footer><span>运行态快照</span><span>已记录</span></footer>
+              </article>
+              <article class="task-card logic-card">
+                <div><i class="priority">画笔</i><b>超级画笔必须绑定任务描述</b></div>
+                <p>画完位移、圈选或轨迹后强制输入任务；平时隐藏，只在任务预览时显示轨迹和作用范围。</p>
+                <footer><span>任务预览</span><span>已记录</span></footer>
+              </article>
+              <article class="task-card logic-card">
+                <div><i class="pending">测试</i><b>AI 自主模拟测试</b></div>
+                <p>AI 可执行输入序列、关键帧暂停检查，也可临时操控敌人与玩家进行实时验证。</p>
+                <footer><span>测试代理</span><span>已记录</span></footer>
+              </article>
+              <article class="task-card logic-card">
+                <div><i class="done">脚本</i><b>编辑器内暂不内置脚本编辑</b></div>
+                <p>需要写代码时交给 VS Code 等外部编辑器；编辑器侧保留属性、行为描述和 AI 修改记录。</p>
+                <footer><span>外部源码编辑</span><span>已确认</span></footer>
+              </article>
+            </section>
+            <section class="quick-task-box">
+              <header><strong>快速添加</strong><span>对象任务</span></header>
+              <p>描述这个对象要怎么改，或把文件拖入这里。点击“排队”后进入当前对象队列。</p>
+              <div class="input-preview">让死亡淡出图用于死亡后，并在 0.8 秒内慢慢消失</div>
+              <div class="drop-zone">粘贴 / 拖入文件 / 附加截图</div>
+              <footer>
+                <button type="button">排队</button>
+                <button type="button">立即执行</button>
+              </footer>
+            </section>
+            <section class="task-command">
+              <button class="primary" type="button">执行优先任务</button>
+              <button type="button">暂停</button>
+              <button type="button">清理完成</button>
+            </section>
+            <section class="task-section">
+              <header><strong>优先队列</strong><span>AI 会先完成这里</span></header>
+              <article class="task-card priority-card">
+                <div><i class="priority">优先</i><b>超级画笔：调整地面并生成落尘特效</b></div>
+                <p>来自画布圈选，作用于地面平台、左侧平台、敌人附近区域。</p>
+                <footer><span>可改</span><span>等待执行</span></footer>
+              </article>
+            </section>
+            <section class="task-section">
+              <header><strong>待办</strong><span>3</span></header>
+              <article class="task-card">
+                <div><i class="pending">待办</i><b>资源形容：死亡淡出图</b></div>
+                <p>把“死亡后使用这张图，并慢慢消失”转成资源规则。</p>
+                <footer><span>PlatformTile_A</span><span>可改</span></footer>
+              </article>
+              <article class="task-card">
+                <div><i class="pending">待办</i><b>行为形容：落地后播放硬地脚步</b></div>
+                <p>把用户形容压缩为“硬地承载反馈”，并写入行为属性。</p>
+                <footer><span>GroundSurface</span><span>可改</span></footer>
+              </article>
+              <article class="task-card">
+                <div><i class="pending">待办</i><b>拖拽层级：世界方块放入地面</b></div>
+                <p>世界中选中的方块拖进“地面”文件夹，保持场景对象不丢失。</p>
+                <footer><span>场景层级</span><span>可改</span></footer>
+              </article>
+            </section>
+            <section class="task-section">
+              <header><strong>群体任务</strong><span>左键框选</span></header>
+              <article class="task-card">
+                <div><i class="pending">待办</i><b>框选区域：批量调整平台与敌人</b></div>
+                <p>左键拖框选中一片区域后，任务会作用于选中对象集合。</p>
+                <footer><span>3 个对象</span><span>可改</span></footer>
+              </article>
+            </section>
+            <section class="global-task-box">
+              <header><strong>全局任务</strong><span>默认对话框</span></header>
+              <div class="input-preview">输入面向整个场景的要求，例如统一地面风格或生成一组反馈特效。</div>
+              <footer>
+                <button type="button">加入全局队列</button>
+              </footer>
+            </section>
+            <section class="task-section">
+              <header><strong>已完成</strong><span>1</span></header>
+              <article class="task-card done-card">
+                <div><i class="done">完成</i><b>整理地面对象分组</b></div>
+                <p>地面平台、左侧平台、攀爬墙面已归入地面文件夹。</p>
+                <footer><span>可查看</span><span>已归档</span></footer>
+              </article>
+            </section>
+          </div>
+        </aside>
+      </div>
+
+      <footer class="status-bar">
+        <span>静态预览，无编辑功能</span>
+        <span>默认窗口：工具 / 场景层级 / 画布 / 任务列表</span>
+        <span>后端逻辑记录已添加；最小化窗口统一停靠左侧</span>
+      </footer>
+    </main>
+  </body>
+</html>

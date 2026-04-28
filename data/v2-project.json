@@ -1,0 +1,546 @@
+{
+  "kind": "webhachimi-v2-project",
+  "version": 1,
+  "meta": {
+    "name": "WebHachimi v2 ???",
+    "createdAt": "2026-04-26T14:21:40.430Z",
+    "updatedAt": "2026-04-28T02:37:33.192Z"
+  },
+  "activeSceneId": "scene-07cjxzd9-mofuwuz3",
+  "scenes": {
+    "scene-07cjxzd9-mofuwuz3": {
+      "id": "scene-07cjxzd9-mofuwuz3",
+      "name": "测试场景",
+      "settings": {
+        "width": 1600,
+        "height": 900,
+        "background": "#111313",
+        "gravity": {
+          "x": 0,
+          "y": 1600
+        },
+        "fixedStepMs": 10,
+        "tickRate": 100
+      },
+      "entities": {
+        "ent-24z2k1dn-mofuwuz3": {
+          "id": "ent-24z2k1dn-mofuwuz3",
+          "internalName": "Player",
+          "displayName": "玩家",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": -280,
+              "y": 120
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "render": {
+            "visible": true,
+            "color": "#35bd9a",
+            "opacity": 1,
+            "layerId": "world"
+          },
+          "body": {
+            "mode": "dynamic",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 1,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "box",
+            "size": {
+              "x": 52,
+              "y": 68
+            },
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ]
+          },
+          "behavior": {
+            "builtin": "playerPlatformer",
+            "description": "玩家平台移动控制器",
+            "params": {
+              "speed": 300,
+              "jump": 620,
+              "health": 3,
+              "parryWindowFrames": 5,
+              "parryCooldownFrames": 16
+            }
+          },
+          "resources": [
+            {
+              "resourceId": "res-aoiglovz-mofuwuz3",
+              "slot": "death",
+              "description": "死亡后使用这张图，并缓慢淡出。",
+              "aiDescription": "死亡残影淡出。",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ],
+          "tags": [
+            "玩家",
+            "实体",
+            "硬质碰撞"
+          ],
+          "runtime": {
+            "ageMs": 0,
+            "grounded": false,
+            "wasGrounded": false,
+            "patrolDirection": 1,
+            "facing": 1,
+            "health": 3
+          },
+          "folderId": "characters"
+        },
+        "ent-fmhhoe71-mofuwuz3": {
+          "id": "ent-fmhhoe71-mofuwuz3",
+          "internalName": "Player_Attack_Hitbox",
+          "displayName": "普通攻击判定",
+          "kind": "effect",
+          "persistent": false,
+          "transform": {
+            "position": {
+              "x": -214,
+              "y": 120
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "render": {
+            "visible": true,
+            "color": "#d7a84a",
+            "opacity": 0.32,
+            "layerId": "world"
+          },
+          "body": {
+            "mode": "none",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "box",
+            "size": {
+              "x": 72,
+              "y": 38
+            },
+            "solid": false,
+            "trigger": true,
+            "layerMask": [
+              "world"
+            ]
+          },
+          "resources": [],
+          "tags": [
+            "临时对象",
+            "攻击判定",
+            "表现预览"
+          ],
+          "parentId": "ent-24z2k1dn-mofuwuz3",
+          "folderId": "runtime"
+        },
+        "ent-mfkk8zb1-mofuwuz3": {
+          "id": "ent-mfkk8zb1-mofuwuz3",
+          "internalName": "Ground_Main",
+          "displayName": "主地面",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 310
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "render": {
+            "visible": true,
+            "color": "#969a90",
+            "opacity": 1,
+            "layerId": "world"
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "box",
+            "size": {
+              "x": 760,
+              "y": 48
+            },
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ]
+          },
+          "resources": [],
+          "tags": [
+            "地面",
+            "硬质地面"
+          ],
+          "runtime": {
+            "ageMs": 0,
+            "grounded": false,
+            "wasGrounded": false,
+            "patrolDirection": 1,
+            "facing": 1
+          },
+          "folderId": "terrain"
+        },
+        "ent-98oyg1gk-mofuwuz3": {
+          "id": "ent-98oyg1gk-mofuwuz3",
+          "internalName": "Ground_Ledge_Left",
+          "displayName": "左侧平台",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": 190,
+              "y": 110
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "render": {
+            "visible": true,
+            "color": "#969a90",
+            "opacity": 1,
+            "layerId": "world"
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "box",
+            "size": {
+              "x": 240,
+              "y": 34
+            },
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ]
+          },
+          "resources": [],
+          "tags": [
+            "地面",
+            "平台",
+            "硬质地面"
+          ],
+          "runtime": {
+            "ageMs": 0,
+            "grounded": false,
+            "wasGrounded": false,
+            "patrolDirection": 1,
+            "facing": 1
+          },
+          "folderId": "terrain"
+        },
+        "ent-pht4vdze-mofuwuz3": {
+          "id": "ent-pht4vdze-mofuwuz3",
+          "internalName": "Enemy_Patrol",
+          "displayName": "巡逻敌人",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": -120,
+              "y": 246
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "render": {
+            "visible": true,
+            "color": "#e06c6c",
+            "opacity": 1,
+            "layerId": "world"
+          },
+          "body": {
+            "mode": "kinematic",
+            "velocity": {
+              "x": -70,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "box",
+            "size": {
+              "x": 52,
+              "y": 44
+            },
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ]
+          },
+          "behavior": {
+            "builtin": "enemyPatrol",
+            "description": "敌人左右巡逻",
+            "params": {
+              "speed": 70,
+              "left": -210,
+              "right": -30,
+              "health": 1,
+              "attackStartupFrames": 8,
+              "attackActiveFrames": 4,
+              "attackCooldownFrames": 18,
+              "attackRange": 210,
+              "attackHeight": 70,
+              "parryStunFrames": 14
+            }
+          },
+          "resources": [],
+          "tags": [
+            "敌人",
+            "实体"
+          ],
+          "runtime": {
+            "ageMs": 0,
+            "grounded": false,
+            "wasGrounded": false,
+            "patrolDirection": -1,
+            "facing": -1,
+            "health": 1
+          },
+          "folderId": "characters"
+        }
+      },
+      "folders": [
+        {
+          "id": "terrain",
+          "displayName": "地面",
+          "entityIds": [
+            "ent-mfkk8zb1-mofuwuz3",
+            "ent-98oyg1gk-mofuwuz3"
+          ]
+        },
+        {
+          "id": "characters",
+          "displayName": "角色",
+          "entityIds": [
+            "ent-24z2k1dn-mofuwuz3",
+            "ent-pht4vdze-mofuwuz3"
+          ]
+        },
+        {
+          "id": "runtime",
+          "displayName": "运行时捕捉",
+          "entityIds": [
+            "ent-fmhhoe71-mofuwuz3"
+          ]
+        }
+      ],
+      "layers": [
+        {
+          "id": "world",
+          "displayName": "??",
+          "order": 0,
+          "visible": true,
+          "locked": false
+        }
+      ]
+    }
+  },
+  "resources": {
+    "res-aoiglovz-mofuwuz3": {
+      "id": "res-aoiglovz-mofuwuz3",
+      "internalName": "Player_Death_Fade_Sprite",
+      "displayName": "死亡淡出残影",
+      "type": "sprite",
+      "description": "玩家死亡后使用的残影图，逐渐变透明并消失。",
+      "aiDescription": "死亡后残影，淡出消失。",
+      "tags": [
+        "玩家",
+        "死亡",
+        "表现体"
+      ],
+      "attachments": []
+    }
+  },
+  "tasks": {},
+  "transactions": {},
+  "testRecords": {},
+  "snapshots": {
+    "snapshot-hdk5j39d-moi0n1l5": {
+      "id": "snapshot-hdk5j39d-moi0n1l5",
+      "sceneId": "scene-07cjxzd9-mofuwuz3",
+      "mode": "editorFrozen",
+      "frame": 0,
+      "timeMs": 0,
+      "clockAccumulatorMs": 0,
+      "entities": {
+        "ent-24z2k1dn-mofuwuz3": {
+          "entityId": "ent-24z2k1dn-mofuwuz3",
+          "transform": {
+            "position": {
+              "x": -280,
+              "y": 120
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "velocity": {
+            "x": 0,
+            "y": 0
+          },
+          "bodyMode": "dynamic",
+          "ageMs": 0,
+          "grounded": false,
+          "timers": {},
+          "state": {
+            "patrolDirection": 1,
+            "wasGrounded": false,
+            "facing": 1,
+            "health": 3
+          }
+        },
+        "ent-mfkk8zb1-mofuwuz3": {
+          "entityId": "ent-mfkk8zb1-mofuwuz3",
+          "transform": {
+            "position": {
+              "x": 0,
+              "y": 310
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "velocity": {
+            "x": 0,
+            "y": 0
+          },
+          "bodyMode": "static",
+          "ageMs": 0,
+          "grounded": false,
+          "timers": {},
+          "state": {
+            "patrolDirection": 1,
+            "wasGrounded": false,
+            "facing": 1
+          }
+        },
+        "ent-98oyg1gk-mofuwuz3": {
+          "entityId": "ent-98oyg1gk-mofuwuz3",
+          "transform": {
+            "position": {
+              "x": 190,
+              "y": 110
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "velocity": {
+            "x": 0,
+            "y": 0
+          },
+          "bodyMode": "static",
+          "ageMs": 0,
+          "grounded": false,
+          "timers": {},
+          "state": {
+            "patrolDirection": 1,
+            "wasGrounded": false,
+            "facing": 1
+          }
+        },
+        "ent-pht4vdze-mofuwuz3": {
+          "entityId": "ent-pht4vdze-mofuwuz3",
+          "transform": {
+            "position": {
+              "x": -120,
+              "y": 246
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "velocity": {
+            "x": -70,
+            "y": 0
+          },
+          "bodyMode": "kinematic",
+          "ageMs": 0,
+          "grounded": false,
+          "timers": {},
+          "state": {
+            "patrolDirection": -1,
+            "wasGrounded": false,
+            "facing": -1,
+            "health": 1
+          }
+        }
+      },
+      "transientEntities": {},
+      "input": {},
+      "combatEvents": [],
+      "capturedAt": "2026-04-28T02:37:32.489Z"
+    }
+  },
+  "autonomyRuns": {}
+}
