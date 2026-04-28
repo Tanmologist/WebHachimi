@@ -67,6 +67,7 @@ export type ReactionWindowSweepRunOptions = {
   taskId?: TaskId;
   transactionId?: TransactionId;
   traceLimit?: number;
+  initialSnapshot?: RuntimeSnapshot;
 };
 
 export type ReactionWindowSweepCaseResult = {
@@ -83,6 +84,17 @@ export type ReactionWindowSweepCaseResult = {
 export type ReactionWindowSweepRunResult = {
   status: "passed" | "failed";
   cases: ReactionWindowSweepCaseResult[];
+};
+
+export type ReactionWindowBoundsSummary = {
+  firstPassingOffset?: number;
+  lastPassingOffset?: number;
+  firstFailBefore?: number;
+  firstFailAfter?: number;
+  contiguousPassWindow: boolean;
+  passingOffsets: number[];
+  failingOffsets: number[];
+  gapOffsets: number[];
 };
 
 export type ScriptedReactionPlanConfig = {
@@ -128,6 +140,34 @@ export type ScriptedReactionRunResult = {
   timeScaleMode?: TestTimeScaleMode;
   timeScaleReason?: string;
   script: InputScript;
+};
+
+export type RepeatedScriptedReactionOptions = {
+  scene: Scene;
+  config: ScriptedReactionPlanConfig;
+  iterations: number;
+  taskId?: TaskId;
+  transactionId?: TransactionId;
+  traceLimit?: number;
+};
+
+export type RepeatedScriptedReactionIteration = {
+  iteration: number;
+  status: ScriptedReactionRunResult["status"];
+  testRecordId: TestRecordId;
+  failureSnapshotRef?: TestRecord["failureSnapshotRef"];
+  signature: string;
+  traceSummary: string;
+  logs: TestLog[];
+};
+
+export type RepeatedScriptedReactionRunResult = {
+  status: "passed" | "failed";
+  stable: boolean;
+  baselineSignature?: string;
+  mismatchIterations: number[];
+  iterations: RepeatedScriptedReactionIteration[];
+  initialSnapshot: RuntimeSnapshot;
 };
 
 export type GestureIntent = {
@@ -187,6 +227,7 @@ export function runReactionWindowSweep(options: ReactionWindowSweepRunOptions): 
       traceSink,
       timeline: testCase.timeline,
       script: testCase.script,
+      initialSnapshot: options.initialSnapshot,
       fallbackTarget: options.config.defenderTarget,
     });
     const record = execution.record;
@@ -206,6 +247,44 @@ export function runReactionWindowSweep(options: ReactionWindowSweepRunOptions): 
   return {
     status: results.every((result) => result.status === "passed") ? "passed" : "failed",
     cases: results,
+  };
+}
+
+export function summarizeReactionWindowBounds(result: ReactionWindowSweepRunResult): ReactionWindowBoundsSummary {
+  const orderedCases = [...result.cases].sort((left, right) => left.defenseOffset - right.defenseOffset);
+  const passingOffsets = orderedCases.filter((item) => item.status === "passed").map((item) => item.defenseOffset);
+  const failingOffsets = orderedCases.filter((item) => item.status !== "passed").map((item) => item.defenseOffset);
+  if (passingOffsets.length === 0) {
+    return {
+      contiguousPassWindow: false,
+      passingOffsets,
+      failingOffsets,
+      gapOffsets: [],
+    };
+  }
+
+  const firstPassingOffset = passingOffsets[0];
+  const lastPassingOffset = passingOffsets[passingOffsets.length - 1];
+  const firstPassingIndex = orderedCases.findIndex((item) => item.defenseOffset === firstPassingOffset);
+  const lastPassingIndex = orderedCases.findIndex((item) => item.defenseOffset === lastPassingOffset);
+  const gapOffsets = orderedCases
+    .slice(firstPassingIndex, lastPassingIndex + 1)
+    .filter((item) => item.status !== "passed")
+    .map((item) => item.defenseOffset);
+  const firstFailBefore = [...orderedCases]
+    .reverse()
+    .find((item) => item.defenseOffset < firstPassingOffset && item.status !== "passed")?.defenseOffset;
+  const firstFailAfter = orderedCases.find((item) => item.defenseOffset > lastPassingOffset && item.status !== "passed")?.defenseOffset;
+
+  return {
+    firstPassingOffset,
+    lastPassingOffset,
+    firstFailBefore,
+    firstFailAfter,
+    contiguousPassWindow: gapOffsets.length === 0,
+    passingOffsets,
+    failingOffsets,
+    gapOffsets,
   };
 }
 
@@ -319,6 +398,53 @@ export function runScriptedReactionPlan(options: {
     timeScaleMode: record.timeScaleMode || planned.value.script.timeScaleMode,
     timeScaleReason: record.timeScaleReason || planned.value.script.timeScaleReason,
     script: planned.value.script,
+  });
+}
+
+export function runRepeatedScriptedReactionPlan(options: RepeatedScriptedReactionOptions): Result<RepeatedScriptedReactionRunResult> {
+  const iterations = Math.max(1, Math.floor(options.iterations));
+  const initialSnapshot = options.config.initialSnapshot || new RuntimeWorld({ scene: options.scene }).captureSnapshot();
+  const results: RepeatedScriptedReactionIteration[] = [];
+  const mismatchIterations: number[] = [];
+  let baselineSignature: string | undefined;
+  let status: RepeatedScriptedReactionRunResult["status"] = "passed";
+
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    const planned = runScriptedReactionPlan({
+      scene: options.scene,
+      taskId: options.taskId,
+      transactionId: options.transactionId,
+      traceLimit: options.traceLimit,
+      config: {
+        ...options.config,
+        initialSnapshot,
+      },
+    });
+    if (!planned.ok) return planned;
+
+    const signature = scriptedReactionSignature(planned.value, options.config.attackerId, options.config.defenderId);
+    if (baselineSignature === undefined) baselineSignature = signature;
+    else if (baselineSignature !== signature) mismatchIterations.push(iteration + 1);
+    if (planned.value.status !== "passed") status = "failed";
+
+    results.push({
+      iteration: iteration + 1,
+      status: planned.value.status,
+      testRecordId: planned.value.testRecordId,
+      failureSnapshotRef: planned.value.record.failureSnapshotRef,
+      signature,
+      traceSummary: planned.value.traceSummary,
+      logs: planned.value.logs,
+    });
+  }
+
+  return ok({
+    status,
+    stable: mismatchIterations.length === 0,
+    baselineSignature,
+    mismatchIterations,
+    iterations: results,
+    initialSnapshot,
   });
 }
 
@@ -633,4 +759,44 @@ function findFirstImpactFrame(
   }
 
   return undefined;
+}
+
+function scriptedReactionSignature(
+  result: ScriptedReactionRunResult,
+  attackerId: EntityId,
+  defenderId: EntityId,
+): string {
+  const finalSnapshot = result.snapshots[result.snapshots.length - 1];
+  const attackerState = finalSnapshot?.entities[attackerId]?.state || {};
+  const defenderState = finalSnapshot?.entities[defenderId]?.state || {};
+  const combatEvents =
+    finalSnapshot?.combatEvents.map((event) => ({
+      type: event.type,
+      frame: event.frame,
+      attackerId: event.attackerId,
+      defenderId: event.defenderId,
+      sourceId: event.sourceId,
+      targetId: event.targetId,
+    })) || [];
+  return JSON.stringify({
+    status: result.status,
+    probeFrame: result.plan.probeFrame,
+    tickRate: result.tickRate,
+    timeScale: result.timeScale,
+    attackerState: relevantEntityState(attackerState),
+    defenderState: relevantEntityState(defenderState),
+    combatEvents,
+  });
+}
+
+function relevantEntityState(state: Record<string, unknown>): Record<string, unknown> {
+  return {
+    health: state.health,
+    attackStartFrame: state.attackStartFrame,
+    attackActiveUntilFrame: state.attackActiveUntilFrame,
+    attackCooldownUntilFrame: state.attackCooldownUntilFrame,
+    parryUntilFrame: state.parryUntilFrame,
+    parryCooldownUntilFrame: state.parryCooldownUntilFrame,
+    hitStunUntilFrame: state.hitStunUntilFrame,
+  };
 }

@@ -1,4 +1,4 @@
-import type { Project, Task, Transaction } from "../project/schema";
+import type { Project, RuntimeSnapshot, Task, Transaction } from "../project/schema";
 import { transitionTask } from "../project/tasks";
 import type { ProjectStore } from "../project/projectStore";
 import { RuntimeWorld } from "../runtime/world";
@@ -115,7 +115,7 @@ export class AiTaskExecutor {
 
   runReactionWindowSweep(
     config: ReactionWindowSweepConfig,
-    options: { taskId?: TaskId; sceneId?: string; traceLimit?: number } = {},
+    options: { taskId?: TaskId; sceneId?: string; traceLimit?: number; initialSnapshot?: RuntimeSnapshot } = {},
   ): Result<ReactionWindowSweepRunResult> {
     const scene = this.store.project.scenes[options.sceneId || this.store.project.activeSceneId];
     if (!scene) return err(`scene not found: ${options.sceneId || this.store.project.activeSceneId}`);
@@ -125,6 +125,7 @@ export class AiTaskExecutor {
         config,
         taskId: options.taskId,
         traceLimit: options.traceLimit,
+        initialSnapshot: options.initialSnapshot,
       }),
     );
   }
