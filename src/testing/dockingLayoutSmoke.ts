@@ -27,11 +27,13 @@ assert(rects.assets, "assets should have a floating rect");
 assertSingleOwnership(state, "default layout");
 assertDockedNoOverlap(state, workspace, "default layout");
 
-assertDetectsFloatingPanelAsFloat(state, rects.assets);
+assertDetectsFloatingPanelAsTarget(state, rects.assets);
 assertDetectsPanelTargetBeforeRootEdge(state);
+assertDetectsOverlappedDockedPanelWhenPointerMisses(state);
 assertDetectsOutsideRootEdges(state);
 assertRootBottomDropUsesReasonableBand(state);
 assertPanelEdgeDropDoesNotCollapseTarget(state);
+assertFloatingPanelEdgeDropSplitsFloatingTarget(state);
 
 const rootLeftTarget: DockDropTarget = { kind: "root-edge", edge: "left" };
 assertPreviewMatchesFinal(state, "assets", rootLeftTarget, rects.assets);
@@ -148,7 +150,7 @@ console.log(
   ),
 );
 
-function assertDetectsFloatingPanelAsFloat(state: DockingState, floatingPanelRect: DockRect | undefined): void {
+function assertDetectsFloatingPanelAsTarget(state: DockingState, floatingPanelRect: DockRect | undefined): void {
   assert(floatingPanelRect, "expected floating panel rect");
   const target = detectDockDropTarget({
     pointer: { x: floatingPanelRect.x + 12, y: floatingPanelRect.y + 12 },
@@ -156,8 +158,9 @@ function assertDetectsFloatingPanelAsFloat(state: DockingState, floatingPanelRec
     rects: resolveDockingRects(state, workspace),
     workspace,
     draggedPanel: "scene",
+    targetOrder: ["assets", "tasks", "properties", "scene"],
   });
-  assert(target.kind === "float", "floating panels should not become panel-edge dock targets");
+  assert(target.kind === "panel-edge" && target.panel === "assets", "floating panels should accept panel-edge drops");
 }
 
 function assertDetectsPanelTargetBeforeRootEdge(state: DockingState): void {
@@ -201,6 +204,23 @@ function assertDetectsPanelTargetBeforeRootEdge(state: DockingState): void {
   assert(upperTarget.kind === "panel-edge" && upperTarget.panel === "scene" && upperTarget.edge === "top", "upper half should split above the existing panel");
 }
 
+function assertDetectsOverlappedDockedPanelWhenPointerMisses(state: DockingState): void {
+  const sceneRect = resolveDockingRects(state, workspace).scene;
+  assert(sceneRect, "expected scene rect");
+  const draggedRect: DockRect = { x: sceneRect.x + 82, y: sceneRect.y + 300, width: 360, height: 220 };
+  const target = detectDockDropTarget({
+    pointer: { x: sceneRect.x + sceneRect.width + 24, y: sceneRect.y + 380 },
+    draggedRect,
+    state,
+    rects: resolveDockingRects(state, workspace),
+    workspace,
+    draggedPanel: "assets",
+    targetOrder: ["assets", "scene", "properties", "tasks"],
+  });
+  assert(target.kind === "panel-edge" && target.panel === "scene", "dragged window overlap should split a docked panel even when pointer misses it");
+  assert(target.edge === "right", `overlap target should choose a stable side from dragged window center, got ${target.edge}`);
+}
+
 function assertDetectsOutsideRootEdges(state: DockingState): void {
   const rects = resolveDockingRects(state, workspace);
   const cases: Array<{ pointer: { x: number; y: number }; edge: string }> = [
@@ -240,6 +260,25 @@ function assertPanelEdgeDropDoesNotCollapseTarget(state: DockingState): void {
   assert(nextRects.tasks && nextRects.assets, "expected tasks and assets after panel-edge split");
   assert(nextRects.tasks.height > 100, `panel-edge target should not collapse, got ${nextRects.tasks.height}`);
   assert(nextRects.assets.height > 100, `panel-edge inserted panel should not collapse, got ${nextRects.assets.height}`);
+}
+
+function assertFloatingPanelEdgeDropSplitsFloatingTarget(state: DockingState): void {
+  const floatingTarget = resolveDockingRects(state, workspace).assets;
+  assert(floatingTarget, "expected assets floating target");
+  const next = applyDockDrop({
+    state,
+    panel: "scene",
+    target: { kind: "panel-edge", panel: "assets", edge: "right" },
+    floatingRect: { x: floatingTarget.x + 40, y: floatingTarget.y + 24, width: 390, height: 154 },
+    workspace,
+  });
+  const nextRects = resolveDockingRects(next, workspace);
+  assert(!isPanelInDockTree(next.root, "scene"), "scene should remain floating after splitting a floating target");
+  assert(!isPanelInDockTree(next.root, "assets"), "floating target should remain floating after split");
+  assert(nextRects.assets && nextRects.scene, "floating target split should resolve both windows");
+  assert(!rectsOverlap(nextRects.assets, nextRects.scene), "floating target split rects should not overlap");
+  assert(nextRects.assets.x < nextRects.scene.x, "right-edge floating split should place dragged panel to the right");
+  assertSingleOwnership(next, "after floating target split");
 }
 
 function assertPreviewMatchesFinal(state: DockingState, panel: DockPanelId, target: DockDropTarget, floatingRect: DockRect | undefined): void {

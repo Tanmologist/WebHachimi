@@ -157,10 +157,12 @@ export class PanelLayoutController {
     const previewTarget = this.normalizeUiDropTarget(
       detectDockDropTarget({
         pointer,
+        draggedRect: toDockRect(next),
         state: visibleState,
         rects,
         workspace,
         draggedPanel: this.windowDrag.panel,
+        targetOrder: this.visiblePanelHitOrder(),
       }),
     );
     this.windowDrag.previewTarget = previewTarget;
@@ -271,11 +273,11 @@ export class PanelLayoutController {
   }
 
   private applyDockPreview(panel: PanelId, target: DockDropTarget, floatingLayout = this.panelWindows[panel]): void {
-    const dock = this.dockForTarget(target);
-    this.root.dataset.dockPreview = target.kind === "stack-center" ? "stack" : dock;
+    const previewDock = target.kind === "stack-center" ? "stack" : target.kind === "root-edge" || target.kind === "panel-edge" ? target.edge : "float";
+    this.root.dataset.dockPreview = previewDock;
     const preview = this.root.querySelector<HTMLElement>(".v2-dock-preview");
     if (!preview) return;
-    if (target.kind === "float" || dock === "float") {
+    if (target.kind === "float") {
       preview.removeAttribute("style");
       return;
     }
@@ -289,7 +291,11 @@ export class PanelLayoutController {
       workspace,
     });
     const visibleCommittedState = removePanelsFromDockingState(committedState, this.hiddenPanelIds());
-    const rect = resolveDockingRects(visibleCommittedState, workspace)[panel] || dockRect(dock, workspace, this.panelWindows[panel]);
+    const rect = resolveDockingRects(visibleCommittedState, workspace)[panel];
+    if (!rect) {
+      preview.removeAttribute("style");
+      return;
+    }
     preview.style.left = `${Math.round(rect.x)}px`;
     preview.style.top = `${Math.round(rect.y)}px`;
     preview.style.width = `${Math.round(rect.width)}px`;
@@ -309,8 +315,15 @@ export class PanelLayoutController {
   }
 
   private dockForTarget(target: DockDropTarget): PanelDock {
+    if (target.kind === "panel-edge" && this.dockingState.floating[target.panel]) return "float";
     if (target.kind === "stack-center") return this.panelWindows[target.panel]?.dock || "float";
     return targetDockEdge(target);
+  }
+
+  private visiblePanelHitOrder(): PanelId[] {
+    return panelOrder
+      .filter((panel) => this.panelState[panel] === "open")
+      .sort((left, right) => this.panelWindows[right].z - this.panelWindows[left].z);
   }
 
   private pointerInWorkspace(event: PointerEvent): { x: number; y: number } {

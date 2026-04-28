@@ -83,17 +83,25 @@ export function resolveDockingRects(state: DockingState, workspace: DockRect): P
 
 export function detectDockDropTarget(input: {
   pointer: { x: number; y: number };
+  draggedRect?: DockRect;
   state: DockingState;
   rects: Partial<Record<DockPanelId, DockRect>>;
   workspace: DockRect;
   draggedPanel: DockPanelId;
+  targetOrder?: DockPanelId[];
 }): DockDropTarget {
-  const dockedRects: Partial<Record<DockPanelId, DockRect>> = {};
+  const targetRects: Partial<Record<DockPanelId, DockRect>> = {};
+  const orderedPanels = input.targetOrder || dockPanelOrder;
   for (const panel of dockPanelOrder) {
-    if (isPanelInDockTree(input.state.root, panel)) dockedRects[panel] = input.rects[panel];
+    if (input.rects[panel]) targetRects[panel] = input.rects[panel];
   }
-  const panelTarget = panelEdgeTarget(input.pointer, dockedRects, input.draggedPanel);
+  const panelTarget = panelEdgeTarget(input.pointer, targetRects, input.draggedPanel, orderedPanels);
   if (panelTarget) return panelTarget;
+
+  if (input.draggedRect) {
+    const overlapTarget = panelOverlapTarget(input.draggedRect, targetRects, input.draggedPanel, orderedPanels);
+    if (overlapTarget) return overlapTarget;
+  }
 
   const rootEdge = rootEdgeTarget(input.pointer, input.workspace);
   if (rootEdge) return { kind: "root-edge", edge: rootEdge };
@@ -144,6 +152,18 @@ export function applyDockDrop(input: {
 
   if (input.target.kind === "panel-edge") {
     if (!isPanelInDockTree(rootWithoutPanel, input.target.panel)) {
+      const targetRect = floating[input.target.panel];
+      if (targetRect) {
+        const splitRects = splitFloatingPanelRects(targetRect, input.floatingRect, input.target.edge);
+        return {
+          root: rootWithoutPanel,
+          floating: {
+            ...floating,
+            [input.target.panel]: splitRects.target,
+            [input.panel]: splitRects.panel,
+          },
+        };
+      }
       return {
         root: rootWithoutPanel,
         floating: {
@@ -274,8 +294,9 @@ function panelEdgeTarget(
   pointer: { x: number; y: number },
   rects: Partial<Record<DockPanelId, DockRect>>,
   draggedPanel: DockPanelId,
+  orderedPanels: DockPanelId[],
 ): DockDropTarget | undefined {
-  for (const panel of dockPanelOrder) {
+  for (const panel of orderedPanels) {
     if (panel === draggedPanel) continue;
     const rect = rects[panel];
     if (!rect || !pointInside(pointer, rect)) continue;
@@ -283,6 +304,30 @@ function panelEdgeTarget(
     return { kind: "panel-edge", panel, edge: splitEdgeForPoint(pointer, rect) };
   }
   return undefined;
+}
+
+function panelOverlapTarget(
+  draggedRect: DockRect,
+  rects: Partial<Record<DockPanelId, DockRect>>,
+  draggedPanel: DockPanelId,
+  orderedPanels: DockPanelId[],
+): DockDropTarget | undefined {
+  const draggedArea = draggedRect.width * draggedRect.height;
+  let best: { panel: DockPanelId; rect: DockRect; ratio: number; order: number } | undefined;
+  for (const [order, panel] of orderedPanels.entries()) {
+    if (panel === draggedPanel) continue;
+    const rect = rects[panel];
+    if (!rect) continue;
+    const overlapArea = rectIntersectionArea(draggedRect, rect);
+    const comparableArea = Math.min(draggedArea, rect.width * rect.height);
+    const threshold = Math.max(480, comparableArea * 0.04);
+    const ratio = comparableArea > 0 ? overlapArea / comparableArea : 0;
+    if (overlapArea < threshold) continue;
+    if (!best || ratio > best.ratio + 0.02 || (Math.abs(ratio - best.ratio) <= 0.02 && order < best.order)) {
+      best = { panel, rect, ratio, order };
+    }
+  }
+  return best ? { kind: "panel-edge", panel: best.panel, edge: splitEdgeForPoint(rectCenter(draggedRect), best.rect) } : undefined;
 }
 
 function splitEdgeForPoint(pointer: { x: number; y: number }, rect: DockRect): DockEdge {
@@ -296,6 +341,44 @@ function splitEdgeForPoint(pointer: { x: number; y: number }, rect: DockRect): D
 
 function pointInside(point: { x: number; y: number }, rect: DockRect): boolean {
   return point.x >= rect.x && point.x <= rect.x + rect.width && point.y >= rect.y && point.y <= rect.y + rect.height;
+}
+
+function rectCenter(rect: DockRect): { x: number; y: number } {
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+}
+
+function rectIntersectionArea(a: DockRect, b: DockRect): number {
+  const left = Math.max(a.x, b.x);
+  const right = Math.min(a.x + a.width, b.x + b.width);
+  const top = Math.max(a.y, b.y);
+  const bottom = Math.min(a.y + a.height, b.y + b.height);
+  return Math.max(0, right - left) * Math.max(0, bottom - top);
+}
+
+function splitFloatingPanelRects(
+  targetRect: DockRect,
+  draggedRect: DockRect,
+  edge: DockEdge,
+): { target: DockRect; panel: DockRect } {
+  const minFloatingWidth = 220;
+  const minFloatingHeight = 120;
+  if (edge === "left" || edge === "right") {
+    const width = Math.max(targetRect.width, draggedRect.width, minFloatingWidth * 2 + splitGap);
+    const height = Math.max(targetRect.height, minFloatingHeight);
+    const firstWidth = Math.floor((width - splitGap) / 2);
+    const secondWidth = width - splitGap - firstWidth;
+    const leftRect = { x: targetRect.x, y: targetRect.y, width: firstWidth, height };
+    const rightRect = { x: targetRect.x + firstWidth + splitGap, y: targetRect.y, width: secondWidth, height };
+    return edge === "left" ? { panel: leftRect, target: rightRect } : { target: leftRect, panel: rightRect };
+  }
+
+  const width = Math.max(targetRect.width, minFloatingWidth);
+  const height = Math.max(targetRect.height, draggedRect.height, minFloatingHeight * 2 + splitGap);
+  const firstHeight = Math.floor((height - splitGap) / 2);
+  const secondHeight = height - splitGap - firstHeight;
+  const topRect = { x: targetRect.x, y: targetRect.y, width, height: firstHeight };
+  const bottomRect = { x: targetRect.x, y: targetRect.y + firstHeight + splitGap, width, height: secondHeight };
+  return edge === "top" ? { panel: topRect, target: bottomRect } : { target: topRect, panel: bottomRect };
 }
 
 function insertAtRootEdge(root: DockNode, panel: DockPanelId, edge: DockEdge, rect: DockRect, workspace?: DockRect): DockNode {
