@@ -212,10 +212,14 @@ function resolveReactionPair(
   }
 
   const entities = Object.values(options.scene.entities);
-  const defender = entities.find((entity) => entity.behavior?.builtin === "playerPlatformer");
-  const attacker = entities.find((entity) => entity.behavior?.builtin === "enemyPatrol");
-  if (!attacker || !defender) return undefined;
-  return { attacker, defender };
+  const defenders = entities.filter((entity) => entity.behavior?.builtin === "playerPlatformer");
+  const attackers = entities.filter((entity) => entity.behavior?.builtin === "enemyPatrol");
+  if (attackers.length === 0 || defenders.length === 0) return undefined;
+
+  const bestPair = attackers
+    .flatMap((attacker) => defenders.map((defender) => ({ attacker, defender, score: scoreReactionPair(attacker, defender) })))
+    .sort((left, right) => right.score - left.score)[0];
+  return bestPair ? { attacker: bestPair.attacker, defender: bestPair.defender } : undefined;
 }
 
 function buildStructureChecks(scene: Scene, maxEntityChecks: number): FrameCheck[] {
@@ -328,4 +332,21 @@ function uniqueSnapshots(snapshots: RuntimeSnapshot[]): RuntimeSnapshot[] {
 
 function isTimingStepSummary(value: AutonomousTimingSummary["slowestStep"]): value is NonNullable<AutonomousTimingSummary["slowestStep"]> {
   return Boolean(value);
+}
+
+function scoreReactionPair(attacker: Scene["entities"][string], defender: Scene["entities"][string]): number {
+  const attackerTags = new Set(attacker.tags || []);
+  const defenderTags = new Set(defender.tags || []);
+  const sharedTags = [...attackerTags].filter((tag) => defenderTags.has(tag));
+  const distance = Math.abs(attacker.transform.position.x - defender.transform.position.x) + Math.abs(attacker.transform.position.y - defender.transform.position.y);
+
+  let score = 0;
+  if (attackerTags.has("combat")) score += 8;
+  if (defenderTags.has("combat")) score += 8;
+  if (attackerTags.has("enemy")) score += 3;
+  if (defenderTags.has("player")) score += 3;
+  if (sharedTags.includes("combat")) score += 12;
+  if (sharedTags.includes("runner")) score -= 12;
+  score -= Math.min(10, distance / 120);
+  return score;
 }

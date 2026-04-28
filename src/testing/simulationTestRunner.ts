@@ -33,12 +33,15 @@ export class SimulationTestRunner {
     const snapshots: RuntimeSnapshot[] = [];
     const initialSnapshotRef = options.initialSnapshot?.id;
     if (options.initialSnapshot) snapshots.push(options.initialSnapshot);
+
     let result: TestRecord["result"] = "passed";
     let failureSnapshotRef = undefined as TestRecord["failureSnapshotRef"];
     let combatTraceCursor = options.world.combatEvents.length;
+
     const worldTickRate = Math.round(1000 / options.world.clock.fixedStepMs);
     const scriptTickRate = normalizedTickRate(options.script.tickRate) ?? worldTickRate;
     const timeScale = normalizedTimeScale(options.script.timeScale ?? this.options.timeScale);
+
     if (options.script.tickRate !== undefined && scriptTickRate !== worldTickRate) {
       logs.push({
         level: "warning",
@@ -48,50 +51,85 @@ export class SimulationTestRunner {
       this.emit(options, "test", "warning", `convert script tickRate ${scriptTickRate} to world tickRate ${worldTickRate}`);
     }
 
-    options.script.steps.forEach((step, stepIndex) => {
+    for (let stepIndex = 0; stepIndex < options.script.steps.length; stepIndex += 1) {
+      const step = options.script.steps[stepIndex];
+      const rawStep = step as unknown;
       const startTick = options.world.clock.frame;
       const startTimeMs = options.world.clock.timeMs;
-      if (step.op === "wait") {
-        const ticks = stepTicks(step, 0, scriptTickRate, worldTickRate);
-        this.emit(options, "test", "debug", `wait ${ticks} ticks`);
-        options.world.runFixedTicks(ticks);
-        combatTraceCursor = this.emitNewCombatEvents(options, combatTraceCursor);
-      } else if (step.op === "hold") {
-        const ticks = stepTicks(step, 0, scriptTickRate, worldTickRate);
-        this.emit(options, "input", "info", `hold ${step.key} for ${ticks} ticks`);
-        options.world.setInput(step.key, true);
-        options.world.runFixedTicks(ticks);
-        options.world.setInput(step.key, false);
-        combatTraceCursor = this.emitNewCombatEvents(options, combatTraceCursor);
-      } else if (step.op === "tap") {
-        const ticks = stepTicks(step, 1, scriptTickRate, worldTickRate);
-        this.emit(options, "input", "info", `tap ${step.key} for ${ticks} ticks`);
-        options.world.setInput(step.key, true);
-        options.world.runFixedTicks(ticks);
-        options.world.setInput(step.key, false);
-        combatTraceCursor = this.emitNewCombatEvents(options, combatTraceCursor);
-      } else if (step.op === "freezeAndInspect") {
-        const snapshot = options.world.freezeForInspection();
-        snapshots.push(snapshot);
-        checks.push(...step.checks);
-        logs.push({
-          level: "info",
-          frame: options.world.clock.frame,
-          message: `Frozen for ${step.checks.length} checks at ${snapshot.id}.`,
-        });
-        this.emit(options, "test", "info", `freeze and inspect ${step.checks.length} checks`, {
-          snapshotId: snapshot.id,
-        });
-        const evaluation = evaluateFrameChecks(snapshot, step.checks, options.world.clock.frame);
-        logs.push(...evaluation.logs);
-        if (!evaluation.passed && result === "passed") {
-          result = "failed";
-          failureSnapshotRef = snapshot.id;
+      let interrupted = false;
+
+      switch (step.op) {
+        case "wait": {
+          const ticks = stepTicks(step, 0, scriptTickRate, worldTickRate);
+          this.emit(options, "test", "debug", `wait ${ticks} ticks`);
+          options.world.runFixedTicks(ticks);
+          combatTraceCursor = this.emitNewCombatEvents(options, combatTraceCursor);
+          break;
         }
-        options.world.setMode("game");
+        case "hold": {
+          const ticks = stepTicks(step, 0, scriptTickRate, worldTickRate);
+          this.emit(options, "input", "info", `hold ${step.key} for ${ticks} ticks`);
+          options.world.setInput(step.key, true);
+          options.world.runFixedTicks(ticks);
+          options.world.setInput(step.key, false);
+          combatTraceCursor = this.emitNewCombatEvents(options, combatTraceCursor);
+          break;
+        }
+        case "tap": {
+          const ticks = stepTicks(step, 1, scriptTickRate, worldTickRate);
+          this.emit(options, "input", "info", `tap ${step.key} for ${ticks} ticks`);
+          options.world.setInput(step.key, true);
+          options.world.runFixedTicks(ticks);
+          options.world.setInput(step.key, false);
+          combatTraceCursor = this.emitNewCombatEvents(options, combatTraceCursor);
+          break;
+        }
+        case "freezeAndInspect": {
+          const snapshot = options.world.freezeForInspection();
+          snapshots.push(snapshot);
+          checks.push(...step.checks);
+          logs.push({
+            level: "info",
+            frame: options.world.clock.frame,
+            message: `Frozen for ${step.checks.length} checks at ${snapshot.id}.`,
+          });
+          this.emit(options, "test", "info", `freeze and inspect ${step.checks.length} checks`, {
+            snapshotId: snapshot.id,
+          });
+          const evaluation = evaluateFrameChecks(snapshot, step.checks, options.world.clock.frame);
+          logs.push(...evaluation.logs);
+          if (!evaluation.passed && result === "passed") {
+            result = "failed";
+            failureSnapshotRef = snapshot.id;
+          }
+          options.world.setMode("game");
+          break;
+        }
+        default: {
+          const snapshot = options.world.freezeForInspection();
+          const op = readUnknownStepOp(rawStep);
+          const message = `Unsupported input step op "${op}" at index ${stepIndex}.`;
+          snapshots.push(snapshot);
+          logs.push({
+            level: "error",
+            frame: options.world.clock.frame,
+            message,
+          });
+          this.emit(options, "test", "error", message, {
+            stepIndex,
+            op,
+            snapshotId: snapshot.id,
+          });
+          result = "interrupted";
+          failureSnapshotRef = snapshot.id;
+          interrupted = true;
+          break;
+        }
       }
+
       timings.push(createTiming(step, stepIndex, startTick, startTimeMs, options.world.clock.frame, options.world.clock.timeMs, timeScale));
-    });
+      if (interrupted) break;
+    }
 
     return {
       record: {
@@ -148,11 +186,11 @@ export class SimulationTestRunner {
         transactionId: options.transactionId,
         message: event.message,
         data: {
-        type: event.type,
-        attackerId: event.attackerId,
-        defenderId: event.defenderId,
-        sourceId: event.sourceId,
-        targetId: event.targetId,
+          type: event.type,
+          attackerId: event.attackerId,
+          defenderId: event.defenderId,
+          sourceId: event.sourceId,
+          targetId: event.targetId,
         },
       });
     }
@@ -215,9 +253,14 @@ function createTiming(
   };
 }
 
+function readUnknownStepOp(step: unknown): string {
+  if (!step || typeof step !== "object" || !("op" in step)) return "unknown";
+  return String((step as { op?: unknown }).op ?? "unknown");
+}
+
 function timingLabel(step: InputStep): string {
-  if (step.op === "wait") return "等待";
-  if (step.op === "hold") return `按住 ${step.key}`;
-  if (step.op === "tap") return `点击 ${step.key}`;
-  return "冻结检查";
+  if (step.op === "wait") return "Wait";
+  if (step.op === "hold") return `Hold ${step.key}`;
+  if (step.op === "tap") return `Tap ${step.key}`;
+  return "Freeze and inspect";
 }

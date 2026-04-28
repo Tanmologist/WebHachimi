@@ -339,6 +339,7 @@ function executeInteractiveTimeline(options: {
     transactionId: options.transactionId,
     traceSink: options.traceSink,
     initialSnapshot: options.initialSnapshot,
+    timeScale: options.script.timeScale,
   });
   const checks: FrameCheck[] = [];
   const logs: TestLog[] = [];
