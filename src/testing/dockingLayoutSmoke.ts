@@ -179,7 +179,26 @@ function assertDetectsPanelTargetBeforeRootEdge(state: DockingState): void {
     workspace,
     draggedPanel: "assets",
   });
-  assert(centerTarget.kind === "stack-center" && centerTarget.panel === "scene", "center drop should target the existing panel stack");
+  assert(centerTarget.kind === "panel-edge" && centerTarget.panel === "scene", "center drop should split the existing panel by default");
+  assert(centerTarget.edge === "right", `center drop should choose a stable split edge, got ${centerTarget.edge}`);
+
+  const lowerTarget = detectDockDropTarget({
+    pointer: { x: sceneRect.x + sceneRect.width / 2, y: sceneRect.y + sceneRect.height * 0.82 },
+    state,
+    rects: resolveDockingRects(state, workspace),
+    workspace,
+    draggedPanel: "assets",
+  });
+  assert(lowerTarget.kind === "panel-edge" && lowerTarget.panel === "scene" && lowerTarget.edge === "bottom", "lower half should split below the existing panel");
+
+  const upperTarget = detectDockDropTarget({
+    pointer: { x: sceneRect.x + sceneRect.width / 2, y: sceneRect.y + sceneRect.height * 0.18 },
+    state,
+    rects: resolveDockingRects(state, workspace),
+    workspace,
+    draggedPanel: "assets",
+  });
+  assert(upperTarget.kind === "panel-edge" && upperTarget.panel === "scene" && upperTarget.edge === "top", "upper half should split above the existing panel");
 }
 
 function assertDetectsOutsideRootEdges(state: DockingState): void {

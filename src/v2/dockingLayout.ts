@@ -48,7 +48,6 @@ export const dockPanelOrder: DockPanelId[] = ["scene", "properties", "assets", "
 
 const rootDropThreshold = 48;
 const rootOutsideDropThreshold = 180;
-const panelDropThreshold = 64;
 const splitGap = 1;
 
 export function createDefaultDockingState(): DockingState {
@@ -281,19 +280,18 @@ function panelEdgeTarget(
     const rect = rects[panel];
     if (!rect || !pointInside(pointer, rect)) continue;
 
-    const distances: Array<{ edge: DockEdge; distance: number }> = [
-      { edge: "left", distance: pointer.x - rect.x },
-      { edge: "right", distance: rect.x + rect.width - pointer.x },
-      { edge: "top", distance: pointer.y - rect.y },
-      { edge: "bottom", distance: rect.y + rect.height - pointer.y },
-    ];
-    distances.sort((left, right) => left.distance - right.distance);
-    const nearest = distances[0];
-    const threshold = Math.min(panelDropThreshold, Math.max(24, Math.min(rect.width, rect.height) * 0.32));
-    if (nearest.distance <= threshold) return { kind: "panel-edge", panel, edge: nearest.edge };
-    return { kind: "stack-center", panel };
+    return { kind: "panel-edge", panel, edge: splitEdgeForPoint(pointer, rect) };
   }
   return undefined;
+}
+
+function splitEdgeForPoint(pointer: { x: number; y: number }, rect: DockRect): DockEdge {
+  const centerX = rect.x + rect.width / 2;
+  const centerY = rect.y + rect.height / 2;
+  const dx = pointer.x - centerX;
+  const dy = pointer.y - centerY;
+  if (Math.abs(dx) >= Math.abs(dy)) return dx < 0 ? "left" : "right";
+  return dy < 0 ? "top" : "bottom";
 }
 
 function pointInside(point: { x: number; y: number }, rect: DockRect): boolean {
