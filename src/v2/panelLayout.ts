@@ -201,7 +201,6 @@ export class PanelLayoutController {
     this.parkingLot = this.createParkingLot();
     const dockview = createDockview(dockHost, {
       defaultTabComponent: dockTabName,
-      dndEdges: false,
       floatingGroupBounds: "boundedWithinViewport",
       noPanelsOverlay: "watermark",
       singleTabMode: "default",

@@ -200,6 +200,7 @@ export function mountEditorShell(root: HTMLElement): void {
               <span class="v2-action-group">
                 <button data-action="queue-task" type="button">排队</button>
                 <button data-action="run-ai-task" type="button">执行</button>
+                <button data-action="cancel-super-brush" type="button" hidden>取消画笔</button>
               </span>
             </div>
           </section>

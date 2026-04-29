@@ -58,6 +58,7 @@ export class PlayerRenderer {
   destroy(): void {
     this.resizeObserver?.disconnect();
     this.removeResizeFallback?.();
+    this.drainGraphicsPool();
     this.app.destroy(true);
   }
 
@@ -180,6 +181,10 @@ export class PlayerRenderer {
       return item;
     }
     return new Graphics();
+  }
+
+  private drainGraphicsPool(): void {
+    for (const item of this.graphicsPool.splice(0)) item.destroy();
   }
 }
 

@@ -23,7 +23,7 @@ const traces: Record<string, string> = {};
 
 const controller = createTaskWorkflowController({
   store,
-  aiExecutor: executor,
+  executeNextAiTask: async () => executor.executeNextQueuedTask(),
   currentTargets: () => [{ kind: "entity", entityId: player.id }],
   getPendingBrush: () => pendingBrush,
   setPendingBrush: (draft) => {
@@ -68,7 +68,8 @@ assert(clearedInput, "expected task input to be cleared after queue");
 assert(!pendingBrush, "expected pending brush to be cleared after queue");
 assert(getProjectChangeCount() === 1, `expected one project change after queue, got ${projectChangeCount}`);
 
-controller.runNextAiTask();
+void (async () => {
+await controller.runNextAiTask();
 const finalProject = store.project;
 const finalTask = finalProject.tasks[task.id];
 assert(syncCount === 1, `expected syncWorldFromStore to run once after AI execution, got ${syncCount}`);
@@ -146,6 +147,7 @@ console.log(
     2,
   ),
 );
+})();
 
 function findPlayer(project: Project) {
   return Object.values(activeScene(project).entities).find((entity) => entity.behavior?.builtin === "playerPlatformer");

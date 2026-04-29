@@ -1,7 +1,7 @@
 import "dockview-core/dist/styles/dockview.css";
 import "./styles.css";
-import { AutonomyLoop } from "../ai/autonomyLoop";
-import { AiTaskExecutor } from "../ai/taskExecutor";
+import type { AutonomyLoop } from "../ai/autonomyLoop";
+import type { AiTaskExecutionResult, AiTaskExecutor } from "../ai/taskExecutor";
 import { createTask } from "../project/tasks";
 import { normalizeProjectDefaults, type BrushContext, type Entity, type Project, type ProjectPatch, type Resource, type ResourceBinding, type TargetRef, type Task } from "../project/schema";
 import { consumeEditorHandoff } from "../project/editorHandoff";
@@ -32,7 +32,7 @@ import { handleEditorKeyDown, handleEditorKeyUp } from "./keyboardController";
 import { PanelLayoutController, type PanelId } from "./panelLayout";
 import { renderInspectorHtml, renderResourceLibraryHtml, renderResourcesHtml } from "./panelViews";
 import { bindSceneTreeInteractions, renderSceneTreeHtml } from "./sceneTreeController";
-import { renderTaskPanelHtml, type TaskPanelSummary } from "./taskPanelViews";
+import { renderTaskPanelHtml } from "./taskPanelViews";
 import { planPersistentFolderMoveTransaction } from "./folderMoveTransaction";
 import {
   planDeleteEntityTransaction,
@@ -62,7 +62,6 @@ import {
   reactionSweepExpectations,
   scriptedRunSummary,
   type AutonomousGeneratedTask,
-  type AutonomousRoundSummary,
 } from "./summaryModels";
 import { buildProjectForSave, loadProjectForEditor, saveProjectFromEditor, saveProjectLocallyFromEditor } from "./persistenceController";
 import {
@@ -77,6 +76,10 @@ import {
   sequenceGroupKeyFromFileName,
 } from "./resourceImport";
 import { buildSequenceSpriteMetadata, buildSheetSpriteMetadata, imageAttachments, resourceHasAnimation } from "./resourceAnimation";
+import { AutoSaveController } from "./autoSaveController";
+import { EditorPerformanceController } from "./editorPerformanceController";
+import { OutputLogController } from "./outputLogController";
+import { TaskSummaryController } from "./taskSummaryController";
 
 const toolIds = ["select", "square", "circle", "leaf", "polygon", "superBrush"] as const;
 type ToolId = (typeof toolIds)[number];
@@ -138,8 +141,8 @@ const handoff = consumeEditorHandoff();
 const initialProject = await loadInitialProject(handoff?.project);
 const project = normalizeProjectDefaults(repairKnownStarterLabels(initialProject.project));
 const store = new ProjectStore(project);
-const aiExecutor = new AiTaskExecutor({ store });
-const autonomyLoop = new AutonomyLoop({ store, executor: aiExecutor });
+let aiExecutorInstance: AiTaskExecutor | undefined;
+let autonomyLoopInstance: AutonomyLoop | undefined;
 let scene = project.scenes[project.activeSceneId];
 let world = new RuntimeWorld({ scene });
 if (handoff?.snapshot) world.restoreSnapshot(handoff.snapshot);
@@ -159,16 +162,7 @@ let notice = handoff
 let lastTime = performance.now();
 let raf = 0;
 let canvasDirty = true;
-let nextEditorAnimationRenderAt = 0;
-let performanceWindowStartedAt = lastTime;
-let performanceRenderCount = 0;
-let performanceFrameText = "fps -- · render --ms · obj --";
-let saveStatus = initialProject.loadedFromDisk ? "已从磁盘载入，自动保存就绪" : "自动保存就绪";
-let autoSaveTimer: number | undefined;
-let autoSaveDirty = false;
-let autoSaveInFlight = false;
-let autoSaveAgain = false;
-let autoSaveActivePromise: Promise<void> | undefined;
+const editorPerformance = new EditorPerformanceController(lastTime);
 
 let drawingBrush = false;
 let currentStrokePoints: Vec2[] = [];
@@ -185,9 +179,8 @@ let contextMenu: ContextMenuState | undefined;
 const collapsedTreeNodes = new Set<string>();
 const managedPanels: PanelId[] = ["scene", "properties", "assets", "library", "tasks", "output"];
 const aiTraceByTask: Record<string, string> = {};
-const outputLines: Array<{ id: number; at: string; message: string }> = [];
-let lastLoggedNotice = "";
-let outputLineCounter = 0;
+const outputLog = new OutputLogController();
+const taskSummaries = new TaskSummaryController();
 const uiRenderState = {
   tree: "",
   tasks: "",
@@ -201,12 +194,16 @@ const uiRenderState = {
   frame: "",
   layout: "",
 };
-let lastSweepSummary = "";
-let lastScriptedRunSummary = "";
-let lastAutonomousSuiteSummary = "";
-let lastMaintenanceSummary = "";
-let autonomousRoundCounter = 0;
-let lastAutonomousRoundSummary: AutonomousRoundSummary | undefined;
+const autoSave = new AutoSaveController({
+  initialStatus: initialProject.loadedFromDisk ? "已从磁盘载入，自动保存就绪" : "自动保存就绪",
+  saveProject: async () => {
+    const result = await saveProjectFromEditor(buildCurrentProjectForSave());
+    return result.notice;
+  },
+  saveProjectLocally: () => saveProjectLocallyFromEditor(buildCurrentProjectForSave()).notice,
+  shouldDeferSave: () => drawingBrush || Boolean(canvasDrag || shapeDrag || polygonDraft),
+  render: renderUi,
+});
 const panelLayout = new PanelLayoutController({
   root,
   setNotice(value) {
@@ -223,7 +220,7 @@ const taskInput = query<HTMLTextAreaElement>('[data-role="task-input"]');
 const resourceFileInput = query<HTMLInputElement>('[data-role="resource-file-input"]');
 const taskWorkflow = createTaskWorkflowController({
   store,
-  aiExecutor,
+  executeNextAiTask,
   currentTargets,
   getPendingBrush: () => pendingBrush,
   setPendingBrush: (draft) => {
@@ -278,6 +275,27 @@ async function loadInitialProject(handoffProject?: Project): Promise<{ project: 
   };
 }
 
+async function getAiExecutor(): Promise<AiTaskExecutor> {
+  if (!aiExecutorInstance) {
+    const { AiTaskExecutor } = await import("../ai/taskExecutor");
+    aiExecutorInstance = new AiTaskExecutor({ store });
+  }
+  return aiExecutorInstance;
+}
+
+async function executeNextAiTask(): Promise<Result<AiTaskExecutionResult | undefined>> {
+  const executor = await getAiExecutor();
+  return executor.executeNextQueuedTask();
+}
+
+async function getAutonomyLoop(): Promise<AutonomyLoop> {
+  if (!autonomyLoopInstance) {
+    const [{ AutonomyLoop }, executor] = await Promise.all([import("../ai/autonomyLoop"), getAiExecutor()]);
+    autonomyLoopInstance = new AutonomyLoop({ store, executor });
+  }
+  return autonomyLoopInstance;
+}
+
 function bindUi(): void {
   root.querySelector('[data-action="toggle-run"]')?.addEventListener("click", toggleRun);
   root.querySelector('[data-action="step"]')?.addEventListener("click", () => {
@@ -299,7 +317,10 @@ function bindUi(): void {
     renderAll();
   });
   root.querySelector('[data-action="queue-task"]')?.addEventListener("click", () => taskWorkflow.queueTaskFromText(taskInput.value));
-  root.querySelector('[data-action="run-ai-task"]')?.addEventListener("click", taskWorkflow.runNextAiTask);
+  root.querySelector('[data-action="run-ai-task"]')?.addEventListener("click", () => {
+    void taskWorkflow.runNextAiTask();
+  });
+  root.querySelector('[data-action="cancel-super-brush"]')?.addEventListener("click", cancelPendingSuperBrush);
   taskInput.addEventListener("paste", onTaskInputPaste);
   taskInput.addEventListener("keydown", onResourcePasteKeyDown);
   resourceFileInput.addEventListener("change", () => {
@@ -1107,6 +1128,20 @@ function onCanvasPointerUp(event: PointerEvent): void {
   renderAll();
 }
 
+function cancelPendingSuperBrush(): void {
+  if (!pendingBrush && !drawingBrush && currentStrokePoints.length === 0) {
+    notice = "没有待取消的超级画笔上下文。";
+    renderAll();
+    return;
+  }
+  drawingBrush = false;
+  currentStrokePoints = [];
+  pendingBrush = undefined;
+  notice = "已取消超级画笔上下文；任务输入会按普通任务处理。";
+  taskInput.focus();
+  renderAll();
+}
+
 function finishSelectionBox(event: PointerEvent): void {
   if (!selectionBoxDrag) return;
   const finished = selectionBoxDrag;
@@ -1230,6 +1265,11 @@ function applyCreatedEntity(entity: Entity, diffSummary: string): void {
 }
 
 function onKeyDown(event: KeyboardEvent): void {
+  if (event.key === "Escape" && (pendingBrush || drawingBrush || currentStrokePoints.length > 0)) {
+    event.preventDefault();
+    cancelPendingSuperBrush();
+    return;
+  }
   if (activeTool === "polygon" && polygonDraft?.points.length && !isTypingTarget(event.target)) {
     if (event.key === "Enter") {
       event.preventDefault();
@@ -1331,65 +1371,18 @@ function buildCurrentProjectForSave(): Project {
 }
 
 function markProjectDirty(reason: string): void {
-  autoSaveDirty = true;
-  saveStatus = `${reason}，等待自动保存`;
-  scheduleAutoSave();
-}
-
-function scheduleAutoSave(delayMs = 700): void {
-  if (autoSaveTimer !== undefined) window.clearTimeout(autoSaveTimer);
-  autoSaveTimer = window.setTimeout(() => {
-    autoSaveTimer = undefined;
-    void flushAutoSaveNow();
-  }, delayMs);
+  autoSave.markDirty(reason);
 }
 
 async function flushAutoSaveNow(): Promise<boolean> {
-  if (!autoSaveDirty && !autoSaveAgain) return true;
-  if (drawingBrush || canvasDrag || shapeDrag || polygonDraft) {
-    scheduleAutoSave(500);
-    return false;
-  }
-  if (autoSaveInFlight) {
-    autoSaveAgain = true;
-    await autoSaveActivePromise;
-    if (autoSaveDirty || autoSaveAgain) return flushAutoSaveNow();
-    return true;
-  }
-
-  if (autoSaveTimer !== undefined) {
-    window.clearTimeout(autoSaveTimer);
-    autoSaveTimer = undefined;
-  }
-
-  autoSaveActivePromise = (async () => {
-    autoSaveInFlight = true;
-    autoSaveDirty = false;
-    autoSaveAgain = false;
-    saveStatus = "正在自动保存";
-    renderUi();
-    try {
-      const result = await saveProjectFromEditor(buildCurrentProjectForSave());
-      saveStatus = result.notice;
-    } catch (error) {
-      autoSaveDirty = true;
-      saveStatus = `自动保存失败：${error instanceof Error ? error.message : String(error)}`;
-    } finally {
-      autoSaveInFlight = false;
-      autoSaveActivePromise = undefined;
-      if (autoSaveAgain || autoSaveDirty) scheduleAutoSave(900);
-      renderUi();
-    }
-  })();
-  await autoSaveActivePromise;
-  return !autoSaveDirty;
+  return autoSave.flushNow();
 }
 
 async function refreshProjectFromDisk(): Promise<void> {
   const flushed = await flushAutoSaveNow();
   if (!flushed) {
     notice = "请先结束当前拖动或画笔操作，然后再从磁盘刷新。";
-    saveStatus = "自动保存等待当前操作结束";
+    autoSave.setStatus("自动保存等待当前操作结束");
     renderAll();
     return;
   }
@@ -1397,7 +1390,7 @@ async function refreshProjectFromDisk(): Promise<void> {
     const result = await loadProjectForEditor();
     if (!result.project) {
       notice = result.notice;
-      saveStatus = "磁盘没有可载入项目";
+      autoSave.setStatus("磁盘没有可载入项目");
       renderAll();
       return;
     }
@@ -1415,9 +1408,7 @@ async function refreshProjectFromDisk(): Promise<void> {
     canvasDrag = undefined;
     shapeDrag = undefined;
     polygonDraft = undefined;
-    autoSaveDirty = false;
-    autoSaveAgain = false;
-    saveStatus = "已从磁盘刷新，自动保存就绪";
+    autoSave.reset("已从磁盘刷新，自动保存就绪");
     notice = `已从磁盘刷新。${result.notice}`;
   } catch (error) {
     notice = `刷新失败：${error instanceof Error ? error.message : String(error)}`;
@@ -1426,27 +1417,14 @@ async function refreshProjectFromDisk(): Promise<void> {
 }
 
 function saveDirtyProjectLocallyNow(): void {
-  if (!autoSaveDirty && !autoSaveAgain) return;
-  try {
-    const result = saveProjectLocallyFromEditor(buildCurrentProjectForSave());
-    saveStatus = result.notice;
-    autoSaveDirty = false;
-    autoSaveAgain = false;
-  } catch (error) {
-    saveStatus = `本地暂存失败：${error instanceof Error ? error.message : String(error)}`;
-  }
+  autoSave.saveDirtyLocallyNow();
 }
 
 function resetTaskUiEvidence(): void {
   Object.keys(aiTraceByTask).forEach((taskId) => {
     delete aiTraceByTask[taskId];
   });
-  lastSweepSummary = "";
-  lastScriptedRunSummary = "";
-  lastAutonomousSuiteSummary = "";
-  lastMaintenanceSummary = "";
-  lastAutonomousRoundSummary = undefined;
-  autonomousRoundCounter = 0;
+  taskSummaries.reset();
 }
 
 async function runTimingSweepDemo(): Promise<void> {
@@ -1481,7 +1459,8 @@ async function runTimingSweepDemo(): Promise<void> {
     renderAll();
     return;
   }
-  const sweep = aiExecutor.runReactionWindowSweep({
+  const executor = await getAiExecutor();
+  const sweep = executor.runReactionWindowSweep({
     attackerId: enemy.id,
     defenderId: player.id,
     attackKey: "attack",
@@ -1509,9 +1488,11 @@ async function runTimingSweepDemo(): Promise<void> {
     .filter((item) => item.status === "passed")
     .map((item) => formatOffset(item.defenseOffset))
     .join(" / ");
-  lastSweepSummary = sweep.value.cases
-    .map((item) => `${item.defenseOffset}\t${item.status}\t${expectedStatuses.get(item.defenseOffset) || "unknown"}\t${item.label}`)
-    .join("\n");
+  taskSummaries.setSweep(
+    sweep.value.cases
+      .map((item) => `${item.defenseOffset}\t${item.status}\t${expectedStatuses.get(item.defenseOffset) || "unknown"}\t${item.label}`)
+      .join("\n"),
+  );
   notice =
     mismatchedCount > 0
       ? `时间轴扫描发现 ${mismatchedCount} 个异常偏移，请检查震刀窗口。`
@@ -1559,7 +1540,7 @@ async function runScriptedTimelineDemo(): Promise<void> {
     return;
   }
 
-  lastScriptedRunSummary = JSON.stringify(scriptedRunSummary(result.value));
+  taskSummaries.setScriptedRun(JSON.stringify(scriptedRunSummary(result.value)));
   notice =
     result.value.status === "passed"
       ? `脚本测试通过：AI 计算命中 tick ${result.value.plan.impactFrame}，在 tick ${result.value.plan.defenseInputFrame} 预输入震刀。`
@@ -1580,8 +1561,8 @@ async function runAutonomousTestDemo(): Promise<void> {
   recordAutonomousSuite(report);
   markProjectDirty("自测记录已更新");
 
-  lastAutonomousRoundSummary = undefined;
-  lastAutonomousSuiteSummary = JSON.stringify(autonomousSuiteSummary(report));
+  taskSummaries.clearAutonomousRound();
+  taskSummaries.setAutonomousSuite(JSON.stringify(autonomousSuiteSummary(report)));
   notice =
     report.status === "passed"
       ? `AI自测通过：${report.cases.length} 个用例，已从冻结现场收集日志。`
@@ -1589,8 +1570,9 @@ async function runAutonomousTestDemo(): Promise<void> {
   renderAll();
 }
 
-function runAutonomousRound(): void {
+async function runAutonomousRound(): Promise<void> {
   const autonomySnapshot = world.freezeForInspection();
+  const autonomyLoop = await getAutonomyLoop();
   const autonomyOutcome = autonomyLoop.runOnce({
     initialSnapshot: autonomySnapshot,
     traceLimit: 140,
@@ -1611,14 +1593,15 @@ function runAutonomousRound(): void {
   for (const task of autonomyValue.createdFailureTasks) {
     aiTraceByTask[task.id] = autonomyValue.run.traceSummary;
   }
-  lastAutonomousSuiteSummary = JSON.stringify(autonomySuite);
-  lastAutonomousRoundSummary = autonomousRoundSummaryFromCycle({
-    round: ++autonomousRoundCounter,
+  const autonomousRound = taskSummaries.nextAutonomousRoundNumber();
+  taskSummaries.setAutonomousSuite(JSON.stringify(autonomySuite));
+  taskSummaries.setAutonomousRound(autonomousRoundSummaryFromCycle({
+    round: autonomousRound,
     cycle: autonomyValue,
     translateEvidence: aiEvidenceText,
-  });
+  }));
   markProjectDirty("自治轮次已更新");
-  notice = `AI自治第 ${autonomousRoundCounter} 轮完成：${autonomyValue.run.decisionSummary}`;
+  notice = `AI自治第 ${autonomousRound} 轮完成：${autonomyValue.run.decisionSummary}`;
   renderAll();
 }
 
@@ -1660,7 +1643,7 @@ function recordAutonomousSuite(report: AutonomousTestSuiteReport): AutonomousGen
 
 function previewProjectMaintenance(): void {
   const report = store.previewProjectMaintenance(manualMaintenanceOptions());
-  lastMaintenanceSummary = JSON.stringify(maintenanceSummary(report, "preview"));
+  taskSummaries.setMaintenance(JSON.stringify(maintenanceSummary(report, "preview")));
   notice = `清理预览：可清理 ${report.deletedSnapshotIds.length} 个快照，约 ${formatKb(report.reclaimedApproxBytes)}。`;
   renderAll();
 }
@@ -1668,7 +1651,7 @@ function previewProjectMaintenance(): void {
 function runManualProjectMaintenance(): void {
   const report = store.runProjectMaintenance(manualMaintenanceOptions());
   markProjectDirty("项目维护已更新");
-  lastMaintenanceSummary = JSON.stringify(maintenanceSummary(report, "manual"));
+  taskSummaries.setMaintenance(JSON.stringify(maintenanceSummary(report, "manual")));
   notice =
     report.deletedSnapshotIds.length > 0
       ? `已清理 ${report.deletedSnapshotIds.length} 个旧快照，约 ${formatKb(report.reclaimedApproxBytes)}。`
@@ -1687,7 +1670,7 @@ function runScheduledProjectMaintenance(): void {
   });
   if (report.deletedSnapshotIds.length === 0 && report.updatedRecordIds.length === 0) return;
   markProjectDirty("后台维护已更新");
-  lastMaintenanceSummary = JSON.stringify(maintenanceSummary(report, "auto"));
+  taskSummaries.setMaintenance(JSON.stringify(maintenanceSummary(report, "auto")));
   notice = `后台清理完成：${report.deletedSnapshotIds.length} 个旧快照。`;
   renderAll();
 }
@@ -1714,7 +1697,7 @@ function renderCanvasNow(projectSnapshot?: Project): void {
     resources: snapshotProject.resources,
     animationTimeMs: world.mode === "game" ? world.clock.timeMs : performance.now(),
   });
-  recordCanvasPerformance(renderStarted);
+  editorPerformance.recordRender(renderStarted, renderer.performanceStats());
   canvasDirty = false;
   renderFrame();
 }
@@ -1727,7 +1710,7 @@ function loop(time: number): void {
   const delta = time - lastTime;
   lastTime = time;
   world.pushDelta(delta);
-  if (world.mode === "game" || canvasDirty || shouldRenderEditorAnimation(time)) renderCanvasNow();
+  if (world.mode === "game" || canvasDirty || editorPerformance.shouldRenderAnimationFrame(time, animatedResourcePresent)) renderCanvasNow();
   raf = requestAnimationFrame(loop);
 }
 
@@ -1783,7 +1766,7 @@ function renderUi(projectSnapshot?: Project): void {
   mode.setAttribute("role", "status");
   mode.setAttribute("aria-label", `Runtime mode: ${mode.textContent || ""}`);
   const saveStatusNode = query<HTMLElement>('[data-role="save-status"]');
-  saveStatusNode.textContent = saveStatus;
+  saveStatusNode.textContent = autoSave.status;
   saveStatusNode.setAttribute("role", "status");
   const pointerNode = query<HTMLElement>('[data-role="pointer"]');
   pointerNode.textContent = `工具：${toolLabel(activeTool)}`;
@@ -1795,6 +1778,13 @@ function renderUi(projectSnapshot?: Project): void {
   const polygonActions = query<HTMLElement>('[data-role="polygon-actions"]');
   polygonActions.hidden = !(activeTool === "polygon" && Boolean(polygonDraft?.points.length));
   polygonActions.setAttribute("aria-hidden", String(polygonActions.hidden));
+  const cancelBrushButton = root.querySelector<HTMLButtonElement>('[data-action="cancel-super-brush"]');
+  if (cancelBrushButton) {
+    const hasPendingBrush = Boolean(pendingBrush || drawingBrush || currentStrokePoints.length > 0);
+    cancelBrushButton.hidden = !hasPendingBrush;
+    cancelBrushButton.disabled = !hasPendingBrush;
+    cancelBrushButton.setAttribute("aria-hidden", String(!hasPendingBrush));
+  }
   root.dataset.tool = activeTool;
   root.dataset.scenePanel = panelLayout.panelState.scene;
   root.dataset.propertiesPanel = panelLayout.panelState.properties;
@@ -1881,30 +1871,10 @@ function renderContextMenu(): void {
 }
 
 function renderFrame(): void {
-  const text = `tick ${world.clock.frame} · ${(world.clock.timeMs / 1000).toFixed(2)}s · ${Math.round(1000 / world.clock.fixedStepMs)}t/s · ${performanceFrameText}`;
+  const text = `tick ${world.clock.frame} · ${(world.clock.timeMs / 1000).toFixed(2)}s · ${Math.round(1000 / world.clock.fixedStepMs)}t/s · ${editorPerformance.frameText}`;
   if (uiRenderState.frame === text) return;
   uiRenderState.frame = text;
   query<HTMLElement>('[data-role="frame"]').textContent = text;
-}
-
-function shouldRenderEditorAnimation(time: number): boolean {
-  if (!animatedResourcePresent) return false;
-  if (time < nextEditorAnimationRenderAt) return false;
-  nextEditorAnimationRenderAt = time + 1000 / 24;
-  return true;
-}
-
-function recordCanvasPerformance(renderStarted: number): void {
-  const now = performance.now();
-  performanceRenderCount += 1;
-  if (now - performanceWindowStartedAt < 500) return;
-  const stats = renderer.performanceStats();
-  const fps = Math.round((performanceRenderCount * 1000) / Math.max(1, now - performanceWindowStartedAt));
-  const created = stats.graphicsCreated + stats.spritesCreated;
-  const reused = stats.graphicsReused + stats.spritesReused;
-  performanceFrameText = `${fps}fps · render ${(now - renderStarted).toFixed(1)}ms · obj ${stats.visibleObjects} · pool ${reused}/${created}`;
-  performanceRenderCount = 0;
-  performanceWindowStartedAt = now;
 }
 
 function renderTree(projectSnapshot: Project): void {
@@ -1950,7 +1920,7 @@ function renderTree(projectSnapshot: Project): void {
 }
 
 function renderTasks(projectSnapshot: Project): void {
-  const summarySignature = taskPanelSummaries().map((summary) => `${summary.title}:${summary.body}`).join("||");
+  const summarySignature = taskSummaries.signature();
   const signature = [projectSnapshot.meta.updatedAt, previewTaskId, aiTraceSignature(), summarySignature].join("||");
   if (uiRenderState.tasks === signature) return;
   uiRenderState.tasks = signature;
@@ -1959,7 +1929,7 @@ function renderTasks(projectSnapshot: Project): void {
     project: projectSnapshot,
     previewTaskId,
     aiTraceByTask,
-    summaries: taskPanelSummaries(),
+    summaries: taskSummaries.summaries(),
   });
   tasks.querySelectorAll<HTMLButtonElement>("[data-preview-task]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1968,16 +1938,6 @@ function renderTasks(projectSnapshot: Project): void {
       renderAll();
     });
   });
-}
-
-function taskPanelSummaries(): TaskPanelSummary[] {
-  const summaries: TaskPanelSummary[] = [];
-  if (lastSweepSummary) summaries.push({ title: "Timing sweep", body: lastSweepSummary });
-  if (lastScriptedRunSummary) summaries.push({ title: "Scripted run", body: lastScriptedRunSummary });
-  if (lastAutonomousSuiteSummary) summaries.push({ title: "Autonomous suite", body: lastAutonomousSuiteSummary });
-  if (lastAutonomousRoundSummary) summaries.push({ title: "Autonomous round", body: JSON.stringify(lastAutonomousRoundSummary, null, 2) });
-  if (lastMaintenanceSummary) summaries.push({ title: "Maintenance", body: lastMaintenanceSummary });
-  return summaries;
 }
 
 function legacyFrameToTick(frames: number): number {
@@ -2030,36 +1990,12 @@ function renderResources(projectSnapshot: Project): void {
 }
 
 function renderOutput(): void {
-  rememberNoticeForOutput();
-  const signature = outputLines.length
-    ? `${outputLines[0]?.id || 0}:${outputLines[outputLines.length - 1]?.id || 0}:${outputLines.length}`
-    : "empty";
+  outputLog.remember(notice);
+  const signature = outputLog.signature();
   if (uiRenderState.output === signature) return;
   uiRenderState.output = signature;
   const output = query<HTMLElement>('[data-role="output"]');
-  const rows = outputLines
-    .slice()
-    .reverse()
-    .map((line) => `
-      <article class="v2-output-row">
-        <time>${escapeContextMenuHtml(line.at)}</time>
-        <span>${escapeContextMenuHtml(line.message)}</span>
-      </article>
-    `)
-    .join("");
-  output.innerHTML = rows || `<article class="v2-card"><b>暂无输出</b><p>运行、导入、保存和窗口操作的消息会显示在这里。</p></article>`;
-}
-
-function rememberNoticeForOutput(): void {
-  const message = notice.trim();
-  if (!message || message === lastLoggedNotice) return;
-  lastLoggedNotice = message;
-  outputLines.push({
-    id: ++outputLineCounter,
-    at: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
-    message,
-  });
-  if (outputLines.length > 80) outputLines.splice(0, outputLines.length - 80);
+  output.innerHTML = outputLog.renderHtml();
 }
 
 function bindResourceInteractions(resourcesNode: HTMLElement): void {

@@ -1,12 +1,17 @@
 import type { Entity, Scene } from "../project/schema";
+import { collectDynamicPairs, collectPairs } from "../runtime/collision";
 import { RuntimeWorld } from "../runtime/world";
 import type { EntityId, SceneId } from "../shared/types";
 
 const staticCount = 360;
+const crowdedStaticCount = 80;
 const ticks = 180;
 const scene = createPerformanceScene(staticCount);
 const world = new RuntimeWorld({ scene });
 world.setMode("game");
+const crowdedEntities = createCrowdedCollisionEntities(crowdedStaticCount);
+const fullCrowdedPairs = collectPairs(crowdedEntities);
+const dynamicCrowdedPairs = collectDynamicPairs(crowdedEntities);
 
 const started = performance.now();
 for (let index = 0; index < ticks; index += 1) world.runFixedFrame();
@@ -15,7 +20,13 @@ const ticksPerSecond = Math.round((ticks * 1000) / Math.max(1, elapsedMs));
 const player = world.entityById("perf-player" as EntityId);
 
 assert(player?.transform.position.y !== undefined, "player should still be simulated");
-assert(ticksPerSecond >= 240, `runtime performance smoke too slow: ${ticksPerSecond} ticks/s`);
+assert(ticksPerSecond >= 900, `runtime performance smoke too slow: ${ticksPerSecond} ticks/s`);
+assert(dynamicCrowdedPairs.length === crowdedStaticCount, `expected ${crowdedStaticCount} dynamic pairs, got ${dynamicCrowdedPairs.length}`);
+assert(fullCrowdedPairs.length > dynamicCrowdedPairs.length * 20, "crowded collision fixture should expose static-static pair pruning");
+assert(
+  dynamicCrowdedPairs.every((hit) => hit.a.body?.mode === "dynamic" || hit.b.body?.mode === "dynamic"),
+  "dynamic collision collection should not return static-static pairs",
+);
 
 console.log(
   JSON.stringify(
@@ -25,6 +36,10 @@ console.log(
       ticks,
       elapsedMs: Number(elapsedMs.toFixed(2)),
       ticksPerSecond,
+      crowdedPairPruning: {
+        fullPairs: fullCrowdedPairs.length,
+        dynamicPairs: dynamicCrowdedPairs.length,
+      },
       playerY: Math.round(player?.transform.position.y || 0),
     },
     null,
@@ -58,6 +73,14 @@ function createPerformanceScene(count: number): Scene {
     folders: [],
     layers: [{ id: "world", displayName: "World", order: 0, visible: true, locked: false }],
   };
+}
+
+function createCrowdedCollisionEntities(count: number): Entity[] {
+  const entities: Entity[] = [makeEntity("perf-crowded-player" as EntityId, 0, 0, 64, 64, "dynamic")];
+  for (let index = 0; index < count; index += 1) {
+    entities.push(makeEntity(`perf-crowded-static-${index}` as EntityId, 0, 0, 64, 64, "static"));
+  }
+  return entities;
 }
 
 function makeEntity(id: EntityId, x: number, y: number, width: number, height: number, mode: "dynamic" | "static"): Entity {

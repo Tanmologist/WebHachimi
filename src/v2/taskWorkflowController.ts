@@ -1,13 +1,13 @@
-import type { AiTaskExecutor } from "../ai/taskExecutor";
+import type { AiTaskExecutionResult } from "../ai/taskExecutor";
 import { createTask } from "../project/tasks";
 import type { ProjectStore } from "../project/projectStore";
 import type { TargetRef } from "../project/schema";
-import type { TaskId } from "../shared/types";
+import type { Result, TaskId } from "../shared/types";
 import { createTaskFromSuperBrush, type SuperBrushDraft } from "../editor/superBrush";
 
 export type TaskWorkflowControllerDeps = {
   store: ProjectStore;
-  aiExecutor: AiTaskExecutor;
+  executeNextAiTask: () => Promise<Result<AiTaskExecutionResult | undefined>>;
   currentTargets: () => TargetRef[];
   getPendingBrush: () => SuperBrushDraft | undefined;
   setPendingBrush: (draft: SuperBrushDraft | undefined) => void;
@@ -23,7 +23,7 @@ export type TaskWorkflowControllerDeps = {
 
 export type TaskWorkflowController = {
   queueTaskFromText: (text: string) => void;
-  runNextAiTask: () => void;
+  runNextAiTask: () => Promise<void>;
 };
 
 export function createTaskWorkflowController(deps: TaskWorkflowControllerDeps): TaskWorkflowController {
@@ -59,8 +59,15 @@ export function createTaskWorkflowController(deps: TaskWorkflowControllerDeps): 
       deps.renderAll();
     },
 
-    runNextAiTask() {
-      const result = deps.aiExecutor.executeNextQueuedTask();
+    async runNextAiTask() {
+      let result: Result<AiTaskExecutionResult | undefined>;
+      try {
+        result = await deps.executeNextAiTask();
+      } catch (error) {
+        deps.setNotice(`AI 执行失败：${error instanceof Error ? error.message : String(error)}`);
+        deps.renderAll();
+        return;
+      }
       if (!result.ok) {
         deps.setNotice(`AI 执行失败：${result.error}`);
         deps.renderAll();

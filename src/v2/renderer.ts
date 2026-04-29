@@ -128,6 +128,7 @@ export class V2Renderer {
     this.removeResizeFallback?.();
     this.frameTextures.forEach((texture) => texture.destroy(false));
     this.frameTextures.clear();
+    this.destroyPools();
     this.app.destroy(true);
   }
 
@@ -287,6 +288,11 @@ export class V2Renderer {
     }
     this.stats.spritesCreated += 1;
     return new Sprite(texture);
+  }
+
+  private destroyPools(): void {
+    for (const item of this.graphicsPool.splice(0)) item.destroy();
+    for (const item of this.spritePool.splice(0)) item.destroy();
   }
 
   private drawGrid(): void {
