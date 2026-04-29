@@ -9,6 +9,7 @@ import { ProjectStore } from "../project/projectStore";
 import {
   createBrushContextFromSuperBrushDraft,
   createSuperBrushStroke,
+  createTaskFromSuperBrush,
   hasMeaningfulSuperBrushContext,
   mergeSuperBrushTargets,
   summarizeSuperBrushDraft,
@@ -168,6 +169,8 @@ let drawingBrushPointerId: number | undefined;
 let brushStartPoint: Vec2 | undefined;
 let currentStrokePoints: Vec2[] = [];
 let pendingBrush: SuperBrushDraft | undefined;
+let superBrushTaskDialogOpen = false;
+let superBrushTaskError = "";
 let canvasDrag: CanvasDragState | undefined;
 let canvasCameraDrag: { pointerId: number; clientX: number; clientY: number; moved: boolean } | undefined;
 let selectionBoxDrag: { pointerId: number; start: Vec2; current: Vec2; moved: boolean } | undefined;
@@ -202,7 +205,7 @@ const autoSave = new AutoSaveController({
     return result.notice;
   },
   saveProjectLocally: () => saveProjectLocallyFromEditor(buildCurrentProjectForSave()).notice,
-  shouldDeferSave: () => drawingBrush || Boolean(canvasDrag || shapeDrag || polygonDraft),
+  shouldDeferSave: () => drawingBrush || superBrushTaskDialogOpen || Boolean(canvasDrag || shapeDrag || polygonDraft),
   render: renderUi,
 });
 const panelLayout = new PanelLayoutController({
@@ -219,6 +222,7 @@ panelLayout.applyPanelSizes();
 
 const stageHost = query<HTMLElement>('[data-role="stage"]');
 const taskInput = query<HTMLTextAreaElement>('[data-role="task-input"]');
+const superBrushTaskInput = query<HTMLTextAreaElement>('[data-role="super-brush-task-input"]');
 const resourceFileInput = query<HTMLInputElement>('[data-role="resource-file-input"]');
 const taskWorkflow = createTaskWorkflowController({
   store,

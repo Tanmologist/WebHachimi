@@ -1154,6 +1154,80 @@ textarea {
   color: #e7fff7;
 }
 
+.v2-super-brush-task-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 1320;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(4, 7, 6, 0.78);
+  backdrop-filter: blur(10px);
+}
+
+.v2-super-brush-task-modal[hidden] {
+  display: none;
+}
+
+.v2-super-brush-task-dialog {
+  width: min(780px, 100%);
+  max-height: min(620px, calc(100vh - 36px));
+  display: grid;
+  grid-template-rows: auto minmax(180px, 1fr) auto auto;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid rgba(64, 200, 156, 0.48);
+  border-radius: 8px;
+  background: #141917;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.56);
+}
+
+.v2-super-brush-task-dialog header {
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.v2-super-brush-task-dialog header span {
+  display: grid;
+  gap: 4px;
+}
+
+.v2-super-brush-task-dialog header strong {
+  font-size: 18px;
+}
+
+.v2-super-brush-task-dialog header small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.v2-super-brush-task-dialog textarea {
+  min-height: 180px;
+  resize: none;
+  font-size: 14px;
+}
+
+.v2-super-brush-task-error {
+  min-height: 18px;
+  margin: 0;
+  color: #f0b2b2;
+  font-size: 12px;
+}
+
+.v2-super-brush-task-dialog footer {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.v2-super-brush-task-dialog footer button {
+  min-height: 32px;
+  padding: 0 14px;
+}
+
 .v2-task-composer-head {
   min-height: 0;
   display: grid;
