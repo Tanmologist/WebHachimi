@@ -1893,6 +1893,14 @@ function superBrushPointerText(): string {
   return base;
 }
 
+function superBrushSummaryText(): string {
+  if (superBrushTaskDialogOpen && pendingBrush) return `已确认：${summarizeSuperBrushDraft(pendingBrush)}`;
+  if (drawingBrush) return `正在记录第 ${(pendingBrush?.strokes.length || 0) + 1} 笔；右键取消当前笔。`;
+  if (pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush)) return `${summarizeSuperBrushDraft(pendingBrush)}；右键撤销上一笔。`;
+  if (activeTool === "superBrush") return "拖动画布开始标记，右键撤销上一笔。";
+  return "拖动画布开始标记";
+}
+
 function renderUi(projectSnapshot?: Project): void {
   const snapshotProject = projectSnapshot || store.snapshot().project;
   renderTree(snapshotProject);
@@ -1957,19 +1965,22 @@ function renderUi(projectSnapshot?: Project): void {
   const polygonActions = query<HTMLElement>('[data-role="polygon-actions"]');
   polygonActions.hidden = !(activeTool === "polygon" && Boolean(polygonDraft?.points.length));
   polygonActions.setAttribute("aria-hidden", String(polygonActions.hidden));
-  const cancelBrushButton = root.querySelector<HTMLButtonElement>('[data-action="cancel-super-brush"]');
-  if (cancelBrushButton) {
-    const hasPendingBrush = Boolean(pendingBrush || drawingBrush || currentStrokePoints.length > 0);
-    cancelBrushButton.hidden = !hasPendingBrush;
-    cancelBrushButton.disabled = !hasPendingBrush;
-    cancelBrushButton.setAttribute("aria-hidden", String(!hasPendingBrush));
-    cancelBrushButton.textContent = drawingBrush ? "停止画笔" : "清除画笔";
-  }
   taskInput.placeholder = pendingBrush
     ? "描述这些画笔标记要让 AI 改什么"
     : "写给 AI 的任务";
+  const brushSummary = superBrushSummaryText();
+  const brushSummaryNode = query<HTMLElement>('[data-role="super-brush-summary"]');
+  brushSummaryNode.textContent = brushSummary;
+  const confirmBrushButton = root.querySelector<HTMLButtonElement>('[data-action="confirm-super-brush"]');
+  if (confirmBrushButton) confirmBrushButton.disabled = !pendingBrush || !hasMeaningfulSuperBrushContext(pendingBrush);
+  const brushTaskModal = query<HTMLElement>('[data-role="super-brush-task-modal"]');
+  brushTaskModal.hidden = !superBrushTaskDialogOpen;
+  brushTaskModal.setAttribute("aria-hidden", String(!superBrushTaskDialogOpen));
+  query<HTMLElement>('[data-role="super-brush-task-summary"]').textContent = brushSummary;
+  query<HTMLElement>('[data-role="super-brush-task-error"]').textContent = superBrushTaskError;
   root.dataset.tool = activeTool;
   root.dataset.superBrushState = superBrushUiState();
+  root.dataset.superBrushActive = String(isSuperBrushModeActive());
   root.dataset.scenePanel = panelLayout.panelState.scene;
   root.dataset.propertiesPanel = panelLayout.panelState.properties;
   root.dataset.assetsPanel = panelLayout.panelState.assets;
