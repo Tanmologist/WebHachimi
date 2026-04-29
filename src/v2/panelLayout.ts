@@ -6,14 +6,11 @@ import {
   type IDockviewPanel,
   type ITabRenderer,
   type IWatermarkRenderer,
-  type DroptargetOverlayModel,
   type DockviewTheme,
-  type PanelTransfer,
   type TabPartInitParameters,
 } from "dockview-core";
 
 export type PanelId = "scene" | "properties" | "assets" | "library" | "tasks" | "output";
-type DockviewGroupDropLocation = "tab" | "header_space" | "content" | "edge";
 export type PanelState = "open" | "minimized" | "closed";
 export type PanelPlacement = "docked" | "floating";
 export type PanelDock = PanelPlacement;
@@ -39,6 +36,7 @@ type PanelLayoutControllerOptions = {
   root: HTMLElement;
   setNotice: (notice: string) => void;
   renderAll: () => void;
+  renderUi?: () => void;
 };
 
 type DockPanelDefaults = {
@@ -66,16 +64,29 @@ type DockEdgeRect = {
   height: number;
 };
 
+type DockEdgeSnapPanelSize = {
+  minimumWidth: number;
+  minimumHeight: number;
+  initialWidth: number;
+  initialHeight: number;
+};
+
+export type DockEdgeSnapRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 const panelOrder: PanelId[] = ["scene", "properties", "assets", "library", "tasks", "output"];
 const dockComponentName = "webhachimi-panel";
 const dockTabName = "webhachimi-tab";
 export const dockDragStartThreshold = 6;
 export const dockEdgeSnapThreshold = 36;
+export const dockEdgeSnapMargin = 12;
+export const dockEdgeSnapWidthRatio = 0.38;
+export const dockEdgeSnapHeightRatio = 0.38;
 export const dockSingleTabMode = "fullwidth";
-export const dockEdgeDropOverlay: DroptargetOverlayModel = {
-  activationSize: { type: "pixels", value: 18 },
-  size: { type: "pixels", value: 42 },
-};
 export const dockTheme: DockviewTheme = {
   name: "webhachimi-dark",
   className: "dockview-theme-dark",
@@ -116,7 +127,7 @@ export class PanelLayoutController {
 
   private readonly root: HTMLElement;
   private readonly setNotice: (notice: string) => void;
-  private readonly renderAll: () => void;
+  private readonly renderUi: () => void;
   private dockview: DockviewApi | undefined;
   private parkingLot: HTMLElement | undefined;
   private focusedPanel: PanelId | undefined = "tasks";
@@ -138,7 +149,7 @@ export class PanelLayoutController {
   constructor(options: PanelLayoutControllerOptions) {
     this.root = options.root;
     this.setNotice = options.setNotice;
-    this.renderAll = options.renderAll;
+    this.renderUi = options.renderUi || options.renderAll;
   }
 
   applyPanelSizes(): void {
@@ -244,7 +255,7 @@ export class PanelLayoutController {
     this.parkingLot = this.createParkingLot();
     const dockview = createDockview(dockHost, {
       defaultTabComponent: dockTabName,
-      dndEdges: dockEdgeDropOverlay,
+      dndEdges: false,
       floatingGroupBounds: "boundedWithinViewport",
       noPanelsOverlay: "watermark",
       singleTabMode: dockSingleTabMode,
@@ -283,14 +294,11 @@ export class PanelLayoutController {
     dockview.onWillDragPanel(() => this.beginDockDrag());
     dockview.onWillDragGroup(() => this.beginDockDrag());
     dockview.onWillShowOverlay((event) => {
-      if (isSelfReferentialDropTarget(event.getData(), event.group?.id, event.kind)) {
-        event.preventDefault();
-        return;
-      }
       this.beginDockDrag();
+      event.preventDefault();
     });
     dockview.onWillDrop((event) => {
-      if (isSelfReferentialDropTarget(event.getData(), event.group?.id, event.kind)) event.preventDefault();
+      event.preventDefault();
     });
     dockview.onDidDrop(() => this.finishDockDragSoon());
     dockview.onDidActivePanelChange((panel) => {
@@ -359,7 +367,6 @@ export class PanelLayoutController {
     drag.lastX = clientX;
     drag.lastY = clientY;
     drag.edge = this.dockEdgeAtClientPoint(clientX, clientY);
-    this.updateDockEdgePreview(drag.edge);
   }
 
   private finishDockTitleDragFromPoint(clientX: number, clientY: number): void {
@@ -386,22 +393,21 @@ export class PanelLayoutController {
     const drag = this.dockTitleDrag;
     if (!drag) return;
     this.dockTitleDrag = undefined;
-    this.updateDockEdgePreview(undefined);
 
     const moved = hasDockDragTravelled({ x: drag.startX, y: drag.startY }, { x: drag.lastX, y: drag.lastY });
-    if (!cancelled && moved && drag.edge) this.dockFloatingPanelToEdge(drag.panel, drag.edge);
+    if (!cancelled && moved && drag.edge) this.snapFloatingPanelToEdge(drag.panel, drag.edge);
     this.finishDockDragSoon();
   }
 
-  private dockFloatingPanelToEdge(panel: PanelId, edge: DockEdge): void {
+  private snapFloatingPanelToEdge(panel: PanelId, edge: DockEdge): void {
     const dockPanel = this.dockview?.getPanel(panel);
-    if (!dockPanel || dockPanel.api.location.type !== "floating") return;
+    if (!dockPanel || !this.dockview) return;
 
     this.withInternalMutation(() => {
-      dockPanel.api.group.api.moveTo({ position: edge });
+      this.dockview?.addFloatingGroup(dockPanel, this.edgeFloatingDefaults(panel, edge));
     });
     this.focusedPanel = panel;
-    this.panelPlacement[panel] = "docked";
+    this.panelPlacement[panel] = "floating";
     this.layoutVersion += 1;
     this.setNotice(`${dockDefaults[panel].title}已贴到${dockEdgeLabel(edge)}。`);
     this.applyPanelSizes();
@@ -411,32 +417,14 @@ export class PanelLayoutController {
   private dockEdgeAtClientPoint(clientX: number, clientY: number): DockEdge | undefined {
     const dockHost = this.dockHostElement();
     if (!dockHost) return undefined;
-    const rect = dockHost.getBoundingClientRect();
-    return resolveDockEdgeFromPoint({ x: clientX, y: clientY }, rect);
+    return resolveDockEdgeFromPoint({ x: clientX, y: clientY }, dockHost.getBoundingClientRect());
   }
 
-  private updateDockEdgePreview(edge: DockEdge | undefined): void {
-    const preview = this.root.querySelector<HTMLElement>('[data-role="snap-preview"]');
-    const dockHost = this.dockHostElement();
-    if (!preview || !dockHost || !edge) {
-      if (preview) {
-        preview.hidden = true;
-        delete preview.dataset.edge;
-      }
-      return;
-    }
-
-    const rootRect = this.root.getBoundingClientRect();
-    const hostRect = dockHost.getBoundingClientRect();
-    const left = hostRect.left - rootRect.left;
-    const top = hostRect.top - rootRect.top;
-    const edgeSize = Math.max(42, dockEdgeDropOverlay.size?.value || 42);
-    preview.hidden = false;
-    preview.dataset.edge = edge;
-    preview.style.left = `${Math.round(edge === "right" ? left + hostRect.width - edgeSize : left)}px`;
-    preview.style.top = `${Math.round(edge === "bottom" ? top + hostRect.height - edgeSize : top)}px`;
-    preview.style.width = `${Math.round(edge === "left" || edge === "right" ? edgeSize : hostRect.width)}px`;
-    preview.style.height = `${Math.round(edge === "top" || edge === "bottom" ? edgeSize : hostRect.height)}px`;
+  private edgeFloatingDefaults(panel: PanelId, edge: DockEdge): DockEdgeSnapRect {
+    const host = this.dockHostElement();
+    const hostWidth = host?.clientWidth || window.innerWidth || 1200;
+    const hostHeight = host?.clientHeight || window.innerHeight || 760;
+    return resolveDockEdgeSnapRect(edge, { width: hostWidth, height: hostHeight }, dockDefaults[panel]);
   }
 
   private isDockTitleDragTarget(target: HTMLElement): boolean {
@@ -643,7 +631,7 @@ export class PanelLayoutController {
   private requestRender(): void {
     this.layoutVersion += 1;
     if (this.internalMutationDepth > 0) return;
-    this.renderAll();
+    this.renderUi();
   }
 
   private withInternalMutation<T>(callback: () => T): T {
@@ -737,6 +725,38 @@ export function resolveDockEdgeFromPoint(
   return nearest.distance <= threshold ? nearest.edge : undefined;
 }
 
+export function resolveDockEdgeSnapRect(
+  edge: DockEdge,
+  host: { width: number; height: number },
+  panel: DockEdgeSnapPanelSize,
+  margin = dockEdgeSnapMargin,
+): DockEdgeSnapRect {
+  const hostWidth = Math.max(1, host.width);
+  const hostHeight = Math.max(1, host.height);
+  const marginX = Math.min(margin, Math.max(0, Math.floor(hostWidth / 4)));
+  const marginY = Math.min(margin, Math.max(0, Math.floor(hostHeight / 4)));
+  const availableWidth = Math.max(1, hostWidth - marginX * 2);
+  const availableHeight = Math.max(1, hostHeight - marginY * 2);
+  const sideWidth = edgeSnapSize(panel.minimumWidth, availableWidth, dockEdgeSnapWidthRatio);
+  const bandHeight = edgeSnapSize(panel.minimumHeight, availableHeight, dockEdgeSnapHeightRatio);
+
+  if (edge === "left") return { x: marginX, y: marginY, width: sideWidth, height: availableHeight };
+  if (edge === "right") return { x: hostWidth - marginX - sideWidth, y: marginY, width: sideWidth, height: availableHeight };
+  if (edge === "top") return { x: marginX, y: marginY, width: availableWidth, height: bandHeight };
+  return { x: marginX, y: hostHeight - marginY - bandHeight, width: availableWidth, height: bandHeight };
+}
+
+function edgeSnapSize(minimum: number, available: number, ratio: number): number {
+  const safeAvailable = Math.max(1, Math.round(available));
+  const safeMinimum = Math.min(Math.max(1, Math.round(minimum)), safeAvailable);
+  const ratioSize = Math.max(safeMinimum, Math.round(safeAvailable * ratio));
+  return clamp(ratioSize, safeMinimum, safeAvailable);
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(maximum, Math.max(minimum, value));
+}
+
 function hasUsableClientPoint(event: DragEvent): boolean {
   return Number.isFinite(event.clientX) && Number.isFinite(event.clientY) && (event.clientX !== 0 || event.clientY !== 0);
 }
@@ -746,16 +766,6 @@ function dockEdgeLabel(edge: DockEdge): string {
   if (edge === "right") return "右侧";
   if (edge === "top") return "顶部";
   return "底部";
-}
-
-function isSelfReferentialDropTarget(
-  transfer: PanelTransfer | undefined,
-  targetGroupId: string | undefined,
-  kind: DockviewGroupDropLocation,
-): boolean {
-  if (!transfer || !targetGroupId || transfer.groupId !== targetGroupId) return false;
-  if (kind === "tab" || kind === "header_space") return false;
-  return true;
 }
 
 class ExistingElementContentRenderer implements IContentRenderer {

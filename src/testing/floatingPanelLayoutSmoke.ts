@@ -1,12 +1,15 @@
 import {
   createFixedPanelLayout,
   dockDragStartThreshold,
-  dockEdgeDropOverlay,
+  dockEdgeSnapHeightRatio,
+  dockEdgeSnapMargin,
   dockEdgeSnapThreshold,
+  dockEdgeSnapWidthRatio,
   dockSingleTabMode,
   dockTheme,
   hasDockDragTravelled,
   resolveDockEdgeFromPoint,
+  resolveDockEdgeSnapRect,
   resolveStudioWorkspaceMode,
   type FixedPanelLayout,
   type PanelId,
@@ -48,12 +51,8 @@ assertPanel(explicitLayout, "output", "dock", false, "floating", 5);
 assert(resolveStudioWorkspaceMode(1440) === "desktop", "wide workspace should use desktop layout");
 assert(resolveStudioWorkspaceMode(1179) === "compact", "medium workspace should use compact layout");
 assert(resolveStudioWorkspaceMode(759) === "narrow", "small workspace should use narrow layout");
-assert(dockEdgeDropOverlay.activationSize?.type === "pixels", "dock edge drop activation should be explicit");
-assert((dockEdgeDropOverlay.activationSize?.value || 0) > 0, "dock edge drop activation should not be disabled");
-assert((dockEdgeDropOverlay.size?.value || 0) >= 20, "dock edge drop target should be large enough to hit");
 assert(dockSingleTabMode === "fullwidth", "single-panel floating window titles should be draggable dock tabs");
-assert(dockTheme.dndOverlayMounting === "absolute", "dock root edge drop targets must mount at the dockview root");
-assert(dockTheme.dndPanelOverlay === "group", "dock drop feedback should include the tab header group");
+assert(dockTheme.dndOverlayMounting === "absolute", "dock drag overlays should mount at stable viewport coordinates");
 assert(resolveDockEdgeFromPoint({ x: 1001, y: 320 }, { left: 20, top: 40, width: 980, height: 700 }) === "right", "right edge release should dock to the right");
 assert(resolveDockEdgeFromPoint({ x: 22, y: 320 }, { left: 20, top: 40, width: 980, height: 700 }) === "left", "left edge release should dock to the left");
 assert(resolveDockEdgeFromPoint({ x: 400, y: 48 }, { left: 20, top: 40, width: 980, height: 700 }) === "top", "top edge release should dock to the top");
@@ -62,6 +61,27 @@ assert(resolveDockEdgeFromPoint({ x: 400, y: 320 }, { left: 20, top: 40, width: 
 assert(hasDockDragTravelled({ x: 10, y: 10 }, { x: 10 + dockDragStartThreshold, y: 10 }), "dock title drag should arm after threshold travel");
 assert(!hasDockDragTravelled({ x: 10, y: 10 }, { x: 10 + dockDragStartThreshold - 1, y: 10 }), "dock title click should not dock without real drag travel");
 assert(dockEdgeSnapThreshold >= 30, "dock edge snap threshold should be easy to hit by pointer release");
+assert(dockEdgeSnapMargin >= 8, "edge-snapped floating windows should keep a small visual gutter");
+assert(dockEdgeSnapWidthRatio < 0.5, "side snaps should not cover the whole fixed canvas");
+assert(dockEdgeSnapHeightRatio < 0.5, "top/bottom snaps should not cover the whole fixed canvas");
+
+const rightSnap = resolveDockEdgeSnapRect(
+  "right",
+  { width: 1200, height: 720 },
+  { minimumWidth: 260, minimumHeight: 180, initialWidth: 520, initialHeight: 250 },
+);
+assert(rightSnap.x > 700, "right snap should attach the floating window to the right edge");
+assert(rightSnap.y === dockEdgeSnapMargin, "right snap should keep the top gutter");
+assert(rightSnap.height === 720 - dockEdgeSnapMargin * 2, "right snap should span the usable height");
+assert(rightSnap.width < 600, "right snap should remain an overlay strip instead of becoming the canvas");
+
+const bottomSnap = resolveDockEdgeSnapRect(
+  "bottom",
+  { width: 1200, height: 720 },
+  { minimumWidth: 320, minimumHeight: 150, initialWidth: 520, initialHeight: 250 },
+);
+assert(bottomSnap.y > 430, "bottom snap should attach the floating window to the bottom edge");
+assert(bottomSnap.width === 1200 - dockEdgeSnapMargin * 2, "bottom snap should span the usable width");
 
 console.log(
   JSON.stringify(

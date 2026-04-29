@@ -4,7 +4,7 @@ import { ProjectStore } from "../project/projectStore";
 import type { EntityId, TaskId } from "../shared/types";
 import { createStarterProject } from "../v2/starterProject";
 import { createTaskWorkflowController } from "../v2/taskWorkflowController";
-import { createSuperBrushStroke, type SuperBrushDraft } from "../editor/superBrush";
+import { createSuperBrushStroke, superBrushSelectionBox, type SuperBrushDraft } from "../editor/superBrush";
 
 const store = new ProjectStore(createStarterProject());
 const executor = new AiTaskExecutor({ store });
@@ -97,13 +97,16 @@ pendingBrush = {
   annotations: [],
   selectionTargets: [{ kind: "entity", entityId: player.id }],
 };
-const taskCountBeforeTargetOnlyBrush = Object.keys(store.project.tasks).length;
-controller.queueTaskFromText("This target-only click should not become a super brush task.");
+controller.queueTaskFromText("Use the clicked super brush target to make the player brighter.");
+const targetOnlyBrushTask = store.project.tasks[previewTaskId];
+assert(targetOnlyBrushTask, "expected entity-only super brush task to be stored");
+assert(targetOnlyBrushTask.source === "superBrush", `expected entity-only brush source, got ${targetOnlyBrushTask.source}`);
 assert(
-  Object.keys(store.project.tasks).length === taskCountBeforeTargetOnlyBrush,
-  "expected target-only empty brush to be rejected",
+  targetOnlyBrushTask.brushContext?.targetEntityIds.includes(player.id),
+  "expected entity-only super brush task to preserve clicked target",
 );
-assert(!pendingBrush, "expected invalid target-only brush to be cleared");
+assert(targetOnlyBrushTask.brushContext?.strokes.length === 0, "expected entity-only brush task to have no strokes");
+assert(!pendingBrush, "expected entity-only brush to be cleared after queue");
 
 const stroke = createSuperBrushStroke([
   { x: 0, y: 0 },
@@ -113,9 +116,16 @@ assert(stroke.ok, "expected test brush stroke to be valid");
 pendingBrush = {
   strokes: [stroke.value],
   annotations: [],
-  selectionTargets: [{ kind: "entity", entityId: player.id }],
+  selectionTargets: [
+    { kind: "entity", entityId: player.id },
+    { kind: "area", sceneId: store.project.activeSceneId, rect: { x: 0, y: -12, w: 48, h: 24 } },
+    { kind: "area", sceneId: store.project.activeSceneId, rect: { x: 60, y: 10, w: 20, h: 20 } },
+  ],
   selectionBox: { x: 0, y: -12, w: 48, h: 24 },
 };
+const mergedBrushBox = superBrushSelectionBox(pendingBrush);
+assert(mergedBrushBox?.x === 0, "expected merged brush selection box to keep the left edge");
+assert(mergedBrushBox?.w === 80, `expected merged brush selection width 80, got ${mergedBrushBox?.w}`);
 controller.queueTaskFromText("Use the super brush context to make this target green.");
 const superBrushTask = store.project.tasks[previewTaskId];
 assert(superBrushTask, "expected super brush task to be stored and previewed");
@@ -125,7 +135,7 @@ assert(
   superBrushTask.brushContext?.targetEntityIds.includes(player.id),
   "expected super brush task to identify the selected entity target",
 );
-assert(superBrushTask.brushContext?.selectionBox?.w === 48, "expected super brush task to keep selection box");
+assert(superBrushTask.brushContext?.selectionBox?.w === 80, "expected super brush task to keep merged selection box");
 assert(superBrushTask.brushContext?.summary?.includes("1 stroke"), "expected super brush summary to mention stroke count");
 assert(!pendingBrush, "expected pending brush to be cleared after valid super brush queue");
 

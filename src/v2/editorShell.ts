@@ -74,6 +74,17 @@ export function mountEditorShell(root: HTMLElement): void {
       </section>
     </header>
 
+    <section class="v2-super-brush-bar" data-role="super-brush-bar" aria-label="超级画笔">
+      <span class="v2-super-brush-title">
+        <strong>超级画笔</strong>
+        <small data-role="super-brush-summary">拖动画布开始标记</small>
+      </span>
+      <span class="v2-super-brush-actions">
+        <button class="v2-command is-primary" data-action="confirm-super-brush" type="button">确认画笔</button>
+        <button class="v2-command" data-action="cancel-super-brush-session" type="button">取消</button>
+      </span>
+    </section>
+
     <section class="v2-workspace" data-layout="studio">
       <nav class="v2-toolrail" role="toolbar" aria-label="Tools">
         <button class="v2-tool-button" data-tool="select" type="button" title="选择">
@@ -199,8 +210,6 @@ export function mountEditorShell(root: HTMLElement): void {
             <div class="v2-task-actions">
               <span class="v2-action-group">
                 <button data-action="queue-task" type="button">排队</button>
-                <button data-action="run-ai-task" type="button">执行</button>
-                <button data-action="cancel-super-brush" type="button" hidden>取消画笔</button>
               </span>
             </div>
           </section>
@@ -225,9 +234,26 @@ export function mountEditorShell(root: HTMLElement): void {
         <div class="v2-window-resize" data-resize="floating" data-panel="output" title="调整输出大小"></div>
       </section>
       <div class="v2-minimized-tray" data-role="minimized-tray" role="toolbar" aria-label="Minimized panels" aria-hidden="true" hidden></div>
-      <div class="v2-snap-preview" data-role="snap-preview" hidden></div>
     </section>
     <div class="v2-context-menu" data-role="context-menu" role="menu" aria-hidden="true" hidden></div>
+    <section class="v2-super-brush-task-modal" data-role="super-brush-task-modal" role="dialog" aria-modal="true" aria-hidden="true" hidden>
+      <div class="v2-super-brush-task-dialog">
+        <header>
+          <span>
+            <strong>超级画笔任务</strong>
+            <small data-role="super-brush-task-summary">等待画笔上下文</small>
+          </span>
+        </header>
+        <textarea data-role="super-brush-task-input" rows="7" placeholder="描述这次超级画笔标记要让 AI 改什么"></textarea>
+        <p class="v2-super-brush-task-error" data-role="super-brush-task-error" aria-live="polite"></p>
+        <footer>
+          <button data-action="back-super-brush" type="button">返回画笔</button>
+          <span></span>
+          <button data-action="cancel-super-brush-session" type="button">取消</button>
+          <button class="is-emphasis" data-action="queue-super-brush-task" type="button">排队</button>
+        </footer>
+      </div>
+    </section>
 
     <footer class="v2-status">
       <span>data/v2-project.json</span>

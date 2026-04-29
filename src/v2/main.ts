@@ -7,12 +7,11 @@ import { normalizeProjectDefaults, type BrushContext, type Entity, type Project,
 import { consumeEditorHandoff } from "../project/editorHandoff";
 import { ProjectStore } from "../project/projectStore";
 import {
+  createBrushContextFromSuperBrushDraft,
   createSuperBrushStroke,
   hasMeaningfulSuperBrushContext,
   mergeSuperBrushTargets,
   summarizeSuperBrushDraft,
-  superBrushSelectionBox,
-  superBrushTargetEntityIds,
   type SuperBrushDraft,
 } from "../editor/superBrush";
 import { RuntimeWorld } from "../runtime/world";
@@ -165,6 +164,8 @@ let canvasDirty = true;
 const editorPerformance = new EditorPerformanceController(lastTime);
 
 let drawingBrush = false;
+let drawingBrushPointerId: number | undefined;
+let brushStartPoint: Vec2 | undefined;
 let currentStrokePoints: Vec2[] = [];
 let pendingBrush: SuperBrushDraft | undefined;
 let canvasDrag: CanvasDragState | undefined;
@@ -210,6 +211,7 @@ const panelLayout = new PanelLayoutController({
     notice = value;
   },
   renderAll,
+  renderUi,
 });
 
 mountEditorShell(root);
@@ -706,8 +708,10 @@ function cancelCanvasPointerInteraction(event: PointerEvent): void {
     renderAll();
     return;
   }
-  if (drawingBrush) {
+  if (drawingBrush && drawingBrushPointerId === event.pointerId) {
     drawingBrush = false;
+    drawingBrushPointerId = undefined;
+    brushStartPoint = undefined;
     currentStrokePoints = [];
     if (pendingBrush && !hasMeaningfulSuperBrushContext(pendingBrush)) pendingBrush = undefined;
     renderAll();
@@ -739,7 +743,7 @@ function toolSwitchNotice(tool: ToolId): string {
   if (tool === "circle") return "圆形工具：在画布上拖动创建一个圆形本体；扇形参数后续接到属性面板。";
   if (tool === "leaf") return "柳叶笔：按住拖动画出自由轮廓，松开后自动闭环成碰撞本体。";
   if (tool === "polygon") return "多边形工具：逐点点击顶点，点确认或右键自动闭环。";
-  if (tool === "superBrush") return "超级画笔会在松开后要求输入任务。";
+  if (tool === "superBrush") return "超级画笔：拖动圈出问题，单击对象可追加目标，然后在任务框描述要改什么。";
   return "已切换工具。";
 }
 
@@ -755,6 +759,28 @@ function parseToolId(value?: string): ToolId | undefined {
 
 function shapeToolFromActive(tool: ToolId): ShapeToolId | undefined {
   return tool === "square" || tool === "circle" || tool === "leaf" ? tool : undefined;
+}
+
+function startSuperBrushStroke(event: PointerEvent, point: Vec2): void {
+  const snapshot = world.freezeForInspection();
+  store.recordRuntimeSnapshot(snapshot);
+  const startTargets = mergeSuperBrushTargets(pendingBrush?.selectionTargets, currentTargets(), targetsForSuperBrushClick(point));
+  pendingBrush = {
+    strokes: pendingBrush?.strokes || [],
+    annotations: pendingBrush?.annotations || [],
+    selectionTargets: startTargets,
+    capturedSnapshotId: pendingBrush?.capturedSnapshotId || snapshot.id,
+    selectionBox: pendingBrush?.selectionBox || selectionBoxFromTargets(startTargets),
+  };
+  markProjectDirty("已捕捉超级画笔上下文");
+  drawingBrush = true;
+  drawingBrushPointerId = event.pointerId;
+  brushStartPoint = point;
+  currentStrokePoints = [point];
+  contextMenu = undefined;
+  renderer.canvas().setPointerCapture(event.pointerId);
+  notice = "正在记录超级画笔；可以连续画多笔，随后在任务框描述要改什么。";
+  renderAll();
 }
 
 function onCanvasPointerDown(event: PointerEvent): void {
@@ -794,21 +820,7 @@ function onCanvasPointerDown(event: PointerEvent): void {
     }
   }
   if (activeTool === "superBrush") {
-    const snapshot = world.freezeForInspection();
-    store.recordRuntimeSnapshot(snapshot);
-    markProjectDirty("已捕捉画笔上下文");
-    drawingBrush = true;
-    currentStrokePoints = [point];
-    pendingBrush = {
-      strokes: pendingBrush?.strokes || [],
-      annotations: pendingBrush?.annotations || [],
-      selectionTargets: pendingBrush?.selectionTargets || [],
-      capturedSnapshotId: pendingBrush?.capturedSnapshotId || snapshot.id,
-      selectionBox: pendingBrush?.selectionBox,
-    };
-    renderer.canvas().setPointerCapture(event.pointerId);
-    notice = "正在记录超级画笔。松开后输入任务描述。";
-    renderAll();
+    startSuperBrushStroke(event, point);
     return;
   }
 
@@ -1079,9 +1091,10 @@ function onCanvasPointerMove(event: PointerEvent): void {
     return;
   }
   updateCanvasCursor(point);
-  if (!drawingBrush) return;
+  if (!drawingBrush || drawingBrushPointerId !== event.pointerId) return;
+  event.preventDefault();
   const last = currentStrokePoints[currentStrokePoints.length - 1];
-  if (!last || Math.hypot(point.x - last.x, point.y - last.y) >= 4) {
+  if (!last || distance(point, last) >= superBrushPointSpacing()) {
     currentStrokePoints.push(point);
     renderCanvasOnly();
   }
@@ -1105,24 +1118,48 @@ function onCanvasPointerUp(event: PointerEvent): void {
     finishShapeDrag(event);
     return;
   }
-  if (!drawingBrush) return;
+  if (!drawingBrush || drawingBrushPointerId !== event.pointerId) return;
+  event.preventDefault();
+  const finishedPoints = currentStrokePoints;
+  const finishedStart = brushStartPoint || finishedPoints[0];
+  const finishedEnd = finishedPoints[finishedPoints.length - 1] || finishedStart;
   drawingBrush = false;
+  drawingBrushPointerId = undefined;
+  brushStartPoint = undefined;
   releaseCanvasPointer(event.pointerId);
-  const createdStroke = createSuperBrushStroke(currentStrokePoints);
+  const createdStroke = createSuperBrushStroke(finishedPoints);
   if (createdStroke.ok) {
-    const strokeTargets = targetsForCompletedSuperBrushStroke(currentStrokePoints);
+    const strokeTargets = targetsForCompletedSuperBrushStroke(finishedPoints);
     pendingBrush = {
       strokes: [...(pendingBrush?.strokes || []), createdStroke.value],
       annotations: pendingBrush?.annotations || [],
       selectionTargets: mergeSuperBrushTargets(pendingBrush?.selectionTargets, strokeTargets),
       capturedSnapshotId: pendingBrush?.capturedSnapshotId,
-      selectionBox: pendingBrush?.selectionBox || selectionBoxFromTargets(strokeTargets),
+      selectionBox: mergedSelectionBox(pendingBrush?.selectionBox, selectionBoxFromTargets(strokeTargets)),
     };
-    notice = "超级画笔已记录，请输入任务描述后排队。";
+    notice = superBrushRecordedNotice();
     taskInput.focus();
+  } else if (finishedStart && distance(finishedStart, finishedEnd) < superBrushClickDistance()) {
+    const clickTargets = targetsForSuperBrushClick(finishedEnd);
+    pendingBrush = clickTargets.length > 0
+      ? {
+          strokes: pendingBrush?.strokes || [],
+          annotations: pendingBrush?.annotations || [],
+          selectionTargets: mergeSuperBrushTargets(pendingBrush?.selectionTargets, clickTargets),
+          capturedSnapshotId: pendingBrush?.capturedSnapshotId,
+          selectionBox: mergedSelectionBox(pendingBrush?.selectionBox, selectionBoxFromTargets(clickTargets)),
+        }
+      : pendingBrush;
+    if (pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush)) {
+      notice = superBrushRecordedNotice();
+      taskInput.focus();
+    } else {
+      pendingBrush = undefined;
+      notice = "超级画笔标记太短；请拖动画一笔，或单击对象追加目标。";
+    }
   } else if (pendingBrush && !hasMeaningfulSuperBrushContext(pendingBrush)) {
     pendingBrush = undefined;
-    notice = "super brush stroke was too short; drag a longer mark or select a target first.";
+    notice = "超级画笔标记太短；请拖动画一笔，或单击对象追加目标。";
   }
   currentStrokePoints = [];
   renderAll();
@@ -1135,6 +1172,8 @@ function cancelPendingSuperBrush(): void {
     return;
   }
   drawingBrush = false;
+  drawingBrushPointerId = undefined;
+  brushStartPoint = undefined;
   currentStrokePoints = [];
   pendingBrush = undefined;
   notice = "已取消超级画笔上下文；任务输入会按普通任务处理。";
@@ -1350,6 +1389,8 @@ async function loadSavedProject(): Promise<void> {
     previewTaskId = "";
     resetTaskUiEvidence();
     drawingBrush = false;
+    drawingBrushPointerId = undefined;
+    brushStartPoint = undefined;
     pendingBrush = undefined;
     currentStrokePoints = [];
     canvasDrag = undefined;
@@ -1403,6 +1444,8 @@ async function refreshProjectFromDisk(): Promise<void> {
     previewTaskId = "";
     resetTaskUiEvidence();
     drawingBrush = false;
+    drawingBrushPointerId = undefined;
+    brushStartPoint = undefined;
     pendingBrush = undefined;
     currentStrokePoints = [];
     canvasDrag = undefined;
@@ -1714,6 +1757,20 @@ function loop(time: number): void {
   raf = requestAnimationFrame(loop);
 }
 
+function superBrushUiState(): "idle" | "armed" | "drawing" | "pending" {
+  if (drawingBrush) return "drawing";
+  if (pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush)) return "pending";
+  return activeTool === "superBrush" ? "armed" : "idle";
+}
+
+function superBrushPointerText(): string {
+  const base = `工具：${toolLabel(activeTool)}`;
+  if (drawingBrush) return `${base} · 正在记录第 ${(pendingBrush?.strokes.length || 0) + 1} 笔`;
+  if (pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush)) return `${base} · ${summarizeSuperBrushDraft(pendingBrush)}`;
+  if (activeTool === "superBrush") return `${base} · 拖动画笔或单击对象`;
+  return base;
+}
+
 function renderUi(projectSnapshot?: Project): void {
   const snapshotProject = projectSnapshot || store.snapshot().project;
   renderTree(snapshotProject);
@@ -1769,7 +1826,7 @@ function renderUi(projectSnapshot?: Project): void {
   saveStatusNode.textContent = autoSave.status;
   saveStatusNode.setAttribute("role", "status");
   const pointerNode = query<HTMLElement>('[data-role="pointer"]');
-  pointerNode.textContent = `工具：${toolLabel(activeTool)}`;
+  pointerNode.textContent = superBrushPointerText();
   pointerNode.setAttribute("aria-live", "polite");
   const noticeNode = query<HTMLElement>('[data-role="notice"]');
   noticeNode.textContent = notice;
@@ -1784,8 +1841,13 @@ function renderUi(projectSnapshot?: Project): void {
     cancelBrushButton.hidden = !hasPendingBrush;
     cancelBrushButton.disabled = !hasPendingBrush;
     cancelBrushButton.setAttribute("aria-hidden", String(!hasPendingBrush));
+    cancelBrushButton.textContent = drawingBrush ? "停止画笔" : "清除画笔";
   }
+  taskInput.placeholder = pendingBrush
+    ? "描述这些画笔标记要让 AI 改什么"
+    : "写给 AI 的任务";
   root.dataset.tool = activeTool;
+  root.dataset.superBrushState = superBrushUiState();
   root.dataset.scenePanel = panelLayout.panelState.scene;
   root.dataset.propertiesPanel = panelLayout.panelState.properties;
   root.dataset.assetsPanel = panelLayout.panelState.assets;
@@ -2634,25 +2696,21 @@ function liveBrushContext(): BrushContext | undefined {
     };
   }
   const liveStrokeResult = createSuperBrushStroke(currentStrokePoints);
-  if (liveStrokeResult.ok) {
-    const liveTargets = mergeSuperBrushTargets(pendingBrush?.selectionTargets, targetsForCompletedSuperBrushStroke(currentStrokePoints));
-    return {
-      strokes: [liveStrokeResult.value],
-      annotations: [],
-      selectionBox: pendingBrush?.selectionBox || selectionBoxFromTargets(liveTargets),
-      targetEntityIds: superBrushTargetEntityIds(liveTargets),
-      capturedSnapshotId: pendingBrush?.capturedSnapshotId as BrushContext["capturedSnapshotId"],
+  if (drawingBrush || liveStrokeResult.ok) {
+    const liveTargets = liveStrokeResult.ok
+      ? targetsForCompletedSuperBrushStroke(currentStrokePoints)
+      : mergeSuperBrushTargets(pendingBrush?.selectionTargets);
+    const draft: SuperBrushDraft = {
+      strokes: [...(pendingBrush?.strokes || []), ...(liveStrokeResult.ok ? [liveStrokeResult.value] : [])],
+      annotations: pendingBrush?.annotations || [],
+      selectionTargets: mergeSuperBrushTargets(pendingBrush?.selectionTargets, liveTargets),
+      capturedSnapshotId: pendingBrush?.capturedSnapshotId,
+      selectionBox: mergedSelectionBox(pendingBrush?.selectionBox, selectionBoxFromTargets(liveTargets)),
     };
+    return hasMeaningfulSuperBrushContext(draft) ? createBrushContextFromSuperBrushDraft(draft) : undefined;
   }
   if (!pendingBrush) return undefined;
-  return {
-    strokes: pendingBrush.strokes,
-    annotations: pendingBrush.annotations,
-    selectionBox: superBrushSelectionBox(pendingBrush),
-    targetEntityIds: superBrushTargetEntityIds(pendingBrush.selectionTargets),
-    capturedSnapshotId: pendingBrush.capturedSnapshotId as BrushContext["capturedSnapshotId"],
-    summary: summarizeSuperBrushDraft(pendingBrush),
-  };
+  return createBrushContextFromSuperBrushDraft(pendingBrush);
 }
 
 function liveShapeDraft(): ShapeDraftPreview | undefined {
@@ -2675,12 +2733,44 @@ function targetsForSuperBrushStroke(points: Vec2[]): TargetRef[] {
 
 function targetsForCompletedSuperBrushStroke(points: Vec2[]): TargetRef[] {
   const strokeTargets = targetsForSuperBrushStroke(points);
-  if (strokeTargets.some((target) => target.kind === "entity")) return strokeTargets;
   return mergeSuperBrushTargets(currentTargets(), strokeTargets);
 }
 
+function targetsForSuperBrushClick(point: Vec2): TargetRef[] {
+  const picked = renderer.pickCanvasTarget(world, point, selectedId ? { entityId: selectedId, part: selectedPart } : undefined);
+  if (picked) return [{ kind: "entity", entityId: picked.entity.id as EntityId }];
+  const current = currentTargets();
+  return current.some((target) => target.kind !== "scene") ? current : [];
+}
+
 function selectionBoxFromTargets(targets: TargetRef[]): Rect | undefined {
-  return targets.find((target): target is Extract<TargetRef, { kind: "area" }> => target.kind === "area")?.rect;
+  return targets
+    .filter((target): target is Extract<TargetRef, { kind: "area" }> => target.kind === "area")
+    .map((target) => target.rect)
+    .reduce<Rect | undefined>((box, rect) => mergedSelectionBox(box, rect), undefined);
+}
+
+function mergedSelectionBox(left: Rect | undefined, right: Rect | undefined): Rect | undefined {
+  if (!left) return right;
+  if (!right) return left;
+  const minX = Math.min(left.x, right.x);
+  const minY = Math.min(left.y, right.y);
+  const maxX = Math.max(left.x + left.w, right.x + right.w);
+  const maxY = Math.max(left.y + left.h, right.y + right.h);
+  return { x: minX, y: minY, w: Math.max(1, maxX - minX), h: Math.max(1, maxY - minY) };
+}
+
+function superBrushPointSpacing(): number {
+  return Math.max(1.5, 4 / Math.max(renderer.viewportState().zoom, 0.1));
+}
+
+function superBrushClickDistance(): number {
+  return Math.max(5, 8 / Math.max(renderer.viewportState().zoom, 0.1));
+}
+
+function superBrushRecordedNotice(): string {
+  if (!pendingBrush) return "超级画笔已记录，请输入任务描述后排队。";
+  return `超级画笔已记录：${summarizeSuperBrushDraft(pendingBrush)}。输入任务描述后排队。`;
 }
 
 function rectFromStrokePoints(points: Vec2[], padding = 0): Rect {

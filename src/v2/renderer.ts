@@ -128,6 +128,7 @@ export class V2Renderer {
     this.removeResizeFallback?.();
     this.frameTextures.forEach((texture) => texture.destroy(false));
     this.frameTextures.clear();
+    this.lastRender = undefined;
     this.destroyPools();
     this.app.destroy(true);
   }
@@ -137,6 +138,7 @@ export class V2Renderer {
   }
 
   render(world: RuntimeWorld, options: RenderOverlayOptions = {}): void {
+    if (!this.hasLiveRenderer()) return;
     const started = performance.now();
     this.lastRender = { world, options };
     this.recycleLayer(this.worldLayer);
@@ -164,8 +166,8 @@ export class V2Renderer {
       this.drawEntity(world, entity, selectedPart, showBodyMaterial, showEditorDecorations, resources, options.animationTimeMs || 0);
     }
     if (showEditorDecorations) {
-      this.drawTaskPreview(options.previewTask?.brushContext);
-      this.drawTaskPreview(options.liveBrush, true);
+      this.drawTaskPreview(world, options.previewTask?.brushContext);
+      this.drawTaskPreview(world, options.liveBrush, true);
       this.drawShapeDraft(options.shapeDraft);
     }
     this.stats.visibleObjects = this.worldLayer.children.length + this.overlayLayer.children.length;
@@ -319,17 +321,24 @@ export class V2Renderer {
   }
 
   private screenSize(): { width: number; height: number } {
+    if (!this.hasLiveRenderer()) return { width: 1, height: 1 };
     return { width: this.app.screen.width, height: this.app.screen.height };
   }
 
   private clientToLocalPoint(clientX: number, clientY: number): Vec2 {
+    if (!this.hasLiveRenderer()) return { x: 0, y: 0 };
     const rect = this.app.canvas.getBoundingClientRect();
-    const scaleX = rect.width ? this.app.screen.width / rect.width : 1;
-    const scaleY = rect.height ? this.app.screen.height / rect.height : 1;
+    const screen = this.screenSize();
+    const scaleX = rect.width ? screen.width / rect.width : 1;
+    const scaleY = rect.height ? screen.height / rect.height : 1;
     return {
       x: (clientX - rect.left) * scaleX,
       y: (clientY - rect.top) * scaleY,
     };
+  }
+
+  private hasLiveRenderer(): boolean {
+    return Boolean((this.app as unknown as { renderer?: unknown }).renderer);
   }
 
   private drawEntity(
@@ -438,7 +447,7 @@ export class V2Renderer {
     const load = Assets.load<Texture>(imagePath)
       .then((texture) => {
         this.imageTextures.set(imagePath, texture);
-        if (this.lastRender) this.render(this.lastRender.world, this.lastRender.options);
+        if (this.lastRender && this.hasLiveRenderer()) this.render(this.lastRender.world, this.lastRender.options);
       })
       .catch(() => undefined)
       .finally(() => {
@@ -533,27 +542,80 @@ export class V2Renderer {
     this.overlayLayer.addChild(overlay);
   }
 
-  private drawTaskPreview(context?: BrushContext, live = false): void {
+  private drawTaskPreview(world: RuntimeWorld, context?: BrushContext, live = false): void {
     if (!context) return;
     const graphics = this.takeGraphics();
-    for (const stroke of context.strokes) {
-      const [first, ...rest] = stroke.points;
-      if (!first) continue;
-      graphics.setStrokeStyle({
-        width: live ? Math.max(stroke.width, 3) : stroke.width,
-        color: parseColor(stroke.color),
-        alpha: live ? 0.9 : 0.78,
-      });
-      graphics.moveTo(first.x, first.y);
-      rest.forEach((point) => graphics.lineTo(point.x, point.y));
-      graphics.stroke();
+    const pixel = 1 / Math.max(this.viewport.zoom, 0.1);
+    const accent = live ? 0x40c89c : 0xd7a84a;
+    const targetIds = new Set(context.targetEntityIds);
+    for (const entity of world.allEntities()) {
+      if (!targetIds.has(entity.id)) continue;
+      this.drawBrushTargetHighlight(graphics, entity, accent, pixel, live);
     }
     if (context.selectionBox) {
-      graphics.setStrokeStyle({ width: 2, color: live ? 0x35bd9a : 0xd7a84a, alpha: live ? 0.9 : 0.78 });
       graphics.rect(context.selectionBox.x, context.selectionBox.y, context.selectionBox.w, context.selectionBox.h);
+      graphics.fill({ color: accent, alpha: live ? 0.09 : 0.06 });
+      graphics.setStrokeStyle({ width: 2 * pixel, color: accent, alpha: live ? 0.92 : 0.78 });
+      graphics.stroke();
+    }
+    for (const stroke of context.strokes) {
+      if (stroke.points.length < 2) continue;
+      const width = Math.max(stroke.width, live ? 4 : 3) * pixel;
+      graphics.setStrokeStyle({ width: width + 4 * pixel, color: 0x0b1110, alpha: live ? 0.72 : 0.58 });
+      drawPolyline(graphics, stroke.points);
+      graphics.stroke();
+      graphics.setStrokeStyle({
+        width,
+        color: parseColor(stroke.color),
+        alpha: live ? 0.96 : 0.82,
+      });
+      drawPolyline(graphics, stroke.points);
+      graphics.stroke();
+      const last = stroke.points[stroke.points.length - 1];
+      graphics.circle(last.x, last.y, Math.max(3.5 * pixel, width * 0.7));
+      graphics.fill({ color: parseColor(stroke.color), alpha: live ? 0.96 : 0.82 });
+      graphics.setStrokeStyle({ width: 1.5 * pixel, color: 0x0b1110, alpha: 0.72 });
       graphics.stroke();
     }
     this.overlayLayer.addChild(graphics);
+    for (const annotation of context.annotations) this.drawBrushAnnotation(annotation.text, annotation.position, accent, pixel, live);
+  }
+
+  private drawBrushTargetHighlight(graphics: Graphics, entity: Entity, color: number, pixel: number, live: boolean): void {
+    if (entity.collider) {
+      drawBodyShape(graphics, entity);
+      graphics.fill({ color, alpha: live ? 0.08 : 0.05 });
+      graphics.setStrokeStyle({ width: 2.25 * pixel, color, alpha: live ? 0.92 : 0.72 });
+      graphics.stroke();
+    }
+    if (entity.render && entity.render.visible !== false) {
+      drawGeometryBox(graphics, targetGeometry(entity, "presentation"));
+      graphics.setStrokeStyle({ width: 1.75 * pixel, color, alpha: live ? 0.82 : 0.62 });
+      graphics.stroke();
+    }
+  }
+
+  private drawBrushAnnotation(text: string, position: Vec2, color: number, pixel: number, live: boolean): void {
+    const label = new Text({
+      text,
+      style: {
+        fill: live ? "#f6fffb" : "#fff5d8",
+        fontFamily: "Inter, Microsoft YaHei, sans-serif",
+        fontSize: 11,
+        fontWeight: "700",
+      },
+    });
+    label.position.set(position.x + 6 * pixel, position.y - 6 * pixel);
+    label.scale.set(pixel);
+    label.alpha = live ? 0.96 : 0.84;
+    this.overlayLayer.addChild(label);
+
+    const marker = this.takeGraphics();
+    marker.circle(position.x, position.y, 4 * pixel);
+    marker.fill({ color, alpha: live ? 0.94 : 0.78 });
+    marker.setStrokeStyle({ width: 1.5 * pixel, color: 0x0b1110, alpha: 0.72 });
+    marker.stroke();
+    this.overlayLayer.addChild(marker);
   }
 
   private drawShapeDraft(draft?: ShapeDraftPreview): void {
@@ -574,6 +636,13 @@ export class V2Renderer {
     }
     this.overlayLayer.addChild(graphics);
   }
+}
+
+function drawPolyline(graphics: Graphics, points: Vec2[]): void {
+  const [first, ...rest] = points;
+  if (!first) return;
+  graphics.moveTo(first.x, first.y);
+  rest.forEach((point) => graphics.lineTo(point.x, point.y));
 }
 
 function gridStepForZoom(zoom: number): number {
