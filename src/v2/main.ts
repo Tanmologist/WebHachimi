@@ -1509,6 +1509,9 @@ async function loadSavedProject(): Promise<void> {
     drawingBrushPointerId = undefined;
     brushStartPoint = undefined;
     pendingBrush = undefined;
+    superBrushTaskDialogOpen = false;
+    superBrushTaskError = "";
+    superBrushTaskInput.value = "";
     currentStrokePoints = [];
     canvasDrag = undefined;
     shapeDrag = undefined;
@@ -1564,6 +1567,9 @@ async function refreshProjectFromDisk(): Promise<void> {
     drawingBrushPointerId = undefined;
     brushStartPoint = undefined;
     pendingBrush = undefined;
+    superBrushTaskDialogOpen = false;
+    superBrushTaskError = "";
+    superBrushTaskInput.value = "";
     currentStrokePoints = [];
     canvasDrag = undefined;
     shapeDrag = undefined;
