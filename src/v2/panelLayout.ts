@@ -6,6 +6,8 @@ import {
   type IDockviewPanel,
   type ITabRenderer,
   type IWatermarkRenderer,
+  type DroptargetOverlayModel,
+  type DockviewTheme,
   type PanelTransfer,
   type TabPartInitParameters,
 } from "dockview-core";
@@ -16,6 +18,7 @@ export type PanelState = "open" | "minimized" | "closed";
 export type PanelPlacement = "docked" | "floating";
 export type PanelDock = PanelPlacement;
 export type ResizeTarget = "dockview";
+export type DockEdge = "left" | "right" | "top" | "bottom";
 
 export type FixedPanelLayout = {
   panel: PanelId;
@@ -46,9 +49,39 @@ type DockPanelDefaults = {
   initialHeight: number;
 };
 
+type DockTitleDrag = {
+  panel: PanelId;
+  pointerId: number;
+  startX: number;
+  startY: number;
+  lastX: number;
+  lastY: number;
+  edge: DockEdge | undefined;
+};
+
+type DockEdgeRect = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
 const panelOrder: PanelId[] = ["scene", "properties", "assets", "library", "tasks", "output"];
 const dockComponentName = "webhachimi-panel";
 const dockTabName = "webhachimi-tab";
+export const dockDragStartThreshold = 6;
+export const dockEdgeSnapThreshold = 36;
+export const dockSingleTabMode = "fullwidth";
+export const dockEdgeDropOverlay: DroptargetOverlayModel = {
+  activationSize: { type: "pixels", value: 18 },
+  size: { type: "pixels", value: 42 },
+};
+export const dockTheme: DockviewTheme = {
+  name: "webhachimi-dark",
+  className: "dockview-theme-dark",
+  dndOverlayMounting: "absolute",
+  dndPanelOverlay: "group",
+};
 
 const panelAreas: Record<PanelId, FixedPanelLayout["area"]> = {
   scene: "scene",
@@ -91,6 +124,16 @@ export class PanelLayoutController {
   private internalMutationDepth = 0;
   private editorPanelsHiddenForRuntime = false;
   private readonly preservedPanelRemovals = new Set<PanelId>();
+  private dockDragActive = false;
+  private dockDragFinishTimer: number | undefined;
+  private dockTitleDrag: DockTitleDrag | undefined;
+  private readonly onDockDragFinished = () => this.finishDockDragSoon();
+  private readonly onDockTitlePointerDown = (event: PointerEvent) => this.startDockTitleDrag(event);
+  private readonly onDockTitlePointerMove = (event: PointerEvent) => this.updateDockTitleDrag(event);
+  private readonly onDockTitlePointerUp = (event: PointerEvent) => this.finishDockTitleDragFromPoint(event.clientX, event.clientY);
+  private readonly onDockTitlePointerCancel = () => this.cancelDockTitleDrag();
+  private readonly onDockTitleDragMove = (event: DragEvent) => this.updateDockTitleDragFromNativeDrag(event);
+  private readonly onDockTitleDragEnd = (event: DragEvent) => this.finishDockTitleDragFromNativeDrag(event);
 
   constructor(options: PanelLayoutControllerOptions) {
     this.root = options.root;
@@ -165,7 +208,7 @@ export class PanelLayoutController {
   }
 
   isDraggingWindow(): boolean {
-    return false;
+    return this.dockDragActive;
   }
 
   startWindowDrag(_event: PointerEvent): void {
@@ -201,16 +244,19 @@ export class PanelLayoutController {
     this.parkingLot = this.createParkingLot();
     const dockview = createDockview(dockHost, {
       defaultTabComponent: dockTabName,
+      dndEdges: dockEdgeDropOverlay,
       floatingGroupBounds: "boundedWithinViewport",
       noPanelsOverlay: "watermark",
-      singleTabMode: "default",
+      singleTabMode: dockSingleTabMode,
       tabAnimation: "smooth",
+      theme: dockTheme,
       createComponent: (options) => new ExistingElementContentRenderer(this.root, this.parkingLot!, coerceDockContentId(options.id)),
       createTabComponent: () => new DockTabRenderer(),
       createWatermarkComponent: () => new EmptyWatermarkRenderer(),
     });
     this.dockview = dockview;
     this.bindDockviewEvents(dockview);
+    this.layoutDockview(dockview);
 
     this.withInternalMutation(() => {
       for (const panel of panelOrder) {
@@ -222,12 +268,31 @@ export class PanelLayoutController {
   }
 
   private bindDockviewEvents(dockview: DockviewApi): void {
+    const ownerDocument = this.root.ownerDocument;
+    ownerDocument.addEventListener("pointerdown", this.onDockTitlePointerDown, true);
+    ownerDocument.addEventListener("pointermove", this.onDockTitlePointerMove, true);
+    ownerDocument.addEventListener("pointerup", this.onDockTitlePointerUp, true);
+    ownerDocument.addEventListener("pointercancel", this.onDockTitlePointerCancel, true);
+    ownerDocument.addEventListener("dragover", this.onDockTitleDragMove, true);
+    ownerDocument.addEventListener("dragend", this.onDockTitleDragEnd, true);
+    ownerDocument.addEventListener("drop", this.onDockTitleDragEnd, true);
+    ownerDocument.addEventListener("dragend", this.onDockDragFinished, true);
+    ownerDocument.addEventListener("drop", this.onDockDragFinished, true);
+    ownerDocument.addEventListener("pointerup", this.onDockDragFinished, true);
+    ownerDocument.addEventListener("pointercancel", this.onDockDragFinished, true);
+    dockview.onWillDragPanel(() => this.beginDockDrag());
+    dockview.onWillDragGroup(() => this.beginDockDrag());
     dockview.onWillShowOverlay((event) => {
-      if (isSelfReferentialDropTarget(event.getData(), event.group?.id, event.kind)) event.preventDefault();
+      if (isSelfReferentialDropTarget(event.getData(), event.group?.id, event.kind)) {
+        event.preventDefault();
+        return;
+      }
+      this.beginDockDrag();
     });
     dockview.onWillDrop((event) => {
       if (isSelfReferentialDropTarget(event.getData(), event.group?.id, event.kind)) event.preventDefault();
     });
+    dockview.onDidDrop(() => this.finishDockDragSoon());
     dockview.onDidActivePanelChange((panel) => {
       const panelId = asPanelId(panel?.id);
       if (!panelId || !panel) return;
@@ -252,11 +317,170 @@ export class PanelLayoutController {
     });
     dockview.onDidLayoutChange(() => {
       this.layoutVersion += 1;
-      for (const panel of panelOrder) {
-        const dockPanel = dockview.getPanel(panel);
-        if (dockPanel) this.panelPlacement[panel] = dockPanel.api.location.type === "floating" ? "floating" : "docked";
-      }
+      this.syncPanelPlacements(dockview);
     });
+  }
+
+  private startDockTitleDrag(event: PointerEvent): void {
+    if (event.button !== 0 || !event.isPrimary) return;
+    const target = event.target instanceof HTMLElement ? event.target : undefined;
+    if (!target || !this.isDockTitleDragTarget(target)) return;
+    const panel = this.panelIdFromDockGroupTarget(target);
+    if (!panel) return;
+    const dockPanel = this.dockview?.getPanel(panel);
+    if (!dockPanel || dockPanel.api.location.type !== "floating") return;
+
+    this.dockTitleDrag = {
+      panel,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastY: event.clientY,
+      edge: undefined,
+    };
+    this.beginDockDrag();
+  }
+
+  private updateDockTitleDrag(event: PointerEvent): void {
+    const drag = this.dockTitleDrag;
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    this.updateDockTitleDragPoint(event.clientX, event.clientY);
+  }
+
+  private updateDockTitleDragFromNativeDrag(event: DragEvent): void {
+    if (!this.dockTitleDrag || !hasUsableClientPoint(event)) return;
+    this.updateDockTitleDragPoint(event.clientX, event.clientY);
+  }
+
+  private updateDockTitleDragPoint(clientX: number, clientY: number): void {
+    const drag = this.dockTitleDrag;
+    if (!drag) return;
+    drag.lastX = clientX;
+    drag.lastY = clientY;
+    drag.edge = this.dockEdgeAtClientPoint(clientX, clientY);
+    this.updateDockEdgePreview(drag.edge);
+  }
+
+  private finishDockTitleDragFromPoint(clientX: number, clientY: number): void {
+    if (!this.dockTitleDrag) return;
+    this.updateDockTitleDragPoint(clientX, clientY);
+    this.finishDockTitleDragSoon(false);
+  }
+
+  private finishDockTitleDragFromNativeDrag(event: DragEvent): void {
+    if (!this.dockTitleDrag) return;
+    if (hasUsableClientPoint(event)) this.updateDockTitleDragPoint(event.clientX, event.clientY);
+    this.finishDockTitleDragSoon(false);
+  }
+
+  private finishDockTitleDragSoon(cancelled: boolean): void {
+    this.ownerWindow().setTimeout(() => this.finishDockTitleDrag(cancelled), 0);
+  }
+
+  private cancelDockTitleDrag(): void {
+    this.finishDockTitleDragSoon(true);
+  }
+
+  private finishDockTitleDrag(cancelled: boolean): void {
+    const drag = this.dockTitleDrag;
+    if (!drag) return;
+    this.dockTitleDrag = undefined;
+    this.updateDockEdgePreview(undefined);
+
+    const moved = hasDockDragTravelled({ x: drag.startX, y: drag.startY }, { x: drag.lastX, y: drag.lastY });
+    if (!cancelled && moved && drag.edge) this.dockFloatingPanelToEdge(drag.panel, drag.edge);
+    this.finishDockDragSoon();
+  }
+
+  private dockFloatingPanelToEdge(panel: PanelId, edge: DockEdge): void {
+    const dockPanel = this.dockview?.getPanel(panel);
+    if (!dockPanel || dockPanel.api.location.type !== "floating") return;
+
+    this.withInternalMutation(() => {
+      dockPanel.api.group.api.moveTo({ position: edge });
+    });
+    this.focusedPanel = panel;
+    this.panelPlacement[panel] = "docked";
+    this.layoutVersion += 1;
+    this.setNotice(`${dockDefaults[panel].title}已贴到${dockEdgeLabel(edge)}。`);
+    this.applyPanelSizes();
+    this.requestRender();
+  }
+
+  private dockEdgeAtClientPoint(clientX: number, clientY: number): DockEdge | undefined {
+    const dockHost = this.dockHostElement();
+    if (!dockHost) return undefined;
+    const rect = dockHost.getBoundingClientRect();
+    return resolveDockEdgeFromPoint({ x: clientX, y: clientY }, rect);
+  }
+
+  private updateDockEdgePreview(edge: DockEdge | undefined): void {
+    const preview = this.root.querySelector<HTMLElement>('[data-role="snap-preview"]');
+    const dockHost = this.dockHostElement();
+    if (!preview || !dockHost || !edge) {
+      if (preview) {
+        preview.hidden = true;
+        delete preview.dataset.edge;
+      }
+      return;
+    }
+
+    const rootRect = this.root.getBoundingClientRect();
+    const hostRect = dockHost.getBoundingClientRect();
+    const left = hostRect.left - rootRect.left;
+    const top = hostRect.top - rootRect.top;
+    const edgeSize = Math.max(42, dockEdgeDropOverlay.size?.value || 42);
+    preview.hidden = false;
+    preview.dataset.edge = edge;
+    preview.style.left = `${Math.round(edge === "right" ? left + hostRect.width - edgeSize : left)}px`;
+    preview.style.top = `${Math.round(edge === "bottom" ? top + hostRect.height - edgeSize : top)}px`;
+    preview.style.width = `${Math.round(edge === "left" || edge === "right" ? edgeSize : hostRect.width)}px`;
+    preview.style.height = `${Math.round(edge === "top" || edge === "bottom" ? edgeSize : hostRect.height)}px`;
+  }
+
+  private isDockTitleDragTarget(target: HTMLElement): boolean {
+    if (target.closest("button, input, textarea, select, a, [data-panel-action]")) return false;
+    return Boolean(target.closest(".v2-dock-host .dv-tabs-and-actions-container"));
+  }
+
+  private panelIdFromDockGroupTarget(target: HTMLElement): PanelId | undefined {
+    const groupElement = target.closest<HTMLElement>(".dv-groupview");
+    const content = groupElement?.querySelector<HTMLElement>("[data-dock-content]");
+    return asPanelId(content?.dataset.dockContent);
+  }
+
+  private beginDockDrag(): void {
+    const ownerWindow = this.ownerWindow();
+    if (this.dockDragFinishTimer !== undefined) {
+      ownerWindow.clearTimeout(this.dockDragFinishTimer);
+      this.dockDragFinishTimer = undefined;
+    }
+    this.dockDragActive = true;
+    this.root.dataset.dockDragging = "true";
+    this.root.classList.add("is-dragging-window");
+  }
+
+  private finishDockDragSoon(): void {
+    if (!this.dockDragActive) return;
+    const ownerWindow = this.ownerWindow();
+    if (this.dockDragFinishTimer !== undefined) ownerWindow.clearTimeout(this.dockDragFinishTimer);
+    this.dockDragFinishTimer = ownerWindow.setTimeout(() => this.finishDockDrag(), 80);
+  }
+
+  private finishDockDrag(): void {
+    const ownerWindow = this.ownerWindow();
+    if (this.dockDragFinishTimer !== undefined) {
+      ownerWindow.clearTimeout(this.dockDragFinishTimer);
+      this.dockDragFinishTimer = undefined;
+    }
+    if (!this.dockDragActive) return;
+    this.dockDragActive = false;
+    delete this.root.dataset.dockDragging;
+    this.root.classList.remove("is-dragging-window");
+    this.syncPanelPlacements();
+    this.applyPlacementDatasets();
+    this.requestRender();
   }
 
   private ensureDockPanel(panel: PanelId): IDockviewPanel | undefined {
@@ -385,6 +609,18 @@ export class PanelLayoutController {
     dockview.layout(width, height);
   }
 
+  private syncPanelPlacements(dockview = this.dockview): void {
+    if (!dockview) return;
+    for (const panel of panelOrder) {
+      const dockPanel = dockview.getPanel(panel);
+      if (dockPanel) this.panelPlacement[panel] = dockPanel.api.location.type === "floating" ? "floating" : "docked";
+    }
+  }
+
+  private ownerWindow(): Window {
+    return this.root.ownerDocument.defaultView || window;
+  }
+
   private hasDockPanel(panel: PanelId): boolean {
     return Boolean(this.dockview?.getPanel(panel));
   }
@@ -470,6 +706,46 @@ function coerceDockContentId(value: string | undefined): DockContentId {
 
 function asPanelId(value: string | undefined): PanelId | undefined {
   return panelOrder.includes(value as PanelId) ? (value as PanelId) : undefined;
+}
+
+export function hasDockDragTravelled(
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+  threshold = dockDragStartThreshold,
+): boolean {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  return dx * dx + dy * dy >= threshold * threshold;
+}
+
+export function resolveDockEdgeFromPoint(
+  point: { x: number; y: number },
+  rect: DockEdgeRect,
+  threshold = dockEdgeSnapThreshold,
+): DockEdge | undefined {
+  const x = point.x - rect.left;
+  const y = point.y - rect.top;
+  if (x < -threshold || x > rect.width + threshold || y < -threshold || y > rect.height + threshold) return undefined;
+
+  const distances: Array<{ edge: DockEdge; distance: number }> = [
+    { edge: "left", distance: Math.abs(x) },
+    { edge: "right", distance: Math.abs(rect.width - x) },
+    { edge: "top", distance: Math.abs(y) },
+    { edge: "bottom", distance: Math.abs(rect.height - y) },
+  ];
+  const nearest = distances.reduce((best, next) => (next.distance < best.distance ? next : best));
+  return nearest.distance <= threshold ? nearest.edge : undefined;
+}
+
+function hasUsableClientPoint(event: DragEvent): boolean {
+  return Number.isFinite(event.clientX) && Number.isFinite(event.clientY) && (event.clientX !== 0 || event.clientY !== 0);
+}
+
+function dockEdgeLabel(edge: DockEdge): string {
+  if (edge === "left") return "左侧";
+  if (edge === "right") return "右侧";
+  if (edge === "top") return "顶部";
+  return "底部";
 }
 
 function isSelfReferentialDropTarget(

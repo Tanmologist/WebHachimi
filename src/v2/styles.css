@@ -503,12 +503,30 @@ textarea {
   background: transparent;
 }
 
+[data-dock-dragging="true"] .v2-dock-host,
+[data-dock-dragging="true"] .v2-dock-host .dv-dockview,
+[data-dock-dragging="true"] .v2-dock-host .dv-grid-view {
+  pointer-events: auto;
+}
+
 .v2-dock-host .dv-resize-container,
 .v2-dock-host .dv-groupview,
 .v2-dock-host .dv-drop-target,
 .v2-dock-host .dv-drop-target-container,
 .v2-dock-host .dv-overlay-render-container {
   pointer-events: auto;
+}
+
+.v2-dock-host .dv-tabs-and-actions-container,
+.v2-dock-host .dv-tab,
+.v2-dock-host .dv-void-container {
+  cursor: grab;
+}
+
+[data-dock-dragging="true"] .v2-dock-host .dv-tabs-and-actions-container,
+[data-dock-dragging="true"] .v2-dock-host .dv-tab,
+[data-dock-dragging="true"] .v2-dock-host .dv-void-container {
+  cursor: grabbing;
 }
 
 .v2-dock-host .dv-groupview {
