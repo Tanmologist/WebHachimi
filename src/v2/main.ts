@@ -1978,7 +1978,7 @@ function renderUi(projectSnapshot?: Project): void {
   const brushSummaryNode = query<HTMLElement>('[data-role="super-brush-summary"]');
   brushSummaryNode.textContent = brushSummary;
   const confirmBrushButton = root.querySelector<HTMLButtonElement>('[data-action="confirm-super-brush"]');
-  if (confirmBrushButton) confirmBrushButton.disabled = !pendingBrush || !hasMeaningfulSuperBrushContext(pendingBrush);
+  if (confirmBrushButton) confirmBrushButton.disabled = drawingBrush || !pendingBrush || !hasMeaningfulSuperBrushContext(pendingBrush);
   const brushTaskModal = query<HTMLElement>('[data-role="super-brush-task-modal"]');
   brushTaskModal.hidden = !superBrushTaskDialogOpen;
   brushTaskModal.setAttribute("aria-hidden", String(!superBrushTaskDialogOpen));
