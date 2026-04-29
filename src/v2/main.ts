@@ -1190,8 +1190,70 @@ function onCanvasPointerUp(event: PointerEvent): void {
   renderAll();
 }
 
-function cancelPendingSuperBrush(): void {
-  if (!pendingBrush && !drawingBrush && currentStrokePoints.length === 0) {
+function openSuperBrushTaskDialog(): void {
+  if (!pendingBrush || !hasMeaningfulSuperBrushContext(pendingBrush)) {
+    notice = "请先用超级画笔至少画一笔，再确认画笔。";
+    renderAll();
+    return;
+  }
+  superBrushTaskDialogOpen = true;
+  superBrushTaskError = "";
+  superBrushTaskInput.value = "";
+  notice = "填写这次超级画笔任务，排队后会恢复编辑界面。";
+  renderAll();
+  superBrushTaskInput.focus();
+}
+
+function closeSuperBrushTaskDialog(): void {
+  if (!superBrushTaskDialogOpen) return;
+  superBrushTaskDialogOpen = false;
+  superBrushTaskError = "";
+  notice = "已返回超级画笔，可以继续补画或确认。";
+  renderAll();
+  renderer.canvas().focus();
+}
+
+function queueSuperBrushTaskFromDialog(): void {
+  const draft = pendingBrush;
+  const userText = superBrushTaskInput.value.trim();
+  if (!draft || !hasMeaningfulSuperBrushContext(draft)) {
+    superBrushTaskError = "画笔上下文已经为空，请返回重新绘制。";
+    renderAll();
+    return;
+  }
+  if (!userText) {
+    superBrushTaskError = "请先描述这次超级画笔要让 AI 改什么。";
+    superBrushTaskInput.focus();
+    renderAll();
+    return;
+  }
+
+  const result = createTaskFromSuperBrush({ userText, draft });
+  if (!result.ok) {
+    superBrushTaskError = result.error;
+    superBrushTaskInput.focus();
+    renderAll();
+    return;
+  }
+
+  store.upsertTask(result.value);
+  previewTaskId = result.value.id;
+  pendingBrush = undefined;
+  currentStrokePoints = [];
+  drawingBrush = false;
+  drawingBrushPointerId = undefined;
+  brushStartPoint = undefined;
+  superBrushTaskDialogOpen = false;
+  superBrushTaskError = "";
+  superBrushTaskInput.value = "";
+  activeTool = "select";
+  markProjectDirty("超级画笔任务已排队");
+  notice = "超级画笔任务已排队。";
+  renderAll();
+}
+
+function cancelSuperBrushSession(): void {
+  if (!isSuperBrushModeActive() && !pendingBrush && !drawingBrush && currentStrokePoints.length === 0) {
     notice = "没有待取消的超级画笔上下文。";
     renderAll();
     return;
@@ -1201,8 +1263,33 @@ function cancelPendingSuperBrush(): void {
   brushStartPoint = undefined;
   currentStrokePoints = [];
   pendingBrush = undefined;
-  notice = "已取消超级画笔上下文；任务输入会按普通任务处理。";
-  taskInput.focus();
+  superBrushTaskDialogOpen = false;
+  superBrushTaskError = "";
+  superBrushTaskInput.value = "";
+  activeTool = "select";
+  notice = "已取消超级画笔，编辑界面已恢复。";
+  renderAll();
+}
+
+function undoLastSuperBrushStrokeOrCancel(): void {
+  if (drawingBrush) {
+    drawingBrush = false;
+    drawingBrushPointerId = undefined;
+    brushStartPoint = undefined;
+    currentStrokePoints = [];
+    notice = "已取消当前这一笔。";
+    renderAll();
+    return;
+  }
+  if (!pendingBrush || pendingBrush.strokes.length <= 1) {
+    cancelSuperBrushSession();
+    return;
+  }
+  pendingBrush = {
+    ...pendingBrush,
+    strokes: pendingBrush.strokes.slice(0, -1),
+  };
+  notice = `已撤销上一笔：${summarizeSuperBrushDraft(pendingBrush)}。`;
   renderAll();
 }
 
@@ -1783,9 +1870,14 @@ function loop(time: number): void {
 }
 
 function superBrushUiState(): "idle" | "armed" | "drawing" | "pending" {
+  if (superBrushTaskDialogOpen) return "pending";
   if (drawingBrush) return "drawing";
   if (pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush)) return "pending";
   return activeTool === "superBrush" ? "armed" : "idle";
+}
+
+function isSuperBrushModeActive(): boolean {
+  return activeTool === "superBrush" || drawingBrush || Boolean(pendingBrush) || superBrushTaskDialogOpen;
 }
 
 function superBrushPointerText(): string {
