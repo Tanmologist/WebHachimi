@@ -323,10 +323,18 @@ function bindUi(): void {
     renderAll();
   });
   root.querySelector('[data-action="queue-task"]')?.addEventListener("click", () => taskWorkflow.queueTaskFromText(taskInput.value));
-  root.querySelector('[data-action="run-ai-task"]')?.addEventListener("click", () => {
-    void taskWorkflow.runNextAiTask();
+  root.querySelector('[data-action="confirm-super-brush"]')?.addEventListener("click", openSuperBrushTaskDialog);
+  root.querySelector('[data-action="back-super-brush"]')?.addEventListener("click", closeSuperBrushTaskDialog);
+  root.querySelector('[data-action="queue-super-brush-task"]')?.addEventListener("click", queueSuperBrushTaskFromDialog);
+  root.querySelectorAll('[data-action="cancel-super-brush-session"]').forEach((button) => {
+    button.addEventListener("click", cancelSuperBrushSession);
   });
-  root.querySelector('[data-action="cancel-super-brush"]')?.addEventListener("click", cancelPendingSuperBrush);
+  superBrushTaskInput.addEventListener("keydown", (event) => {
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      queueSuperBrushTaskFromDialog();
+    }
+  });
   taskInput.addEventListener("paste", onTaskInputPaste);
   taskInput.addEventListener("keydown", onResourcePasteKeyDown);
   resourceFileInput.addEventListener("change", () => {
@@ -360,6 +368,10 @@ function bindUi(): void {
       if (!nextTool) {
         notice = `Unknown tool: ${button.dataset.tool || ""}`;
         renderAll();
+        return;
+      }
+      if (nextTool === "superBrush") {
+        enterSuperBrushMode();
         return;
       }
       if (activeTool === "polygon" && nextTool !== "polygon") polygonDraft = undefined;
@@ -765,10 +777,21 @@ function shapeToolFromActive(tool: ToolId): ShapeToolId | undefined {
   return tool === "square" || tool === "circle" || tool === "leaf" ? tool : undefined;
 }
 
+function enterSuperBrushMode(): void {
+  activeTool = "superBrush";
+  contextMenu = undefined;
+  windowMenuOpen = false;
+  superBrushTaskDialogOpen = false;
+  superBrushTaskError = "";
+  focusCanvasSurface();
+  notice = "已进入超级画笔模式。右键撤销上一笔，顶部确认后填写任务。";
+  renderAll();
+}
+
 function startSuperBrushStroke(event: PointerEvent, point: Vec2): void {
   const snapshot = world.freezeForInspection();
   store.recordRuntimeSnapshot(snapshot);
-  const startTargets = mergeSuperBrushTargets(pendingBrush?.selectionTargets, currentTargets(), targetsForSuperBrushClick(point));
+  const startTargets = mergeSuperBrushTargets(pendingBrush?.selectionTargets, targetsForSuperBrushClick(point));
   pendingBrush = {
     strokes: pendingBrush?.strokes || [],
     annotations: pendingBrush?.annotations || [],
@@ -1142,7 +1165,6 @@ function onCanvasPointerUp(event: PointerEvent): void {
       selectionBox: mergedSelectionBox(pendingBrush?.selectionBox, selectionBoxFromTargets(strokeTargets)),
     };
     notice = superBrushRecordedNotice();
-    taskInput.focus();
   } else if (finishedStart && distance(finishedStart, finishedEnd) < superBrushClickDistance()) {
     const clickTargets = targetsForSuperBrushClick(finishedEnd);
     pendingBrush = clickTargets.length > 0
@@ -1156,7 +1178,6 @@ function onCanvasPointerUp(event: PointerEvent): void {
       : pendingBrush;
     if (pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush)) {
       notice = superBrushRecordedNotice();
-      taskInput.focus();
     } else {
       pendingBrush = undefined;
       notice = "超级画笔标记太短；请拖动画一笔，或单击对象追加目标。";
@@ -2736,15 +2757,13 @@ function targetsForSuperBrushStroke(points: Vec2[]): TargetRef[] {
 }
 
 function targetsForCompletedSuperBrushStroke(points: Vec2[]): TargetRef[] {
-  const strokeTargets = targetsForSuperBrushStroke(points);
-  return mergeSuperBrushTargets(currentTargets(), strokeTargets);
+  return targetsForSuperBrushStroke(points);
 }
 
 function targetsForSuperBrushClick(point: Vec2): TargetRef[] {
   const picked = renderer.pickCanvasTarget(world, point, selectedId ? { entityId: selectedId, part: selectedPart } : undefined);
   if (picked) return [{ kind: "entity", entityId: picked.entity.id as EntityId }];
-  const current = currentTargets();
-  return current.some((target) => target.kind !== "scene") ? current : [];
+  return [];
 }
 
 function selectionBoxFromTargets(targets: TargetRef[]): Rect | undefined {
