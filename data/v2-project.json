@@ -4,7 +4,7 @@
   "meta": {
     "name": "WebHachimi v2 ???",
     "createdAt": "2026-04-26T14:21:40.430Z",
-    "updatedAt": "2026-04-28T02:37:33.192Z"
+    "updatedAt": "2026-04-28T14:30:39.600Z"
   },
   "activeSceneId": "scene-07cjxzd9-mofuwuz3",
   "scenes": {
@@ -42,9 +42,25 @@
           },
           "render": {
             "visible": true,
-            "color": "#35bd9a",
+            "color": "#ffffff",
             "opacity": 1,
-            "layerId": "world"
+            "layerId": "world",
+            "size": {
+              "x": 52,
+              "y": 68
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current",
+            "resourceId": "res-mklai897-moiihfje"
           },
           "body": {
             "mode": "dynamic",
@@ -66,7 +82,12 @@
             "trigger": false,
             "layerMask": [
               "world"
-            ]
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
           },
           "behavior": {
             "builtin": "playerPlatformer",
@@ -83,8 +104,22 @@
             {
               "resourceId": "res-aoiglovz-mofuwuz3",
               "slot": "death",
-              "description": "死亡后使用这张图，并缓慢淡出。",
+              "description": "蓝色圆形图标",
               "aiDescription": "死亡残影淡出。",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            {
+              "resourceId": "res-mklai897-moiihfje",
+              "slot": "current",
+              "description": "",
               "localOffset": {
                 "x": 0,
                 "y": 0
@@ -132,7 +167,22 @@
             "visible": true,
             "color": "#d7a84a",
             "opacity": 0.32,
-            "layerId": "world"
+            "layerId": "world",
+            "size": {
+              "x": 72,
+              "y": 38
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current"
           },
           "body": {
             "mode": "none",
@@ -186,7 +236,22 @@
             "visible": true,
             "color": "#969a90",
             "opacity": 1,
-            "layerId": "world"
+            "layerId": "world",
+            "size": {
+              "x": 760,
+              "y": 48
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current"
           },
           "body": {
             "mode": "static",
@@ -208,7 +273,12 @@
             "trigger": false,
             "layerMask": [
               "world"
-            ]
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
           },
           "resources": [],
           "tags": [
@@ -245,7 +315,22 @@
             "visible": true,
             "color": "#969a90",
             "opacity": 1,
-            "layerId": "world"
+            "layerId": "world",
+            "size": {
+              "x": 240,
+              "y": 34
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current"
           },
           "body": {
             "mode": "static",
@@ -267,7 +352,12 @@
             "trigger": false,
             "layerMask": [
               "world"
-            ]
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
           },
           "resources": [],
           "tags": [
@@ -292,20 +382,35 @@
           "persistent": true,
           "transform": {
             "position": {
-              "x": -120,
-              "y": 246
+              "x": -28,
+              "y": 180
             },
             "rotation": 0,
             "scale": {
-              "x": 1,
-              "y": 1
+              "x": 1.5961538461538463,
+              "y": 2.409090909090909
             }
           },
           "render": {
             "visible": true,
             "color": "#e06c6c",
             "opacity": 1,
-            "layerId": "world"
+            "layerId": "world",
+            "size": {
+              "x": 52,
+              "y": 44
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current"
           },
           "body": {
             "mode": "kinematic",
@@ -327,7 +432,12 @@
             "trigger": false,
             "layerMask": [
               "world"
-            ]
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
           },
           "behavior": {
             "builtin": "enemyPatrol",
@@ -359,6 +469,996 @@
             "health": 1
           },
           "folderId": "characters"
+        },
+        "ent-pkzyz0sl-moihv0ls": {
+          "id": "ent-pkzyz0sl-moihv0ls",
+          "internalName": "entity",
+          "displayName": "方块本体",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": -357.5,
+              "y": -253.5
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "render": {
+            "visible": true,
+            "color": "#ffffff",
+            "opacity": 1,
+            "layerId": "world",
+            "size": {
+              "x": 60,
+              "y": 60
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current",
+            "resourceId": "res-d06pys86-moioll6t"
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "box",
+            "size": {
+              "x": 60,
+              "y": 60
+            },
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          },
+          "resources": [
+            {
+              "resourceId": "res-d06pys86-moioll6t",
+              "slot": "current",
+              "description": "",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ],
+          "tags": [
+            "实体",
+            "硬质碰撞"
+          ],
+          "folderId": "terrain"
+        },
+        "ent-yses8jm6-moihv77f": {
+          "id": "ent-yses8jm6-moihv77f",
+          "internalName": "entity_2",
+          "displayName": "柳叶本体",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": -242.5,
+              "y": -233.5
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "render": {
+            "visible": true,
+            "color": "#86d36c",
+            "opacity": 1,
+            "layerId": "world",
+            "size": {
+              "x": 90,
+              "y": 60
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current"
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "polygon",
+            "size": {
+              "x": 90,
+              "y": 60
+            },
+            "points": [
+              {
+                "x": 0,
+                "y": -30
+              },
+              {
+                "x": 26.099999999999998,
+                "y": -21.599999999999998
+              },
+              {
+                "x": 45,
+                "y": 0
+              },
+              {
+                "x": 23.400000000000002,
+                "y": 21
+              },
+              {
+                "x": 0,
+                "y": 30
+              },
+              {
+                "x": -23.400000000000002,
+                "y": 21
+              },
+              {
+                "x": -45,
+                "y": 0
+              },
+              {
+                "x": -26.099999999999998,
+                "y": -21.599999999999998
+              }
+            ],
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          },
+          "resources": [],
+          "tags": [
+            "实体",
+            "柳叶碰撞",
+            "多边形碰撞"
+          ],
+          "folderId": "terrain"
+        },
+        "ent-9l6ptjtn-moihwmn8": {
+          "id": "ent-9l6ptjtn-moihwmn8",
+          "internalName": "2",
+          "displayName": "柳叶本体 2",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": -129.203125,
+              "y": -54
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "polygon",
+            "size": {
+              "x": 90,
+              "y": 65
+            },
+            "points": [
+              {
+                "x": 0,
+                "y": -32.5
+              },
+              {
+                "x": 26.099999999999998,
+                "y": -23.4
+              },
+              {
+                "x": 45,
+                "y": 0
+              },
+              {
+                "x": 23.400000000000002,
+                "y": 22.75
+              },
+              {
+                "x": 0,
+                "y": 32.5
+              },
+              {
+                "x": -23.400000000000002,
+                "y": 22.75
+              },
+              {
+                "x": -45,
+                "y": 0
+              },
+              {
+                "x": -26.099999999999998,
+                "y": -23.4
+              }
+            ],
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          },
+          "resources": [],
+          "tags": [
+            "实体",
+            "柳叶碰撞",
+            "多边形碰撞"
+          ],
+          "folderId": "terrain"
+        },
+        "ent-g7t8ppd5-moihxu1i": {
+          "id": "ent-g7t8ppd5-moihxu1i",
+          "internalName": "3",
+          "displayName": "柳叶本体 3",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": -314.296875,
+              "y": -121.5
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "polygon",
+            "size": {
+              "x": 64,
+              "y": 64
+            },
+            "points": [
+              {
+                "x": 0,
+                "y": -32
+              },
+              {
+                "x": 18.56,
+                "y": -23.04
+              },
+              {
+                "x": 32,
+                "y": 0
+              },
+              {
+                "x": 16.64,
+                "y": 22.4
+              },
+              {
+                "x": 0,
+                "y": 32
+              },
+              {
+                "x": -16.64,
+                "y": 22.4
+              },
+              {
+                "x": -32,
+                "y": 0
+              },
+              {
+                "x": -18.56,
+                "y": -23.04
+              }
+            ],
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          },
+          "resources": [],
+          "tags": [
+            "实体",
+            "柳叶碰撞",
+            "多边形碰撞"
+          ],
+          "folderId": "terrain"
+        },
+        "ent-8mm9gfxa-moihxx3i": {
+          "id": "ent-8mm9gfxa-moihxx3i",
+          "internalName": "4",
+          "displayName": "柳叶本体 4",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": -119.6484375,
+              "y": -145
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "polygon",
+            "size": {
+              "x": 127.296875,
+              "y": 45
+            },
+            "points": [
+              {
+                "x": 0,
+                "y": -22.5
+              },
+              {
+                "x": 36.916093749999995,
+                "y": -16.2
+              },
+              {
+                "x": 63.6484375,
+                "y": 0
+              },
+              {
+                "x": 33.097187500000004,
+                "y": 15.749999999999998
+              },
+              {
+                "x": 0,
+                "y": 22.5
+              },
+              {
+                "x": -33.097187500000004,
+                "y": 15.749999999999998
+              },
+              {
+                "x": -63.6484375,
+                "y": 0
+              },
+              {
+                "x": -36.916093749999995,
+                "y": -16.2
+              }
+            ],
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          },
+          "resources": [],
+          "tags": [
+            "实体",
+            "柳叶碰撞",
+            "多边形碰撞"
+          ],
+          "folderId": "terrain"
+        },
+        "ent-x6vo3swp-moii859t": {
+          "id": "ent-x6vo3swp-moii859t",
+          "internalName": "5",
+          "displayName": "柳叶本体 5",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": -300,
+              "y": -258.5
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "polygon",
+            "size": {
+              "x": 155,
+              "y": 110
+            },
+            "points": [
+              {
+                "x": -67.5,
+                "y": -25
+              },
+              {
+                "x": -12.5,
+                "y": -55
+              },
+              {
+                "x": 57.5,
+                "y": -35
+              },
+              {
+                "x": 77.5,
+                "y": 15
+              },
+              {
+                "x": 12.5,
+                "y": 55
+              },
+              {
+                "x": -52.5,
+                "y": 40
+              },
+              {
+                "x": -77.5,
+                "y": 0
+              }
+            ],
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          },
+          "resources": [],
+          "tags": [
+            "实体",
+            "柳叶笔",
+            "多边形碰撞"
+          ],
+          "folderId": "terrain"
+        },
+        "ent-ka536wwi-moii8pbz": {
+          "id": "ent-ka536wwi-moii8pbz",
+          "internalName": "entity_3",
+          "displayName": "多边形本体",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": -193.796875,
+              "y": -53
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "polygon",
+            "size": {
+              "x": 336,
+              "y": 471
+            },
+            "points": [
+              {
+                "x": 46.296875,
+                "y": -235.5
+              },
+              {
+                "x": 136.296875,
+                "y": -180.5
+              },
+              {
+                "x": 41.296875,
+                "y": -135.5
+              },
+              {
+                "x": -138,
+                "y": 75.5
+              },
+              {
+                "x": -18,
+                "y": 117.5
+              },
+              {
+                "x": -147,
+                "y": -1.5
+              },
+              {
+                "x": 68,
+                "y": 48.5
+              },
+              {
+                "x": 77,
+                "y": 127.5
+              },
+              {
+                "x": -168,
+                "y": 196.5
+              },
+              {
+                "x": 41,
+                "y": 235.5
+              },
+              {
+                "x": 168,
+                "y": 119.5
+              }
+            ],
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          },
+          "resources": [],
+          "tags": [
+            "实体",
+            "多边形碰撞"
+          ],
+          "folderId": "terrain"
+        },
+        "ent-mgwy3hl6-moii9gpu": {
+          "id": "ent-mgwy3hl6-moii9gpu",
+          "internalName": "2_2",
+          "displayName": "多边形本体 2",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": -87.5,
+              "y": -231
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "polygon",
+            "size": {
+              "x": 100,
+              "y": 115
+            },
+            "points": [
+              {
+                "x": -50,
+                "y": -57.5
+              },
+              {
+                "x": 50,
+                "y": -2.5
+              },
+              {
+                "x": -40,
+                "y": 57.5
+              }
+            ],
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          },
+          "resources": [],
+          "tags": [
+            "实体",
+            "多边形碰撞"
+          ],
+          "folderId": "terrain"
+        },
+        "ent-0053ulqu-moii9mt4": {
+          "id": "ent-0053ulqu-moii9mt4",
+          "internalName": "3_2",
+          "displayName": "多边形本体 3",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": 30,
+              "y": -246
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "polygon",
+            "size": {
+              "x": 65,
+              "y": 95
+            },
+            "points": [
+              {
+                "x": -27.5,
+                "y": -47.5
+              },
+              {
+                "x": 32.5,
+                "y": -7.5
+              },
+              {
+                "x": -32.5,
+                "y": 47.5
+              }
+            ],
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          },
+          "resources": [],
+          "tags": [
+            "实体",
+            "多边形碰撞"
+          ],
+          "folderId": "terrain"
+        },
+        "ent-z4gdmdhl-moiignuv": {
+          "id": "ent-z4gdmdhl-moiignuv",
+          "internalName": "2_3",
+          "displayName": "方块本体 2",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": 152.5,
+              "y": -41
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "box",
+            "size": {
+              "x": 122,
+              "y": 122
+            },
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          },
+          "resources": [],
+          "tags": [
+            "实体",
+            "硬质碰撞"
+          ],
+          "folderId": "terrain"
+        },
+        "ent-penguin-monster-demo": {
+          "id": "ent-penguin-monster-demo",
+          "internalName": "PenguinMonster",
+          "displayName": "企鹅怪物",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": 92,
+              "y": 178
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "render": {
+            "visible": true,
+            "color": "#ffffff",
+            "opacity": 1,
+            "layerId": "world",
+            "size": {
+              "x": 70,
+              "y": 82
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current",
+            "resourceId": "res-penguin-monster-demo"
+          },
+          "body": {
+            "mode": "kinematic",
+            "velocity": {
+              "x": -35,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "box",
+            "size": {
+              "x": 58,
+              "y": 72
+            },
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          },
+          "resources": [
+            {
+              "resourceId": "res-penguin-monster-demo",
+              "slot": "current",
+              "description": "企鹅怪物当前可视体",
+              "aiDescription": "企鹅造型怪物，带角、红眼、尖牙和爪子。",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ],
+          "tags": [
+            "角色",
+            "怪物",
+            "敌人",
+            "企鹅"
+          ]
+        },
+        "ent-cc0-girl-sprite-demo": {
+          "id": "ent-cc0-girl-sprite-demo",
+          "internalName": "cc0_girl_sprite_demo",
+          "displayName": "CC0 ??????",
+          "kind": "entity",
+          "persistent": true,
+          "transform": {
+            "position": {
+              "x": 248,
+              "y": 178
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          },
+          "render": {
+            "visible": true,
+            "color": "#ffffff",
+            "opacity": 1,
+            "layerId": "world",
+            "size": {
+              "x": 96,
+              "y": 96
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "walk",
+            "resourceId": "res-cc0-girl-sprite-sheet"
+          },
+          "body": {
+            "mode": "static",
+            "velocity": {
+              "x": 0,
+              "y": 0
+            },
+            "gravityScale": 0,
+            "friction": 0.8,
+            "bounce": 0
+          },
+          "collider": {
+            "shape": "box",
+            "size": {
+              "x": 72,
+              "y": 72
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ]
+          },
+          "resources": [
+            {
+              "resourceId": "res-cc0-girl-sprite-sheet",
+              "slot": "current",
+              "description": "4x4 sheet demo",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ],
+          "tags": [
+            "??",
+            "??????"
+          ]
         }
       },
       "folders": [
@@ -367,7 +1467,17 @@
           "displayName": "地面",
           "entityIds": [
             "ent-mfkk8zb1-mofuwuz3",
-            "ent-98oyg1gk-mofuwuz3"
+            "ent-98oyg1gk-mofuwuz3",
+            "ent-pkzyz0sl-moihv0ls",
+            "ent-yses8jm6-moihv77f",
+            "ent-9l6ptjtn-moihwmn8",
+            "ent-g7t8ppd5-moihxu1i",
+            "ent-8mm9gfxa-moihxx3i",
+            "ent-x6vo3swp-moii859t",
+            "ent-ka536wwi-moii8pbz",
+            "ent-mgwy3hl6-moii9gpu",
+            "ent-0053ulqu-moii9mt4",
+            "ent-z4gdmdhl-moiignuv"
           ]
         },
         {
@@ -375,7 +1485,8 @@
           "displayName": "角色",
           "entityIds": [
             "ent-24z2k1dn-mofuwuz3",
-            "ent-pht4vdze-mofuwuz3"
+            "ent-pht4vdze-mofuwuz3",
+            "ent-penguin-monster-demo"
           ]
         },
         {
@@ -403,18 +1514,2812 @@
       "internalName": "Player_Death_Fade_Sprite",
       "displayName": "死亡淡出残影",
       "type": "sprite",
-      "description": "玩家死亡后使用的残影图，逐渐变透明并消失。",
+      "description": "蓝色圆形图标",
       "aiDescription": "死亡后残影，淡出消失。",
       "tags": [
         "玩家",
         "死亡",
-        "表现体"
+        "表现体",
+        "待AI处理"
       ],
       "attachments": []
+    },
+    "res-9dznlq8c-moih9v8w": {
+      "id": "res-9dznlq8c-moih9v8w",
+      "internalName": "resource",
+      "displayName": "粘贴图片资源",
+      "type": "image",
+      "description": "",
+      "tags": [
+        "可视体"
+      ],
+      "attachments": [
+        {
+          "id": "att-4jy5612e-moih9v8x",
+          "fileName": "粘贴图片资源",
+          "mime": "image/svg+xml",
+          "path": "data/assets/att-4jy5612e-moih9v8x.svg"
+        }
+      ]
+    },
+    "res-mklai897-moiihfje": {
+      "id": "res-mklai897-moiihfje",
+      "internalName": "v2_screenshot_1365",
+      "displayName": "v2-screenshot-1365",
+      "type": "image",
+      "description": "",
+      "tags": [
+        "可视体"
+      ],
+      "attachments": [
+        {
+          "id": "att-b2cswk7m-moiihfjf",
+          "fileName": "v2-screenshot-1365.png",
+          "mime": "image/png",
+          "path": "data/assets/att-b2cswk7m-moiihfjf.png"
+        }
+      ]
+    },
+    "res-d06pys86-moioll6t": {
+      "id": "res-d06pys86-moioll6t",
+      "internalName": "v2_screenshot_390",
+      "displayName": "v2-screenshot-390",
+      "type": "image",
+      "description": "",
+      "tags": [
+        "可视体"
+      ],
+      "attachments": [
+        {
+          "id": "att-qunq453v-moioll6v",
+          "fileName": "v2-screenshot-390.png",
+          "mime": "image/png",
+          "path": "data/assets/att-qunq453v-moioll6v.png"
+        }
+      ]
+    },
+    "res-penguin-monster-demo": {
+      "id": "res-penguin-monster-demo",
+      "internalName": "PenguinMonsterResource",
+      "displayName": "企鹅怪物资源",
+      "type": "image",
+      "description": "由聊天里的企鹅小图标改造成的小怪物：紫色角、红眼、尖牙和爪子。",
+      "aiDescription": "企鹅造型怪物资源，适合作为敌人或怪物角色。",
+      "tags": [
+        "可视体",
+        "怪物",
+        "企鹅"
+      ],
+      "attachments": [
+        {
+          "id": "att-penguin-monster-demo",
+          "fileName": "penguin-monster-demo.png",
+          "mime": "image/png",
+          "path": "/data/assets/penguin-monster-demo.png"
+        }
+      ]
+    },
+    "res-cc0-girl-sprite-sheet": {
+      "id": "res-cc0-girl-sprite-sheet",
+      "internalName": "cc0_girl_sprite_sheet",
+      "displayName": "CC0 4x4 ????",
+      "type": "animation",
+      "description": "OpenGameArt CC0 Girl RPG Sprite Sheet demo; original PNG is preserved and frames are metadata slices.",
+      "tags": [
+        "???",
+        "???",
+        "16??"
+      ],
+      "attachments": [
+        {
+          "id": "att-cc0-girl-sprite-sheet",
+          "fileName": "Girl_Sprite_Sheet.png",
+          "mime": "image/png",
+          "path": "/data/assets/cc0-girl-sprite-sheet.png"
+        }
+      ],
+      "sprite": {
+        "mode": "sheet",
+        "columns": 4,
+        "rows": 4,
+        "frameWidth": 24,
+        "frameHeight": 24,
+        "frameCount": 16,
+        "fps": 8,
+        "loop": true,
+        "margin": 0,
+        "spacing": 5
+      }
     }
   },
-  "tasks": {},
-  "transactions": {},
+  "tasks": {
+    "task-057ebm01-moiha2nc": {
+      "id": "task-057ebm01-moiha2nc",
+      "source": "user",
+      "title": "标注资源：死亡淡出残影",
+      "userText": "资源“死亡淡出残影”的描述：蓝色圆形图标\n请在后续 AI 编辑和生成时按这条描述理解它。",
+      "status": "queued",
+      "targetRefs": [
+        {
+          "kind": "resource",
+          "resourceId": "res-aoiglovz-mofuwuz3"
+        },
+        {
+          "kind": "entity",
+          "entityId": "ent-24z2k1dn-mofuwuz3"
+        }
+      ],
+      "transactionRefs": [],
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:23:20.808Z",
+      "updatedAt": "2026-04-28T10:23:20.808Z"
+    }
+  },
+  "transactions": {
+    "txn-wyx8h716-moibu5cq": {
+      "id": "txn-wyx8h716-moibu5cq",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "7b769b80",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -50,
+              "y": 174
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -120,
+              "y": 246
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        }
+      ],
+      "diffSummary": "调整 巡逻敌人 的位置。",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T07:50:59.738Z",
+      "appliedAt": "2026-04-28T07:50:59.739Z"
+    },
+    "txn-ar3li6p9-moibu7ww": {
+      "id": "txn-ar3li6p9-moibu7ww",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "987cc572",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -50,
+              "y": 174
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 2.6346153846153846,
+              "y": 2.6818181818181817
+            }
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -50,
+              "y": 174
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        }
+      ],
+      "diffSummary": "调整 巡逻敌人 的大小。",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T07:51:03.056Z",
+      "appliedAt": "2026-04-28T07:51:03.057Z"
+    },
+    "txn-j44x38ha-moibua29": {
+      "id": "txn-j44x38ha-moibua29",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "cc077d5e",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -50,
+              "y": 174
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1.5961538461538463,
+              "y": 2.409090909090909
+            }
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -50,
+              "y": 174
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 2.6346153846153846,
+              "y": 2.6818181818181817
+            }
+          }
+        }
+      ],
+      "diffSummary": "调整 巡逻敌人 的大小。",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T07:51:05.841Z",
+      "appliedAt": "2026-04-28T07:51:05.841Z"
+    },
+    "txn-y25sk5xn-moibucv1": {
+      "id": "txn-y25sk5xn-moibucv1",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "470626ef",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -50,
+              "y": 174
+            },
+            "rotation": 0.0018859335724012993,
+            "scale": {
+              "x": 1.5961538461538463,
+              "y": 2.409090909090909
+            }
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -50,
+              "y": 174
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1.5961538461538463,
+              "y": 2.409090909090909
+            }
+          }
+        }
+      ],
+      "diffSummary": "调整 巡逻敌人 的旋转。",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T07:51:09.470Z",
+      "appliedAt": "2026-04-28T07:51:09.470Z"
+    },
+    "txn-x1cfwp5q-moicd9ew": {
+      "id": "txn-x1cfwp5q-moicd9ew",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "a7b3f9d5",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/collider",
+          "value": {
+            "shape": "box",
+            "size": {
+              "x": 52,
+              "y": 44
+            },
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": -0.00368849243744096
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/collider",
+          "value": {
+            "shape": "box",
+            "size": {
+              "x": 52,
+              "y": 44
+            },
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          }
+        }
+      ],
+      "diffSummary": "调整 巡逻敌人 的碰撞体旋转。",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T08:05:51.465Z",
+      "appliedAt": "2026-04-28T08:05:51.465Z"
+    },
+    "txn-d2cpgy10-moickypb": {
+      "id": "txn-d2cpgy10-moickypb",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "dccb806a",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -50,
+              "y": 174
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1.5961538461538463,
+              "y": 2.409090909090909
+            }
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -50,
+              "y": 174
+            },
+            "rotation": 0.0018859335724012993,
+            "scale": {
+              "x": 1.5961538461538463,
+              "y": 2.409090909090909
+            }
+          }
+        }
+      ],
+      "diffSummary": "调整 巡逻敌人 的旋转。",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T08:11:50.832Z",
+      "appliedAt": "2026-04-28T08:11:50.832Z"
+    },
+    "txn-ggniv528-moicl1z9": {
+      "id": "txn-ggniv528-moicl1z9",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "368398ac",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/collider",
+          "value": {
+            "shape": "box",
+            "size": {
+              "x": 52,
+              "y": 44
+            },
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/collider",
+          "value": {
+            "shape": "box",
+            "size": {
+              "x": 52,
+              "y": 44
+            },
+            "solid": true,
+            "trigger": false,
+            "layerMask": [
+              "world"
+            ],
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": -0.00368849243744096
+          }
+        }
+      ],
+      "diffSummary": "调整 巡逻敌人 的碰撞体旋转。",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T08:11:55.077Z",
+      "appliedAt": "2026-04-28T08:11:55.078Z"
+    },
+    "txn-54o65eon-moicl4b2": {
+      "id": "txn-54o65eon-moicl4b2",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "a53097aa",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -28,
+              "y": 180
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1.5961538461538463,
+              "y": 2.409090909090909
+            }
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pht4vdze-mofuwuz3/transform",
+          "value": {
+            "position": {
+              "x": -50,
+              "y": 174
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1.5961538461538463,
+              "y": 2.409090909090909
+            }
+          }
+        }
+      ],
+      "diffSummary": "调整 巡逻敌人 的位置。",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T08:11:58.094Z",
+      "appliedAt": "2026-04-28T08:11:58.094Z"
+    },
+    "txn-98vtnoqr-moih9v8x": {
+      "id": "txn-98vtnoqr-moih9v8x",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "d62a1249",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/resources/res-9dznlq8c-moih9v8w",
+          "value": {
+            "id": "res-9dznlq8c-moih9v8w",
+            "internalName": "resource",
+            "displayName": "粘贴图片资源",
+            "type": "image",
+            "description": "",
+            "tags": [
+              "可视体"
+            ],
+            "attachments": [
+              {
+                "id": "att-4jy5612e-moih9v8x",
+                "fileName": "粘贴图片资源",
+                "mime": "image/svg+xml",
+                "path": "data/assets/att-4jy5612e-moih9v8x.svg"
+              }
+            ]
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-24z2k1dn-mofuwuz3/resources",
+          "value": [
+            {
+              "resourceId": "res-aoiglovz-mofuwuz3",
+              "slot": "death",
+              "description": "死亡后使用这张图，并缓慢淡出。",
+              "aiDescription": "死亡残影淡出。",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            {
+              "resourceId": "res-9dznlq8c-moih9v8w",
+              "slot": "current",
+              "description": "",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ]
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-24z2k1dn-mofuwuz3/render",
+          "value": {
+            "visible": true,
+            "color": "#ffffff",
+            "opacity": 1,
+            "layerId": "world",
+            "size": {
+              "x": 52,
+              "y": 68
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current",
+            "resourceId": "res-9dznlq8c-moih9v8w"
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/resources/res-9dznlq8c-moih9v8w"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-24z2k1dn-mofuwuz3/resources",
+          "value": [
+            {
+              "resourceId": "res-aoiglovz-mofuwuz3",
+              "slot": "death",
+              "description": "死亡后使用这张图，并缓慢淡出。",
+              "aiDescription": "死亡残影淡出。",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ]
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-24z2k1dn-mofuwuz3/render",
+          "value": {
+            "visible": true,
+            "color": "#35bd9a",
+            "opacity": 1,
+            "layerId": "world",
+            "size": {
+              "x": 52,
+              "y": 68
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current"
+          }
+        }
+      ],
+      "diffSummary": "添加资源并替换 玩家 的当前可视体",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:23:11.217Z",
+      "appliedAt": "2026-04-28T10:23:11.218Z"
+    },
+    "txn-o6tescag-moiha2na": {
+      "id": "txn-o6tescag-moiha2na",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "6da39c17",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/resources/res-aoiglovz-mofuwuz3",
+          "value": {
+            "id": "res-aoiglovz-mofuwuz3",
+            "internalName": "Player_Death_Fade_Sprite",
+            "displayName": "死亡淡出残影",
+            "type": "sprite",
+            "description": "蓝色圆形图标",
+            "aiDescription": "死亡后残影，淡出消失。",
+            "tags": [
+              "玩家",
+              "死亡",
+              "表现体",
+              "待AI处理"
+            ],
+            "attachments": []
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-24z2k1dn-mofuwuz3/resources",
+          "value": [
+            {
+              "resourceId": "res-aoiglovz-mofuwuz3",
+              "slot": "death",
+              "description": "蓝色圆形图标",
+              "aiDescription": "死亡残影淡出。",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            {
+              "resourceId": "res-9dznlq8c-moih9v8w",
+              "slot": "current",
+              "description": "",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ]
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "set",
+          "path": "/resources/res-aoiglovz-mofuwuz3",
+          "value": {
+            "id": "res-aoiglovz-mofuwuz3",
+            "internalName": "Player_Death_Fade_Sprite",
+            "displayName": "死亡淡出残影",
+            "type": "sprite",
+            "description": "玩家死亡后使用的残影图，逐渐变透明并消失。",
+            "aiDescription": "死亡后残影，淡出消失。",
+            "tags": [
+              "玩家",
+              "死亡",
+              "表现体"
+            ],
+            "attachments": []
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-24z2k1dn-mofuwuz3/resources",
+          "value": [
+            {
+              "resourceId": "res-aoiglovz-mofuwuz3",
+              "slot": "death",
+              "description": "死亡后使用这张图，并缓慢淡出。",
+              "aiDescription": "死亡残影淡出。",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            {
+              "resourceId": "res-9dznlq8c-moih9v8w",
+              "slot": "current",
+              "description": "",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ]
+        }
+      ],
+      "diffSummary": "保存资源描述：死亡淡出残影",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:23:20.807Z",
+      "appliedAt": "2026-04-28T10:23:20.808Z"
+    },
+    "txn-fzy4lzyj-moihv0ls": {
+      "id": "txn-fzy4lzyj-moihv0ls",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "af669a1e",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pkzyz0sl-moihv0ls",
+          "value": {
+            "id": "ent-pkzyz0sl-moihv0ls",
+            "internalName": "entity",
+            "displayName": "方块本体",
+            "kind": "entity",
+            "persistent": true,
+            "transform": {
+              "position": {
+                "x": -357.5,
+                "y": -253.5
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            "render": {
+              "visible": true,
+              "color": "#d7a84a",
+              "opacity": 1,
+              "layerId": "world",
+              "size": {
+                "x": 60,
+                "y": 60
+              },
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              },
+              "slot": "current",
+              "state": "current"
+            },
+            "body": {
+              "mode": "static",
+              "velocity": {
+                "x": 0,
+                "y": 0
+              },
+              "gravityScale": 0,
+              "friction": 0.8,
+              "bounce": 0
+            },
+            "collider": {
+              "shape": "box",
+              "size": {
+                "x": 60,
+                "y": 60
+              },
+              "solid": true,
+              "trigger": false,
+              "layerMask": [
+                "world"
+              ],
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0
+            },
+            "resources": [],
+            "tags": [
+              "实体",
+              "硬质碰撞"
+            ],
+            "folderId": "terrain"
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pkzyz0sl-moihv0ls"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "diffSummary": "创建方块本体：方块本体",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:39:37.937Z",
+      "appliedAt": "2026-04-28T10:39:37.939Z"
+    },
+    "txn-enuk6zky-moihv77f": {
+      "id": "txn-enuk6zky-moihv77f",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "15caa36b",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-yses8jm6-moihv77f",
+          "value": {
+            "id": "ent-yses8jm6-moihv77f",
+            "internalName": "entity_2",
+            "displayName": "柳叶本体",
+            "kind": "entity",
+            "persistent": true,
+            "transform": {
+              "position": {
+                "x": -242.5,
+                "y": -233.5
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            "render": {
+              "visible": true,
+              "color": "#86d36c",
+              "opacity": 1,
+              "layerId": "world",
+              "size": {
+                "x": 90,
+                "y": 60
+              },
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              },
+              "slot": "current",
+              "state": "current"
+            },
+            "body": {
+              "mode": "static",
+              "velocity": {
+                "x": 0,
+                "y": 0
+              },
+              "gravityScale": 0,
+              "friction": 0.8,
+              "bounce": 0
+            },
+            "collider": {
+              "shape": "polygon",
+              "size": {
+                "x": 90,
+                "y": 60
+              },
+              "points": [
+                {
+                  "x": 0,
+                  "y": -30
+                },
+                {
+                  "x": 26.099999999999998,
+                  "y": -21.599999999999998
+                },
+                {
+                  "x": 45,
+                  "y": 0
+                },
+                {
+                  "x": 23.400000000000002,
+                  "y": 21
+                },
+                {
+                  "x": 0,
+                  "y": 30
+                },
+                {
+                  "x": -23.400000000000002,
+                  "y": 21
+                },
+                {
+                  "x": -45,
+                  "y": 0
+                },
+                {
+                  "x": -26.099999999999998,
+                  "y": -21.599999999999998
+                }
+              ],
+              "solid": true,
+              "trigger": false,
+              "layerMask": [
+                "world"
+              ],
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0
+            },
+            "resources": [],
+            "tags": [
+              "实体",
+              "柳叶碰撞",
+              "多边形碰撞"
+            ],
+            "folderId": "terrain"
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-yses8jm6-moihv77f"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "diffSummary": "创建柳叶笔本体：柳叶本体",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:39:46.492Z",
+      "appliedAt": "2026-04-28T10:39:46.493Z"
+    },
+    "txn-b2l21nvf-moihwmn8": {
+      "id": "txn-b2l21nvf-moihwmn8",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "a665decf",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-9l6ptjtn-moihwmn8",
+          "value": {
+            "id": "ent-9l6ptjtn-moihwmn8",
+            "internalName": "2",
+            "displayName": "柳叶本体 2",
+            "kind": "entity",
+            "persistent": true,
+            "transform": {
+              "position": {
+                "x": -122.5,
+                "y": -251
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            "body": {
+              "mode": "static",
+              "velocity": {
+                "x": 0,
+                "y": 0
+              },
+              "gravityScale": 0,
+              "friction": 0.8,
+              "bounce": 0
+            },
+            "collider": {
+              "shape": "polygon",
+              "size": {
+                "x": 90,
+                "y": 65
+              },
+              "points": [
+                {
+                  "x": 0,
+                  "y": -32.5
+                },
+                {
+                  "x": 26.099999999999998,
+                  "y": -23.4
+                },
+                {
+                  "x": 45,
+                  "y": 0
+                },
+                {
+                  "x": 23.400000000000002,
+                  "y": 22.75
+                },
+                {
+                  "x": 0,
+                  "y": 32.5
+                },
+                {
+                  "x": -23.400000000000002,
+                  "y": 22.75
+                },
+                {
+                  "x": -45,
+                  "y": 0
+                },
+                {
+                  "x": -26.099999999999998,
+                  "y": -23.4
+                }
+              ],
+              "solid": true,
+              "trigger": false,
+              "layerMask": [
+                "world"
+              ],
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0
+            },
+            "resources": [],
+            "tags": [
+              "实体",
+              "柳叶碰撞",
+              "多边形碰撞"
+            ],
+            "folderId": "terrain"
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-9l6ptjtn-moihwmn8"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "diffSummary": "创建柳叶笔本体：柳叶本体 2",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:40:53.158Z",
+      "appliedAt": "2026-04-28T10:40:53.159Z"
+    },
+    "txn-bt9th7nm-moihxrta": {
+      "id": "txn-bt9th7nm-moihxrta",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "d33f7fc2",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-9l6ptjtn-moihwmn8/transform",
+          "value": {
+            "position": {
+              "x": -129.203125,
+              "y": -54
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-9l6ptjtn-moihwmn8/transform",
+          "value": {
+            "position": {
+              "x": -122.5,
+              "y": -251
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            }
+          }
+        }
+      ],
+      "diffSummary": "调整 柳叶本体 2 本体的位置。",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:41:46.511Z",
+      "appliedAt": "2026-04-28T10:41:46.512Z"
+    },
+    "txn-lauhwz9i-moihxu1i": {
+      "id": "txn-lauhwz9i-moihxu1i",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "45412191",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-g7t8ppd5-moihxu1i",
+          "value": {
+            "id": "ent-g7t8ppd5-moihxu1i",
+            "internalName": "3",
+            "displayName": "柳叶本体 3",
+            "kind": "entity",
+            "persistent": true,
+            "transform": {
+              "position": {
+                "x": -314.296875,
+                "y": -121.5
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            "body": {
+              "mode": "static",
+              "velocity": {
+                "x": 0,
+                "y": 0
+              },
+              "gravityScale": 0,
+              "friction": 0.8,
+              "bounce": 0
+            },
+            "collider": {
+              "shape": "polygon",
+              "size": {
+                "x": 64,
+                "y": 64
+              },
+              "points": [
+                {
+                  "x": 0,
+                  "y": -32
+                },
+                {
+                  "x": 18.56,
+                  "y": -23.04
+                },
+                {
+                  "x": 32,
+                  "y": 0
+                },
+                {
+                  "x": 16.64,
+                  "y": 22.4
+                },
+                {
+                  "x": 0,
+                  "y": 32
+                },
+                {
+                  "x": -16.64,
+                  "y": 22.4
+                },
+                {
+                  "x": -32,
+                  "y": 0
+                },
+                {
+                  "x": -18.56,
+                  "y": -23.04
+                }
+              ],
+              "solid": true,
+              "trigger": false,
+              "layerMask": [
+                "world"
+              ],
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0
+            },
+            "resources": [],
+            "tags": [
+              "实体",
+              "柳叶碰撞",
+              "多边形碰撞"
+            ],
+            "folderId": "terrain"
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-g7t8ppd5-moihxu1i"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "diffSummary": "创建柳叶笔本体：柳叶本体 3",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:41:49.399Z",
+      "appliedAt": "2026-04-28T10:41:49.400Z"
+    },
+    "txn-lwltbj01-moihxx3i": {
+      "id": "txn-lwltbj01-moihxx3i",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "dce0ae5d",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-8mm9gfxa-moihxx3i",
+          "value": {
+            "id": "ent-8mm9gfxa-moihxx3i",
+            "internalName": "4",
+            "displayName": "柳叶本体 4",
+            "kind": "entity",
+            "persistent": true,
+            "transform": {
+              "position": {
+                "x": -119.6484375,
+                "y": -145
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            "body": {
+              "mode": "static",
+              "velocity": {
+                "x": 0,
+                "y": 0
+              },
+              "gravityScale": 0,
+              "friction": 0.8,
+              "bounce": 0
+            },
+            "collider": {
+              "shape": "polygon",
+              "size": {
+                "x": 127.296875,
+                "y": 45
+              },
+              "points": [
+                {
+                  "x": 0,
+                  "y": -22.5
+                },
+                {
+                  "x": 36.916093749999995,
+                  "y": -16.2
+                },
+                {
+                  "x": 63.6484375,
+                  "y": 0
+                },
+                {
+                  "x": 33.097187500000004,
+                  "y": 15.749999999999998
+                },
+                {
+                  "x": 0,
+                  "y": 22.5
+                },
+                {
+                  "x": -33.097187500000004,
+                  "y": 15.749999999999998
+                },
+                {
+                  "x": -63.6484375,
+                  "y": 0
+                },
+                {
+                  "x": -36.916093749999995,
+                  "y": -16.2
+                }
+              ],
+              "solid": true,
+              "trigger": false,
+              "layerMask": [
+                "world"
+              ],
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0
+            },
+            "resources": [],
+            "tags": [
+              "实体",
+              "柳叶碰撞",
+              "多边形碰撞"
+            ],
+            "folderId": "terrain"
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i",
+                "ent-8mm9gfxa-moihxx3i"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-8mm9gfxa-moihxx3i"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "diffSummary": "创建柳叶笔本体：柳叶本体 4",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:41:53.359Z",
+      "appliedAt": "2026-04-28T10:41:53.360Z"
+    },
+    "txn-v9x5i1g1-moii859u": {
+      "id": "txn-v9x5i1g1-moii859u",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "d10b0670",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-x6vo3swp-moii859t",
+          "value": {
+            "id": "ent-x6vo3swp-moii859t",
+            "internalName": "5",
+            "displayName": "柳叶本体 5",
+            "kind": "entity",
+            "persistent": true,
+            "transform": {
+              "position": {
+                "x": -300,
+                "y": -258.5
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            "body": {
+              "mode": "static",
+              "velocity": {
+                "x": 0,
+                "y": 0
+              },
+              "gravityScale": 0,
+              "friction": 0.8,
+              "bounce": 0
+            },
+            "collider": {
+              "shape": "polygon",
+              "size": {
+                "x": 155,
+                "y": 110
+              },
+              "points": [
+                {
+                  "x": -67.5,
+                  "y": -25
+                },
+                {
+                  "x": -12.5,
+                  "y": -55
+                },
+                {
+                  "x": 57.5,
+                  "y": -35
+                },
+                {
+                  "x": 77.5,
+                  "y": 15
+                },
+                {
+                  "x": 12.5,
+                  "y": 55
+                },
+                {
+                  "x": -52.5,
+                  "y": 40
+                },
+                {
+                  "x": -77.5,
+                  "y": 0
+                }
+              ],
+              "solid": true,
+              "trigger": false,
+              "layerMask": [
+                "world"
+              ],
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0
+            },
+            "resources": [],
+            "tags": [
+              "实体",
+              "柳叶笔",
+              "多边形碰撞"
+            ],
+            "folderId": "terrain"
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i",
+                "ent-8mm9gfxa-moihxx3i",
+                "ent-x6vo3swp-moii859t"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-x6vo3swp-moii859t"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i",
+                "ent-8mm9gfxa-moihxx3i"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "diffSummary": "创建柳叶笔本体：柳叶本体 5",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:49:50.515Z",
+      "appliedAt": "2026-04-28T10:49:50.516Z"
+    },
+    "txn-td38r5px-moii8pbz": {
+      "id": "txn-td38r5px-moii8pbz",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "70fc671a",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-ka536wwi-moii8pbz",
+          "value": {
+            "id": "ent-ka536wwi-moii8pbz",
+            "internalName": "entity_3",
+            "displayName": "多边形本体",
+            "kind": "entity",
+            "persistent": true,
+            "transform": {
+              "position": {
+                "x": -193.796875,
+                "y": -53
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            "body": {
+              "mode": "static",
+              "velocity": {
+                "x": 0,
+                "y": 0
+              },
+              "gravityScale": 0,
+              "friction": 0.8,
+              "bounce": 0
+            },
+            "collider": {
+              "shape": "polygon",
+              "size": {
+                "x": 336,
+                "y": 471
+              },
+              "points": [
+                {
+                  "x": 46.296875,
+                  "y": -235.5
+                },
+                {
+                  "x": 136.296875,
+                  "y": -180.5
+                },
+                {
+                  "x": 41.296875,
+                  "y": -135.5
+                },
+                {
+                  "x": -138,
+                  "y": 75.5
+                },
+                {
+                  "x": -18,
+                  "y": 117.5
+                },
+                {
+                  "x": -147,
+                  "y": -1.5
+                },
+                {
+                  "x": 68,
+                  "y": 48.5
+                },
+                {
+                  "x": 77,
+                  "y": 127.5
+                },
+                {
+                  "x": -168,
+                  "y": 196.5
+                },
+                {
+                  "x": 41,
+                  "y": 235.5
+                },
+                {
+                  "x": 168,
+                  "y": 119.5
+                }
+              ],
+              "solid": true,
+              "trigger": false,
+              "layerMask": [
+                "world"
+              ],
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0
+            },
+            "resources": [],
+            "tags": [
+              "实体",
+              "多边形碰撞"
+            ],
+            "folderId": "terrain"
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i",
+                "ent-8mm9gfxa-moihxx3i",
+                "ent-x6vo3swp-moii859t",
+                "ent-ka536wwi-moii8pbz"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-ka536wwi-moii8pbz"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i",
+                "ent-8mm9gfxa-moihxx3i",
+                "ent-x6vo3swp-moii859t"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "diffSummary": "创建多边形本体：多边形本体",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:50:16.513Z",
+      "appliedAt": "2026-04-28T10:50:16.514Z"
+    },
+    "txn-5z9outiy-moii9gpu": {
+      "id": "txn-5z9outiy-moii9gpu",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "20045a13",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-mgwy3hl6-moii9gpu",
+          "value": {
+            "id": "ent-mgwy3hl6-moii9gpu",
+            "internalName": "2_2",
+            "displayName": "多边形本体 2",
+            "kind": "entity",
+            "persistent": true,
+            "transform": {
+              "position": {
+                "x": -87.5,
+                "y": -231
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            "body": {
+              "mode": "static",
+              "velocity": {
+                "x": 0,
+                "y": 0
+              },
+              "gravityScale": 0,
+              "friction": 0.8,
+              "bounce": 0
+            },
+            "collider": {
+              "shape": "polygon",
+              "size": {
+                "x": 100,
+                "y": 115
+              },
+              "points": [
+                {
+                  "x": -50,
+                  "y": -57.5
+                },
+                {
+                  "x": 50,
+                  "y": -2.5
+                },
+                {
+                  "x": -40,
+                  "y": 57.5
+                }
+              ],
+              "solid": true,
+              "trigger": false,
+              "layerMask": [
+                "world"
+              ],
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0
+            },
+            "resources": [],
+            "tags": [
+              "实体",
+              "多边形碰撞"
+            ],
+            "folderId": "terrain"
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i",
+                "ent-8mm9gfxa-moihxx3i",
+                "ent-x6vo3swp-moii859t",
+                "ent-ka536wwi-moii8pbz",
+                "ent-mgwy3hl6-moii9gpu"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-mgwy3hl6-moii9gpu"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i",
+                "ent-8mm9gfxa-moihxx3i",
+                "ent-x6vo3swp-moii859t",
+                "ent-ka536wwi-moii8pbz"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "diffSummary": "创建多边形本体：多边形本体 2",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:50:52.003Z",
+      "appliedAt": "2026-04-28T10:50:52.004Z"
+    },
+    "txn-irhcu0un-moii9mt4": {
+      "id": "txn-irhcu0un-moii9mt4",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "f109442c",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-0053ulqu-moii9mt4",
+          "value": {
+            "id": "ent-0053ulqu-moii9mt4",
+            "internalName": "3_2",
+            "displayName": "多边形本体 3",
+            "kind": "entity",
+            "persistent": true,
+            "transform": {
+              "position": {
+                "x": 30,
+                "y": -246
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            "body": {
+              "mode": "static",
+              "velocity": {
+                "x": 0,
+                "y": 0
+              },
+              "gravityScale": 0,
+              "friction": 0.8,
+              "bounce": 0
+            },
+            "collider": {
+              "shape": "polygon",
+              "size": {
+                "x": 65,
+                "y": 95
+              },
+              "points": [
+                {
+                  "x": -27.5,
+                  "y": -47.5
+                },
+                {
+                  "x": 32.5,
+                  "y": -7.5
+                },
+                {
+                  "x": -32.5,
+                  "y": 47.5
+                }
+              ],
+              "solid": true,
+              "trigger": false,
+              "layerMask": [
+                "world"
+              ],
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0
+            },
+            "resources": [],
+            "tags": [
+              "实体",
+              "多边形碰撞"
+            ],
+            "folderId": "terrain"
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i",
+                "ent-8mm9gfxa-moihxx3i",
+                "ent-x6vo3swp-moii859t",
+                "ent-ka536wwi-moii8pbz",
+                "ent-mgwy3hl6-moii9gpu",
+                "ent-0053ulqu-moii9mt4"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-0053ulqu-moii9mt4"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i",
+                "ent-8mm9gfxa-moihxx3i",
+                "ent-x6vo3swp-moii859t",
+                "ent-ka536wwi-moii8pbz",
+                "ent-mgwy3hl6-moii9gpu"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "diffSummary": "创建多边形本体：多边形本体 3",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:50:59.897Z",
+      "appliedAt": "2026-04-28T10:50:59.898Z"
+    },
+    "txn-2f0wwisa-moiignuv": {
+      "id": "txn-2f0wwisa-moiignuv",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "8a08c489",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-z4gdmdhl-moiignuv",
+          "value": {
+            "id": "ent-z4gdmdhl-moiignuv",
+            "internalName": "2_3",
+            "displayName": "方块本体 2",
+            "kind": "entity",
+            "persistent": true,
+            "transform": {
+              "position": {
+                "x": 152.5,
+                "y": -41
+              },
+              "rotation": 0,
+              "scale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            "body": {
+              "mode": "static",
+              "velocity": {
+                "x": 0,
+                "y": 0
+              },
+              "gravityScale": 0,
+              "friction": 0.8,
+              "bounce": 0
+            },
+            "collider": {
+              "shape": "box",
+              "size": {
+                "x": 122,
+                "y": 122
+              },
+              "solid": true,
+              "trigger": false,
+              "layerMask": [
+                "world"
+              ],
+              "offset": {
+                "x": 0,
+                "y": 0
+              },
+              "rotation": 0
+            },
+            "resources": [],
+            "tags": [
+              "实体",
+              "硬质碰撞"
+            ],
+            "folderId": "terrain"
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i",
+                "ent-8mm9gfxa-moihxx3i",
+                "ent-x6vo3swp-moii859t",
+                "ent-ka536wwi-moii8pbz",
+                "ent-mgwy3hl6-moii9gpu",
+                "ent-0053ulqu-moii9mt4",
+                "ent-z4gdmdhl-moiignuv"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-z4gdmdhl-moiignuv"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/folders",
+          "value": [
+            {
+              "id": "terrain",
+              "displayName": "地面",
+              "entityIds": [
+                "ent-mfkk8zb1-mofuwuz3",
+                "ent-98oyg1gk-mofuwuz3",
+                "ent-pkzyz0sl-moihv0ls",
+                "ent-yses8jm6-moihv77f",
+                "ent-9l6ptjtn-moihwmn8",
+                "ent-g7t8ppd5-moihxu1i",
+                "ent-8mm9gfxa-moihxx3i",
+                "ent-x6vo3swp-moii859t",
+                "ent-ka536wwi-moii8pbz",
+                "ent-mgwy3hl6-moii9gpu",
+                "ent-0053ulqu-moii9mt4"
+              ]
+            },
+            {
+              "id": "characters",
+              "displayName": "角色",
+              "entityIds": [
+                "ent-24z2k1dn-mofuwuz3",
+                "ent-pht4vdze-mofuwuz3"
+              ]
+            },
+            {
+              "id": "runtime",
+              "displayName": "运行时捕捉",
+              "entityIds": [
+                "ent-fmhhoe71-mofuwuz3"
+              ]
+            }
+          ]
+        }
+      ],
+      "diffSummary": "创建方块本体：方块本体 2",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:56:27.848Z",
+      "appliedAt": "2026-04-28T10:56:27.849Z"
+    },
+    "txn-qxmlw9kv-moiihfjf": {
+      "id": "txn-qxmlw9kv-moiihfjf",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "44a3860a",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/resources/res-mklai897-moiihfje",
+          "value": {
+            "id": "res-mklai897-moiihfje",
+            "internalName": "v2_screenshot_1365",
+            "displayName": "v2-screenshot-1365",
+            "type": "image",
+            "description": "",
+            "tags": [
+              "可视体"
+            ],
+            "attachments": [
+              {
+                "id": "att-b2cswk7m-moiihfjf",
+                "fileName": "v2-screenshot-1365.png",
+                "mime": "image/png",
+                "path": "data/assets/att-b2cswk7m-moiihfjf.png"
+              }
+            ]
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-24z2k1dn-mofuwuz3/resources",
+          "value": [
+            {
+              "resourceId": "res-aoiglovz-mofuwuz3",
+              "slot": "death",
+              "description": "蓝色圆形图标",
+              "aiDescription": "死亡残影淡出。",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            {
+              "resourceId": "res-mklai897-moiihfje",
+              "slot": "current",
+              "description": "",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ]
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-24z2k1dn-mofuwuz3/render",
+          "value": {
+            "visible": true,
+            "color": "#ffffff",
+            "opacity": 1,
+            "layerId": "world",
+            "size": {
+              "x": 52,
+              "y": 68
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current",
+            "resourceId": "res-mklai897-moiihfje"
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/resources/res-mklai897-moiihfje"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-24z2k1dn-mofuwuz3/resources",
+          "value": [
+            {
+              "resourceId": "res-aoiglovz-mofuwuz3",
+              "slot": "death",
+              "description": "蓝色圆形图标",
+              "aiDescription": "死亡残影淡出。",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            {
+              "resourceId": "res-9dznlq8c-moih9v8w",
+              "slot": "current",
+              "description": "",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ]
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-24z2k1dn-mofuwuz3/render",
+          "value": {
+            "visible": true,
+            "color": "#ffffff",
+            "opacity": 1,
+            "layerId": "world",
+            "size": {
+              "x": 52,
+              "y": 68
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current",
+            "resourceId": "res-9dznlq8c-moih9v8w"
+          }
+        }
+      ],
+      "diffSummary": "添加资源并替换 玩家 的当前可视体",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T10:57:03.724Z",
+      "appliedAt": "2026-04-28T10:57:03.726Z"
+    },
+    "txn-njx02cpl-moioll6v": {
+      "id": "txn-njx02cpl-moioll6v",
+      "actor": "user",
+      "status": "applied",
+      "baseProjectHash": "717c3010",
+      "patches": [
+        {
+          "op": "set",
+          "path": "/resources/res-d06pys86-moioll6t",
+          "value": {
+            "id": "res-d06pys86-moioll6t",
+            "internalName": "v2_screenshot_390",
+            "displayName": "v2-screenshot-390",
+            "type": "image",
+            "description": "",
+            "tags": [
+              "可视体"
+            ],
+            "attachments": [
+              {
+                "id": "att-qunq453v-moioll6v",
+                "fileName": "v2-screenshot-390.png",
+                "mime": "image/png",
+                "path": "data/assets/att-qunq453v-moioll6v.png"
+              }
+            ]
+          }
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pkzyz0sl-moihv0ls/resources",
+          "value": [
+            {
+              "resourceId": "res-d06pys86-moioll6t",
+              "slot": "current",
+              "description": "",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            }
+          ]
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pkzyz0sl-moihv0ls/render",
+          "value": {
+            "visible": true,
+            "color": "#ffffff",
+            "opacity": 1,
+            "layerId": "world",
+            "size": {
+              "x": 60,
+              "y": 60
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current",
+            "resourceId": "res-d06pys86-moioll6t"
+          }
+        }
+      ],
+      "inversePatches": [
+        {
+          "op": "delete",
+          "path": "/resources/res-d06pys86-moioll6t"
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pkzyz0sl-moihv0ls/resources",
+          "value": []
+        },
+        {
+          "op": "set",
+          "path": "/scenes/scene-07cjxzd9-mofuwuz3/entities/ent-pkzyz0sl-moihv0ls/render",
+          "value": {
+            "visible": true,
+            "color": "#d7a84a",
+            "opacity": 1,
+            "layerId": "world",
+            "size": {
+              "x": 60,
+              "y": 60
+            },
+            "offset": {
+              "x": 0,
+              "y": 0
+            },
+            "rotation": 0,
+            "scale": {
+              "x": 1,
+              "y": 1
+            },
+            "slot": "current",
+            "state": "current"
+          }
+        }
+      ],
+      "diffSummary": "添加资源并替换 方块本体 的当前可视体",
+      "testRecordRefs": [],
+      "createdAt": "2026-04-28T13:48:15.370Z",
+      "appliedAt": "2026-04-28T13:48:15.373Z"
+    }
+  },
   "testRecords": {},
   "snapshots": {
     "snapshot-hdk5j39d-moi0n1l5": {

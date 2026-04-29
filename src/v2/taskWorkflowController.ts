@@ -44,6 +44,8 @@ export function createTaskWorkflowController(deps: TaskWorkflowControllerDeps): 
 
       if (!result.ok) {
         deps.setNotice(result.error);
+        if (pendingBrush) deps.setPendingBrush(undefined);
+        deps.focusTaskInput();
         deps.renderAll();
         return;
       }

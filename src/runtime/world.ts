@@ -9,7 +9,7 @@ import { normalizeEntityDefaults, normalizeSceneSettings } from "../project/sche
 import { cloneJson, makeId } from "../shared/types";
 import type { EntityId, RuntimeMode, SnapshotId } from "../shared/types";
 import type { SceneId, Vec2 } from "../shared/types";
-import { boundsFor, collectPairs, overlaps } from "./collision";
+import { boundsFor, collectDynamicPairs, entityIntersectsRect } from "./collision";
 import { FixedStepClock } from "./time";
 
 export type RuntimeWorldOptions = {
@@ -31,6 +31,7 @@ export class RuntimeWorld {
   mode: RuntimeMode = "editorFrozen";
   entities = new Map<string, Entity>();
   transientEntities = new Map<string, Entity>();
+  private entityListCache?: Entity[];
   input: Record<string, boolean> = {};
   actorInput: Record<string, Record<string, boolean>> = {};
   combatEvents: CombatEvent[] = [];
@@ -104,6 +105,7 @@ export class RuntimeWorld {
     };
     this.normalizeRuntime(transient);
     this.transientEntities.set(id, transient);
+    this.invalidateEntityListCache();
     return id;
   }
 
@@ -190,6 +192,7 @@ export class RuntimeWorld {
     this.actorInput = actorInputFromFlatInput(this.input);
     this.combatEvents = cloneJson(snapshot.combatEvents || []);
     this.transientEntities = new Map(Object.entries(cloneJson(snapshot.transientEntities)));
+    this.invalidateEntityListCache();
     this.transientEntities.forEach((entity) => this.normalizeRuntime(entity));
     for (const state of Object.values(snapshot.entities)) {
       const entity = this.entities.get(state.entityId) || this.transientEntities.get(state.entityId);
@@ -223,12 +226,18 @@ export class RuntimeWorld {
     }
   }
 
+  entityById(entityId: EntityId | undefined): Entity | undefined {
+    if (!entityId) return undefined;
+    return this.entities.get(entityId) || this.transientEntities.get(entityId);
+  }
+
   allEntities(): Entity[] {
-    return [...this.entities.values(), ...this.transientEntities.values()];
+    if (!this.entityListCache) this.entityListCache = [...this.entities.values(), ...this.transientEntities.values()];
+    return this.entityListCache;
   }
 
   private resolveSimpleCollisions(): void {
-    const hits = collectPairs(this.allEntities());
+    const hits = collectDynamicPairs(this.allEntities());
     for (const hit of hits) {
       if (hit.trigger) continue;
       const dynamic = hit.a.body?.mode === "dynamic" ? hit.a : hit.b.body?.mode === "dynamic" ? hit.b : undefined;
@@ -366,7 +375,7 @@ export class RuntimeWorld {
       for (const defender of entities) {
         if (defender.id === attacker.id || defender.kind !== "entity" || !defender.collider) continue;
         if (defender.body?.mode === "static" || hitIds.has(defender.id)) continue;
-        if (!overlaps(attackArea, boundsFor(defender))) continue;
+        if (!entityIntersectsRect(defender, attackArea)) continue;
 
         hitIds.add(defender.id);
         const parryUntil = defender.runtime?.parryUntilFrame ?? -1;
@@ -436,11 +445,16 @@ export class RuntimeWorld {
   }
 
   private cleanupExpiredTransients(): void {
+    let removed = false;
     for (const [id, entity] of this.transientEntities) {
       const lifetimeMs = entity.runtime?.lifetimeMs;
       const ageMs = entity.runtime?.ageMs ?? 0;
-      if (lifetimeMs !== undefined && ageMs >= lifetimeMs) this.transientEntities.delete(id);
+      if (lifetimeMs !== undefined && ageMs >= lifetimeMs) {
+        this.transientEntities.delete(id);
+        removed = true;
+      }
     }
+    if (removed) this.invalidateEntityListCache();
   }
 
   private normalizeRuntime(entity: Entity): void {
@@ -467,6 +481,10 @@ export class RuntimeWorld {
       lifetimeMs: entity.runtime?.lifetimeMs,
       patrolDirection: direction,
     };
+  }
+
+  private invalidateEntityListCache(): void {
+    this.entityListCache = undefined;
   }
 }
 

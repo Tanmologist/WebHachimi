@@ -14,8 +14,9 @@ assert(template, "starter project should keep at least one non-persistent templa
 const world = new RuntimeWorld({ scene });
 assert(!world.allEntities().some((entity) => entity.id === template.id), "non-persistent template should not appear before spawn");
 
-const treeHtml = renderSceneTreeHtml(scene, [...world.entities.values()], "");
+const treeHtml = renderSceneTreeHtml(scene, [...world.entities.values()], "", "body", project.resources);
 assert(!treeHtml.includes(template.displayName), "non-persistent template should not appear in editor tree HTML");
+assert(treeHtml.includes("↳"), "world tree should expose current presentation children under body entities");
 
 const spawnedId = world.spawnTransient(template, 100);
 assert(world.allEntities().some((entity) => entity.id === spawnedId), "spawned transient should appear in runtime world");

@@ -1,6 +1,8 @@
 node_modules/
 dist-v2/
 data/assets/
+data/local/
+data/*.local.json
 v2-screenshot-*.png
 .chrome-profile-v2-check*/
 *.log

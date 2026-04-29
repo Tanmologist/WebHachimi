@@ -55,10 +55,15 @@ export async function loadProjectForEditor(): Promise<LoadProjectOutcome> {
 
 function formatSaveNotice(result: SaveProjectResult): string {
   const storage = storageLabel(result.storage);
+  if (result.warning) return `项目已保存${storage}；磁盘/API 同步失败：${result.warning}`;
   return result.savedAt ? `项目已自动保存${storage}：${result.savedAt}` : `项目已自动保存${storage}。`;
 }
 
 function formatLoadNotice(result: LoadProjectResult): string {
+  if (result.warning) {
+    const source = result.storage === "api" ? "磁盘/API" : "本地浏览器";
+    return `项目已从${source}载入；磁盘/API 读取失败：${result.warning}`;
+  }
   return `项目已从磁盘载入${storageLabel(result.storage)}。`;
 }
 

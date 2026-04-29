@@ -12,11 +12,23 @@ export class PlayerRenderer {
   readonly app = new Application();
   private readonly worldLayer = new Container();
   private readonly hudLayer = new Container();
+  private readonly graphicsPool: Graphics[] = [];
+  private readonly hudText = new Text({
+    text: "",
+    style: {
+      fill: "#e8eee9",
+      fontFamily: "Inter, Microsoft YaHei, sans-serif",
+      fontSize: 13,
+      fontWeight: "700",
+    },
+  });
   private resizeObserver?: ResizeObserver;
   private removeResizeFallback?: () => void;
   private camera: Vec2 = { x: 0, y: 0 };
   private scale = 1;
   private scene?: Scene;
+  private backdrop?: Graphics;
+  private horizon?: Graphics;
 
   async init(options: PlayerRendererOptions): Promise<void> {
     this.scene = options.scene;
@@ -24,12 +36,13 @@ export class PlayerRenderer {
       backgroundColor: parseColor(options.scene.settings.background),
       antialias: true,
       resizeTo: options.host,
-      resolution: Math.min(window.devicePixelRatio || 1, 2),
+      resolution: Math.min(window.devicePixelRatio || 1, 1.5),
       autoDensity: true,
     });
     this.app.canvas.className = "player-canvas";
     options.host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.worldLayer, this.hudLayer);
+    this.hudLayer.addChild(this.hudText);
 
     if ("ResizeObserver" in globalThis) {
       this.resizeObserver = new ResizeObserver(() => this.layout());
@@ -49,8 +62,7 @@ export class PlayerRenderer {
   }
 
   render(world: RuntimeWorld): void {
-    this.worldLayer.removeChildren();
-    this.hudLayer.removeChildren();
+    this.recycleWorldLayer();
     const player = findPlayer(world.allEntities());
     if (player) this.follow(player.transform.position);
     this.layoutWorld();
@@ -82,20 +94,23 @@ export class PlayerRenderer {
   private drawBackdrop(): void {
     const scene = this.scene;
     if (!scene) return;
-    const background = new Graphics();
-    background.rect(-scene.settings.width / 2, -scene.settings.height / 2, scene.settings.width, scene.settings.height);
-    background.fill({ color: parseColor(scene.settings.background), alpha: 1 });
-    this.worldLayer.addChild(background);
-
-    const horizon = new Graphics();
-    horizon.rect(-scene.settings.width / 2, scene.settings.height / 2 - 220, scene.settings.width, 220);
-    horizon.fill({ color: 0x171b1a, alpha: 1 });
-    this.worldLayer.addChild(horizon);
+    if (!this.backdrop) {
+      this.backdrop = new Graphics();
+      this.backdrop.rect(-scene.settings.width / 2, -scene.settings.height / 2, scene.settings.width, scene.settings.height);
+      this.backdrop.fill({ color: parseColor(scene.settings.background), alpha: 1 });
+      this.worldLayer.addChild(this.backdrop);
+    }
+    if (!this.horizon) {
+      this.horizon = new Graphics();
+      this.horizon.rect(-scene.settings.width / 2, scene.settings.height / 2 - 220, scene.settings.width, 220);
+      this.horizon.fill({ color: 0x171b1a, alpha: 1 });
+      this.worldLayer.addChild(this.horizon);
+    }
   }
 
   private drawEntity(entity: Entity): void {
     if (entity.render && !entity.render.visible) return;
-    const graphics = new Graphics();
+    const graphics = this.takeGraphics();
     const size = entity.collider?.size || { x: 56, y: 56 };
     const color = parseColor(entity.render?.color || "#74a8bd");
     const alpha = entity.persistent ? entity.render?.opacity ?? 1 : Math.min(entity.render?.opacity ?? 1, 0.45);
@@ -125,7 +140,7 @@ export class PlayerRenderer {
   }
 
   private drawPlayerFace(entity: Entity, size: Vec2): void {
-    const face = new Graphics();
+    const face = this.takeGraphics();
     const eyeY = -size.y * 0.12;
     face.circle(-size.x * 0.16, eyeY, 4);
     face.circle(size.x * 0.16, eyeY, 4);
@@ -137,19 +152,34 @@ export class PlayerRenderer {
   }
 
   private drawHud(world: RuntimeWorld, player?: Entity): void {
-    const hud = new Text({
-      text: player
-        ? `Frame ${world.clock.frame}  X ${Math.round(player.transform.position.x)}  Y ${Math.round(player.transform.position.y)}`
-        : `Frame ${world.clock.frame}`,
-      style: {
-        fill: "#e8eee9",
-        fontFamily: "Inter, Microsoft YaHei, sans-serif",
-        fontSize: 13,
-        fontWeight: "700",
-      },
-    });
-    hud.position.set(14, 12);
-    this.hudLayer.addChild(hud);
+    this.hudText.text = player
+      ? `Frame ${world.clock.frame}  X ${Math.round(player.transform.position.x)}  Y ${Math.round(player.transform.position.y)}`
+      : `Frame ${world.clock.frame}`;
+    this.hudText.position.set(14, 12);
+  }
+
+  private recycleWorldLayer(): void {
+    const keep = new Set([this.backdrop, this.horizon].filter(Boolean));
+    const children = this.worldLayer.children.slice();
+    for (const child of children) {
+      if (keep.has(child as Graphics)) continue;
+      this.worldLayer.removeChild(child);
+      if (child instanceof Graphics) {
+        resetGraphics(child);
+        this.graphicsPool.push(child);
+      } else {
+        child.destroy({ children: true });
+      }
+    }
+  }
+
+  private takeGraphics(): Graphics {
+    const item = this.graphicsPool.pop();
+    if (item) {
+      resetGraphics(item);
+      return item;
+    }
+    return new Graphics();
   }
 }
 
@@ -165,4 +195,13 @@ function parseColor(value: string): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function resetGraphics(item: Graphics): void {
+  item.clear();
+  item.position.set(0, 0);
+  item.scale.set(1, 1);
+  item.rotation = 0;
+  item.alpha = 1;
+  item.visible = true;
 }

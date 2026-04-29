@@ -1,30 +1,41 @@
-export type ViewPanelId = "scene" | "properties" | "assets" | "tasks";
-export type ViewToolId = "select" | "superBrush" | "shape" | "assist";
+export type ViewPanelId = "scene" | "properties" | "assets" | "library" | "tasks" | "output";
+export type ViewToolId = "select" | "square" | "circle" | "leaf" | "polygon" | "superBrush";
 export type StorageSource = "api" | "local" | undefined;
 export type ReactionCaseSummary = { status: string; expected?: string };
 
 export function panelLabel(panel: ViewPanelId): string {
   return (
     {
-      scene: "场景层级",
+      scene: "世界",
       properties: "属性",
       assets: "对象资源",
+      library: "资源库",
       tasks: "任务列表",
+      output: "输出",
     } satisfies Record<ViewPanelId, string>
   )[panel];
 }
 
 export function toolLabel(tool: ViewToolId): string {
-  return ({ select: "选择", superBrush: "超级画笔", shape: "柳叶笔", assist: "辅助" } satisfies Record<ViewToolId, string>)[tool];
+  return (
+    {
+      select: "选择",
+      square: "方块",
+      circle: "圆形",
+      leaf: "柳叶笔",
+      polygon: "多边形",
+      superBrush: "超级画笔",
+    } satisfies Record<ViewToolId, string>
+  )[tool];
 }
 
 export function typeLabel(kind: string): string {
   return (
     {
       entity: "实体（默认本体）",
-      presentation: "表现体",
+      presentation: "可视体",
       trigger: "触发区",
-      effect: "表现体",
+      effect: "可视体",
       custom: "自定义",
     } satisfies Record<string, string>
   )[kind] || kind;

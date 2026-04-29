@@ -4,12 +4,14 @@ export type LoadProjectResult = {
   empty: boolean;
   project: Project | null;
   storage?: "api" | "local";
+  warning?: string;
 };
 
 export type SaveProjectResult = {
   ok: true;
   savedAt?: string;
   storage?: "api" | "local";
+  warning?: string;
 };
 
 type ApiObject = Record<string, unknown>;
@@ -43,10 +45,11 @@ export async function loadProject(endpoint = V2_PROJECT_ENDPOINT): Promise<LoadP
       return { empty: false, project: selected, storage: selected === project ? "api" : "local" };
     }
     if (body.empty !== true) throw new ProjectPersistenceError("project response has an invalid shape");
-  } catch {
+  } catch (error) {
     const local = readLocalProject();
-    if (local) return { empty: false, project: local, storage: "local" };
-    return { empty: true, project: null, storage: "local" };
+    const warning = errorMessage(error);
+    if (local) return { empty: false, project: local, storage: "local", warning };
+    return { empty: true, project: null, storage: "local", warning };
   }
 
   const local = readLocalProject();
@@ -71,8 +74,8 @@ export async function saveProject(project: Project, endpoint = V2_PROJECT_ENDPOI
     const body = objectPayload(payload);
     if (body.ok === false) throw apiError("save project failed", payload);
     return { ok: true, savedAt: typeof body.savedAt === "string" ? body.savedAt : undefined, storage: "api" };
-  } catch {
-    return { ok: true, savedAt: project.meta.updatedAt, storage: "local" };
+  } catch (error) {
+    return { ok: true, savedAt: project.meta.updatedAt, storage: "local", warning: errorMessage(error) };
   }
 }
 
@@ -98,6 +101,10 @@ function objectPayload(payload: unknown): ApiObject {
 function apiError(fallback: string, payload: unknown): ProjectPersistenceError {
   const body = objectPayload(payload);
   return new ProjectPersistenceError(typeof body.error === "string" ? body.error : fallback);
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function isProject(value: unknown): value is Project {

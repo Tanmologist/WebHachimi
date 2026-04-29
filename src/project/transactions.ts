@@ -42,7 +42,9 @@ export function rollbackTransaction(project: Project, transaction: Transaction):
 
 function applyPatchesInPlace(project: Project, patches: ProjectPatch[]): Result<void> {
   for (const patch of patches) {
-    const segments = parsePath(patch.path);
+    const parsedPath = parsePath(patch.path);
+    if (!parsedPath.ok) return parsedPath;
+    const segments = parsedPath.value;
     if (segments.length === 0) return err("patch path cannot be empty");
     const parent = resolveParent(project, segments);
     if (!parent.ok) return parent;
@@ -60,8 +62,11 @@ function applyPatchesInPlace(project: Project, patches: ProjectPatch[]): Result<
   return ok(undefined);
 }
 
-function parsePath(path: string): string[] {
-  return path.split("/").map((part) => part.trim()).filter(Boolean);
+function parsePath(path: string): Result<string[]> {
+  const segments = path.split("/").map((part) => part.trim()).filter(Boolean);
+  const unsafe = segments.find(isUnsafePatchKey);
+  if (unsafe) return err(`patch path contains unsafe key: ${unsafe}`);
+  return ok(segments);
 }
 
 function resolveParent(root: unknown, segments: string[]): Result<Record<string, unknown>> {
@@ -73,4 +78,8 @@ function resolveParent(root: unknown, segments: string[]): Result<Record<string,
     current = next as Record<string, unknown>;
   }
   return ok(current);
+}
+
+function isUnsafePatchKey(key: string): boolean {
+  return key === "__proto__" || key === "prototype" || key === "constructor";
 }

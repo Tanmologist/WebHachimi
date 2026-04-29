@@ -44,9 +44,9 @@ Legacy direct file mode can still open `index.html`, with browser-local persiste
 ## Data Boundary
 
 - v2 editor and player use `/api/v2/project`.
-- v2 project data is saved to `data/v2-project.json` during Vite development.
+- v2 seed data lives in `data/v2-project.json`; runtime saves go to ignored `data/local/v2-project.json`.
 - Legacy editor uses `/api/project`.
-- Legacy project data is saved to `data/project.json`.
+- Legacy seed data lives in `data/project.json`; runtime saves go to ignored `data/local/project.json`.
 
 Keep these paths separate. Do not mix legacy project payloads with v2 project payloads.
 
@@ -55,6 +55,7 @@ Keep these paths separate. Do not mix legacy project payloads with v2 project pa
 ```powershell
 npm run typecheck
 npm run build
+npm run verify
 ```
 
 The production output is written to:
@@ -67,20 +68,47 @@ dist-v2/
 
 ## Smoke Checks
 
+Run the full smoke suite through the unified verification entry:
+
+```powershell
+npm run verify
+```
+
+To run only smoke checks:
+
+```powershell
+npm run smoke
+```
+
+The smoke suite currently includes:
+
 ```powershell
 npm run smoke:persistence
+npm run smoke:persistence-api
 npm run smoke:folder-move
 npm run smoke:task-workflow
 npm run smoke:autonomy-summary
 npm run smoke:viewport
+npm run smoke:context-menu
+npm run smoke:resource-import
+npm run smoke:resource-animation
+npm run smoke:canvas-transform
+npm run smoke:collision-geometry
+npm run smoke:presentation-label
 npm run smoke:floating-panels
 npm run smoke:runtime-visibility
+npm run smoke:performance
+npm run smoke:workshops
 npm run smoke:transform
 npm run smoke:sweep
 npm run smoke:autonomy
 ```
 
-These cover the current rebuild spine: editor persistence assembly, user transaction slices, canvas viewport math, floating panel docking constraints, runtime-only template visibility, timing sweep expectations, and autonomous task/test records.
+These cover the current rebuild spine: editor persistence and persistence API assembly, user transaction slices, canvas viewport and transform math, context menu/resource workflows, collision geometry, presentation labels, floating panel docking constraints, runtime-only template visibility, a conservative runtime performance budget, gameplay workshops, timing sweep expectations, and autonomous task/test records.
+
+## Toolchain
+
+Use Node.js `24.12.0` and npm `11.x`. The pinned local version lives in `.nvmrc`, and `package.json` declares matching engines. CI installs with `npm ci` and runs `npm run verify`.
 
 ## Build Boundary
 

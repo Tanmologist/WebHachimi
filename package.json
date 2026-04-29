@@ -2,15 +2,21 @@
   "name": "webhachimi",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=24.12.0 <25",
+    "npm": ">=11.6.2 <12"
+  },
   "scripts": {
     "serve": "node server.js",
     "serve:legacy": "node server.js",
-    "serve:preview": "set WEBHACHIMI_NO_BROWSER=1&& set WEBHACHIMI_PORT=5578&& node server.js",
+    "serve:preview": "node -e \"process.env.WEBHACHIMI_NO_BROWSER='1'; process.env.WEBHACHIMI_PORT='5578'; require('./server.js')\"",
     "dev": "vite --host 127.0.0.1",
     "dev:v2": "vite --host 127.0.0.1 --open /v2.html",
     "dev:player": "vite --host 127.0.0.1 --open /player.html",
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke": "npm run smoke:persistence && npm run smoke:persistence-api && npm run smoke:folder-move && npm run smoke:task-workflow && npm run smoke:autonomy-summary && npm run smoke:viewport && npm run smoke:context-menu && npm run smoke:resource-import && npm run smoke:resource-animation && npm run smoke:canvas-transform && npm run smoke:collision-geometry && npm run smoke:presentation-label && npm run smoke:floating-panels && npm run smoke:runtime-visibility && npm run smoke:performance && npm run smoke:workshops && npm run smoke:transform && npm run smoke:sweep && npm run smoke:autonomy",
+    "verify": "npm run typecheck && npm run build && npm run smoke",
     "smoke:persistence": "tsx src/testing/persistenceControllerSmoke.ts",
     "smoke:persistence-api": "tsx src/testing/persistenceApiSmoke.ts",
     "smoke:folder-move": "tsx src/testing/folderMoveTransactionSmoke.ts",
@@ -19,11 +25,13 @@
     "smoke:viewport": "tsx src/testing/viewportMathSmoke.ts",
     "smoke:context-menu": "tsx src/testing/contextMenuActionsSmoke.ts",
     "smoke:resource-import": "tsx src/testing/resourceImportSmoke.ts",
+    "smoke:resource-animation": "tsx src/testing/resourceAnimationSmoke.ts",
     "smoke:canvas-transform": "tsx src/testing/canvasTransformSmoke.ts",
     "smoke:collision-geometry": "tsx src/testing/collisionGeometrySmoke.ts",
     "smoke:presentation-label": "tsx src/testing/presentationLabelSmoke.ts",
     "smoke:floating-panels": "tsx src/testing/floatingPanelLayoutSmoke.ts",
     "smoke:runtime-visibility": "tsx src/testing/runtimeVisibilitySmoke.ts",
+    "smoke:performance": "tsx src/testing/performanceSmoke.ts",
     "smoke:workshops": "tsx src/testing/gameplayWorkshopSmoke.ts",
     "smoke:transform": "tsx src/testing/transformTransactionSmoke.ts",
     "smoke:sweep": "tsx src/testing/smokeSweep.ts",
@@ -35,6 +43,7 @@
     "vite": "^8.0.10"
   },
   "dependencies": {
+    "dockview-core": "^5.2.0",
     "pixi.js": "^8.18.1"
   }
 }

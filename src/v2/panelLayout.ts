@@ -1,56 +1,36 @@
 import {
-  activateDockPanel,
-  applyDockDrop,
-  createDefaultDockingState,
-  detectDockDropTarget,
-  dockPanelOrder,
-  removePanelsFromDockingState,
-  resolveDockingRects,
-  resolveStackActivePanels,
-  targetDockEdge,
-  type DockDropTarget,
-  type DockEdge,
-  type DockingState,
-  type DockPanelId,
-  type DockRect,
-} from "./dockingLayout";
+  createDockview,
+  type DockviewApi,
+  type GroupPanelPartInitParameters,
+  type IContentRenderer,
+  type IDockviewPanel,
+  type ITabRenderer,
+  type IWatermarkRenderer,
+  type PanelTransfer,
+  type TabPartInitParameters,
+} from "dockview-core";
 
-export type PanelId = DockPanelId;
+export type PanelId = "scene" | "properties" | "assets" | "library" | "tasks" | "output";
+type DockviewGroupDropLocation = "tab" | "header_space" | "content" | "edge";
 export type PanelState = "open" | "minimized" | "closed";
-export type ResizeTarget = "scene-width" | "right-width" | "properties-height" | "assets-height";
-export type PanelDock = "float" | DockEdge;
+export type PanelPlacement = "docked" | "floating";
+export type PanelDock = PanelPlacement;
+export type ResizeTarget = "dockview";
 
-export type FloatingPanelLayout = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  z: number;
-  dock: PanelDock;
-};
-
-export type PanelRect = DockRect;
-
-export type DockedPanelLayout = {
+export type FixedPanelLayout = {
   panel: PanelId;
-  layout: FloatingPanelLayout;
+  area: "scene" | "properties" | "assets" | "tasks" | "dock";
+  state: PanelState;
+  placement: PanelPlacement;
+  visible: boolean;
+  docked: boolean;
+  floating: boolean;
+  order: number;
 };
 
-type WindowDragState = {
-  panel: PanelId;
-  pointerId: number;
-  startX: number;
-  startY: number;
-  layout: FloatingPanelLayout;
-  previewTarget: DockDropTarget;
-};
+export type StudioWorkspaceMode = "desktop" | "compact" | "narrow";
 
-type PanelSizes = {
-  sceneWidth: number;
-  rightWidth: number;
-  propertiesHeight: number;
-  assetsHeight: number;
-};
+type DockContentId = PanelId;
 
 type PanelLayoutControllerOptions = {
   root: HTMLElement;
@@ -58,43 +38,59 @@ type PanelLayoutControllerOptions = {
   renderAll: () => void;
 };
 
-const panelOrder: PanelId[] = [...dockPanelOrder];
-const snapThreshold = 48;
-const snapHysteresis = 18;
-const dockGap = 1;
-const minDockedPanelSpan = 120;
-const minSideWidth = 180;
-const minCenterSpan = 140;
+type DockPanelDefaults = {
+  title: string;
+  minimumWidth: number;
+  minimumHeight: number;
+  initialWidth: number;
+  initialHeight: number;
+};
+
+const panelOrder: PanelId[] = ["scene", "properties", "assets", "library", "tasks", "output"];
+const dockComponentName = "webhachimi-panel";
+const dockTabName = "webhachimi-tab";
+
+const panelAreas: Record<PanelId, FixedPanelLayout["area"]> = {
+  scene: "scene",
+  properties: "properties",
+  assets: "assets",
+  library: "dock",
+  tasks: "tasks",
+  output: "dock",
+};
+
+const dockDefaults: Record<DockContentId, DockPanelDefaults> = {
+  scene: { title: "世界", minimumWidth: 220, minimumHeight: 180, initialWidth: 300, initialHeight: 620 },
+  properties: { title: "属性", minimumWidth: 260, minimumHeight: 180, initialWidth: 330, initialHeight: 360 },
+  assets: { title: "资源", minimumWidth: 320, minimumHeight: 160, initialWidth: 520, initialHeight: 250 },
+  library: { title: "资源库", minimumWidth: 320, minimumHeight: 220, initialWidth: 430, initialHeight: 420 },
+  tasks: { title: "任务", minimumWidth: 280, minimumHeight: 180, initialWidth: 330, initialHeight: 310 },
+  output: { title: "输出", minimumWidth: 320, minimumHeight: 150, initialWidth: 520, initialHeight: 210 },
+};
 
 export class PanelLayoutController {
   readonly panelState: Record<PanelId, PanelState> = {
     scene: "open",
     properties: "open",
     assets: "open",
+    library: "closed",
     tasks: "open",
+    output: "closed",
   };
 
-  readonly panelSizes: PanelSizes = {
-    sceneWidth: 300,
-    rightWidth: 390,
-    propertiesHeight: 220,
-    assetsHeight: 150,
-  };
+  readonly panelPlacement: Record<PanelId, PanelPlacement> = defaultPanelPlacement();
+  readonly panelSnaps: Partial<Record<PanelId, never>> = {};
 
-  readonly panelWindows: Record<PanelId, FloatingPanelLayout> = {
-    scene: { x: 10, y: 10, width: 300, height: 560, z: 11, dock: "left" },
-    properties: { x: 700, y: 10, width: 390, height: 220, z: 12, dock: "right" },
-    assets: { x: 700, y: 238, width: 390, height: 154, z: 13, dock: "float" },
-    tasks: { x: 700, y: 400, width: 390, height: 420, z: 14, dock: "right" },
-  };
-
-  private windowDrag: WindowDragState | undefined;
-  private dockingState: DockingState = createDefaultDockingState();
-  private zCounter = 30;
-  private defaultsAligned = false;
   private readonly root: HTMLElement;
   private readonly setNotice: (notice: string) => void;
   private readonly renderAll: () => void;
+  private dockview: DockviewApi | undefined;
+  private parkingLot: HTMLElement | undefined;
+  private focusedPanel: PanelId | undefined = "tasks";
+  private layoutVersion = 0;
+  private internalMutationDepth = 0;
+  private editorPanelsHiddenForRuntime = false;
+  private readonly preservedPanelRemovals = new Set<PanelId>();
 
   constructor(options: PanelLayoutControllerOptions) {
     this.root = options.root;
@@ -103,486 +99,480 @@ export class PanelLayoutController {
   }
 
   applyPanelSizes(): void {
-    this.alignDefaultWindows();
-    const workspace = this.workspaceRect();
-    const visibleState = this.visibleDockingState();
-    const dockedRects = resolveDockingRects(visibleState, workspace);
-    const activePanels = resolveStackActivePanels(visibleState);
-    for (const panel of panelOrder) this.applyWindow(panel, dockedRects[panel], activePanels[panel]);
-  }
+    const dockview = this.ensureDockview();
+    if (!dockview) return;
 
-  startWindowDrag(event: PointerEvent): void {
-    if ((event.target as HTMLElement).closest("button, textarea, input, select, a")) return;
-    const handle = event.currentTarget as HTMLElement;
-    const panel = handle.dataset.windowDrag as PanelId | undefined;
-    if (!panel) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const layout = this.currentFloatingLayout(panel);
-    this.panelWindows[panel] = layout;
-    this.bringPanelToFront(panel);
-    this.windowDrag = {
-      panel,
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      layout: { ...layout },
-      previewTarget: { kind: "float" },
-    };
-    handle.setPointerCapture(event.pointerId);
-    this.root.classList.add("is-dragging-window");
-    this.applyDockPreview(panel, { kind: "float" });
-    this.applyWindow(panel);
-  }
-
-  onWindowDragMove(event: PointerEvent): void {
-    if (!this.windowDrag || event.pointerId !== this.windowDrag.pointerId) return;
-    event.preventDefault();
-    const workspace = this.workspaceRect();
-    const pointer = this.pointerInWorkspace(event);
-    const dx = event.clientX - this.windowDrag.startX;
-    const dy = event.clientY - this.windowDrag.startY;
-    const layout = this.panelWindows[this.windowDrag.panel];
-    const next = constrainWindowLayout(
-      {
-        ...layout,
-        dock: "float",
-        x: this.windowDrag.layout.x + dx,
-        y: this.windowDrag.layout.y + dy,
-      },
-      workspace,
-    );
-    const visibleState = this.visibleDockingState();
-    const rects = resolveDockingRects(visibleState, workspace);
-    const previewTarget = this.normalizeUiDropTarget(
-      detectDockDropTarget({
-        pointer,
-        draggedRect: toDockRect(next),
-        state: visibleState,
-        rects,
-        workspace,
-        draggedPanel: this.windowDrag.panel,
-        targetOrder: this.visiblePanelHitOrder(),
-      }),
-    );
-    this.windowDrag.previewTarget = previewTarget;
-    layout.dock = "float";
-    layout.x = next.x;
-    layout.y = next.y;
-    layout.width = next.width;
-    layout.height = next.height;
-    this.applyDockPreview(this.windowDrag.panel, previewTarget, layout);
-    this.applyWindow(this.windowDrag.panel);
-  }
-
-  stopWindowDrag(event: PointerEvent): void {
-    if (!this.windowDrag || event.pointerId !== this.windowDrag.pointerId) return;
-    const panel = this.windowDrag.panel;
-    const target = this.normalizeUiDropTarget(this.windowDrag.previewTarget);
-    const dock = this.dockForTarget(target);
-    this.windowDrag = undefined;
-    this.root.classList.remove("is-dragging-window");
-    this.applyDockPreview(panel, { kind: "float" });
-    const workspace = this.workspaceRect();
-    const floatingLayout = constrainWindowLayout({ ...this.panelWindows[panel], dock: "float" }, workspace);
-    this.dockingState = applyDockDrop({
-      state: this.dockingState,
-      panel,
-      target,
-      floatingRect: toDockRect(floatingLayout),
-      workspace,
-    });
-    this.panelWindows[panel] = { ...floatingLayout, dock };
-    this.bringPanelToFront(panel);
-    this.setNotice(dock === "float" ? `${panelDisplayName(panel)}窗口已浮动。` : `${panelDisplayName(panel)}窗口已停靠到${dockDisplayName(dock)}。`);
-    this.renderAll();
+    this.syncRuntimeMode(dockview);
+    this.applyPlacementDatasets();
+    this.layoutDockview(dockview);
   }
 
   bringPanelToFront(panel: PanelId): void {
-    this.dockingState = activateDockPanel(this.dockingState, panel);
-    this.panelWindows[panel].z = ++this.zCounter;
+    this.restorePanel(panel);
+  }
+
+  frontPanel(): PanelId | undefined {
+    return this.focusedPanel;
+  }
+
+  layoutSignature(): string {
+    const runtimeMode = this.root.dataset.runtimeMode || "editor";
+    return [
+      runtimeMode,
+      this.layoutVersion,
+      ...panelOrder.map((panel) => `${panel}:${this.panelState[panel]}:${this.panelPlacement[panel]}:${this.hasDockPanel(panel) ? 1 : 0}`),
+    ].join("|");
+  }
+
+  minimizePanel(panel: PanelId): void {
+    this.panelState[panel] = "minimized";
+    this.closeDockPanel(panel, { preserveState: true });
+    if (this.focusedPanel === panel) this.focusedPanel = this.nextOpenPanel();
+    this.applyPanelSizes();
+  }
+
+  closePanel(panel: PanelId): void {
+    this.panelState[panel] = "closed";
+    this.closeDockPanel(panel, { preserveState: true });
+    if (this.focusedPanel === panel) this.focusedPanel = this.nextOpenPanel();
+    this.applyPanelSizes();
+  }
+
+  restorePanel(panel: PanelId): void {
+    this.panelState[panel] = "open";
+    const dockPanel = this.ensureDockPanel(panel);
+    if (dockPanel) {
+      this.panelPlacement[panel] = dockPanel.api.location.type === "floating" ? "floating" : "docked";
+      this.focusDockPanel(dockPanel);
+    }
+    this.focusedPanel = panel;
+    this.applyPanelSizes();
+  }
+
+  centerPanel(panel: PanelId): void {
+    this.panelState[panel] = "open";
+    const dockview = this.ensureDockview();
+    const dockPanel = this.ensureDockPanel(panel);
+    if (!dockview || !dockPanel) return;
+
+    this.withInternalMutation(() => {
+      dockview.addFloatingGroup(dockPanel, this.centerFloatingDefaults(panel));
+    });
+    this.panelPlacement[panel] = "floating";
+    this.focusedPanel = panel;
+    this.layoutVersion += 1;
+    this.applyPanelSizes();
   }
 
   isDraggingWindow(): boolean {
-    return Boolean(this.windowDrag);
+    return false;
   }
 
-  hasOpenRightPanel(): boolean {
-    return this.panelState.properties === "open" || this.panelState.assets === "open" || this.panelState.tasks === "open";
+  startWindowDrag(_event: PointerEvent): void {
+    // Dockview owns panel dragging.
   }
 
-  startPanelResize(event: PointerEvent): void {
-    const handle = event.currentTarget as HTMLElement;
-    const panel = handle.dataset.panelResize as PanelId | undefined;
-    if (!panel) return;
-    this.startWindowDrag(event);
+  onWindowDragMove(_event: PointerEvent): void {
+    // Dockview owns panel dragging.
+  }
+
+  stopWindowDrag(_event: PointerEvent): void {
+    // Dockview owns panel dragging.
+  }
+
+  startPanelResize(_event: PointerEvent): void {
+    // Dockview owns sash and floating-group resizing.
   }
 
   onPanelResizeMove(_event: PointerEvent): void {
-    return;
+    // Dockview owns sash and floating-group resizing.
   }
 
   stopPanelResize(_event: PointerEvent): void {
-    return;
+    // Dockview owns sash and floating-group resizing.
   }
 
-  private alignDefaultWindows(): void {
-    if (this.defaultsAligned) return;
-    const workspace = this.workspaceBounds();
-    const rightX = Math.max(320, workspace.width - 400);
-    this.panelWindows.properties.x = rightX;
-    this.panelWindows.assets.x = rightX;
-    this.panelWindows.tasks.x = rightX;
-    this.panelWindows.scene.height = Math.max(360, workspace.height - 20);
-    this.panelWindows.tasks.height = Math.max(280, workspace.height - this.panelWindows.tasks.y - 10);
-    this.defaultsAligned = true;
-  }
+  private ensureDockview(): DockviewApi | undefined {
+    if (this.dockview) return this.dockview;
 
-  private applyWindow(panel: PanelId, dockedRect?: PanelRect, activePanel?: PanelId): void {
-    const element = this.root.querySelector<HTMLElement>(`.v2-window[data-panel="${panel}"]`);
-    if (!element) return;
-    if (activePanel && activePanel !== panel) {
-      element.style.display = "none";
-      return;
-    }
-    element.style.display = "";
-    const workspace = this.workspaceRect();
-    const current = this.panelWindows[panel];
-    const floatingSource = this.dockingState.floating[panel];
-    const layout = constrainWindowLayout(
-      current.dock === "float" && floatingSource ? { ...current, ...floatingSource, dock: "float" } : current,
-      workspace,
-    );
-    const rect = layout.dock === "float" ? layout : dockedRect || dockRect(layout.dock, workspace, layout);
-    this.panelWindows[panel] = { ...layout, x: rect.x, y: rect.y, width: rect.width, height: rect.height };
-    element.style.left = `${Math.round(rect.x)}px`;
-    element.style.top = `${Math.round(rect.y)}px`;
-    element.style.width = `${Math.round(rect.width)}px`;
-    element.style.height = `${Math.round(rect.height)}px`;
-    element.style.zIndex = String(layout.z);
-    element.dataset.dock = layout.dock;
-  }
+    const dockHost = this.dockHostElement();
+    if (!dockHost) return undefined;
 
-  private currentFloatingLayout(panel: PanelId): FloatingPanelLayout {
-    const layout = this.panelWindows[panel];
-    const workspace = this.workspaceRect();
-    if (layout.dock === "float") return constrainWindowLayout({ ...layout, dock: "float" }, workspace);
-    const dockedRects = resolveDockingRects(this.visibleDockingState(), workspace);
-    const rect = dockedRects[panel] || dockRect(layout.dock, workspace, layout);
-    return constrainWindowLayout({ ...layout, ...rect, dock: "float" }, workspace);
-  }
-
-  private applyDockPreview(panel: PanelId, target: DockDropTarget, floatingLayout = this.panelWindows[panel]): void {
-    const previewDock = target.kind === "stack-center" ? "stack" : target.kind === "root-edge" || target.kind === "panel-edge" ? target.edge : "float";
-    this.root.dataset.dockPreview = previewDock;
-    const preview = this.root.querySelector<HTMLElement>(".v2-dock-preview");
-    if (!preview) return;
-    if (target.kind === "float") {
-      preview.removeAttribute("style");
-      return;
-    }
-    const workspace = this.workspaceRect();
-    const floatingRect = toDockRect(constrainWindowLayout({ ...floatingLayout, dock: "float" }, workspace));
-    const committedState = applyDockDrop({
-      state: this.dockingState,
-      panel,
-      target,
-      floatingRect,
-      workspace,
+    this.parkingLot = this.createParkingLot();
+    const dockview = createDockview(dockHost, {
+      defaultTabComponent: dockTabName,
+      dndEdges: false,
+      floatingGroupBounds: "boundedWithinViewport",
+      noPanelsOverlay: "watermark",
+      singleTabMode: "default",
+      tabAnimation: "smooth",
+      createComponent: (options) => new ExistingElementContentRenderer(this.root, this.parkingLot!, coerceDockContentId(options.id)),
+      createTabComponent: () => new DockTabRenderer(),
+      createWatermarkComponent: () => new EmptyWatermarkRenderer(),
     });
-    const visibleCommittedState = removePanelsFromDockingState(committedState, this.hiddenPanelIds());
-    const rect = resolveDockingRects(visibleCommittedState, workspace)[panel];
-    if (!rect) {
-      preview.removeAttribute("style");
+    this.dockview = dockview;
+    this.bindDockviewEvents(dockview);
+
+    this.withInternalMutation(() => {
+      for (const panel of panelOrder) {
+        if (this.panelState[panel] === "open") this.ensureDockPanel(panel);
+      }
+    });
+    this.layoutDockview(dockview);
+    return dockview;
+  }
+
+  private bindDockviewEvents(dockview: DockviewApi): void {
+    dockview.onWillShowOverlay((event) => {
+      if (isSelfReferentialDropTarget(event.getData(), event.group?.id, event.kind)) event.preventDefault();
+    });
+    dockview.onWillDrop((event) => {
+      if (isSelfReferentialDropTarget(event.getData(), event.group?.id, event.kind)) event.preventDefault();
+    });
+    dockview.onDidActivePanelChange((panel) => {
+      const panelId = asPanelId(panel?.id);
+      if (!panelId || !panel) return;
+      this.focusedPanel = panelId;
+      this.panelPlacement[panelId] = panel.api.location.type === "floating" ? "floating" : "docked";
+      this.requestRender();
+    });
+    dockview.onDidRemovePanel((panel) => {
+      const panelId = asPanelId(panel.id);
+      if (!panelId) return;
+      const preserved = this.preservedPanelRemovals.delete(panelId);
+      if (!preserved && this.panelState[panelId] === "open") this.panelState[panelId] = "closed";
+      if (this.focusedPanel === panelId) this.focusedPanel = this.nextOpenPanel();
+      this.requestRender();
+    });
+    dockview.onDidAddPanel((panel) => {
+      const panelId = asPanelId(panel.id);
+      if (!panelId) return;
+      this.panelState[panelId] = "open";
+      this.panelPlacement[panelId] = panel.api.location.type === "floating" ? "floating" : "docked";
+      this.requestRender();
+    });
+    dockview.onDidLayoutChange(() => {
+      this.layoutVersion += 1;
+      for (const panel of panelOrder) {
+        const dockPanel = dockview.getPanel(panel);
+        if (dockPanel) this.panelPlacement[panel] = dockPanel.api.location.type === "floating" ? "floating" : "docked";
+      }
+    });
+  }
+
+  private ensureDockPanel(panel: PanelId): IDockviewPanel | undefined {
+    const dockview = this.ensureDockview();
+    if (!dockview) return undefined;
+    const existing = dockview.getPanel(panel);
+    if (existing) return existing;
+
+    const defaults = dockDefaults[panel];
+    return this.withInternalMutation(() =>
+      dockview.addPanel({
+        id: panel,
+        title: defaults.title,
+        component: dockComponentName,
+        tabComponent: dockTabName,
+        params: { panel, closable: true },
+        minimumWidth: defaults.minimumWidth,
+        minimumHeight: defaults.minimumHeight,
+        initialWidth: defaults.initialWidth,
+        initialHeight: defaults.initialHeight,
+        renderer: "onlyWhenVisible",
+        floating: this.initialFloatingPosition(panel),
+      }),
+    );
+  }
+
+  private initialFloatingPosition(panel: PanelId): { x: number; y: number; width: number; height: number } {
+    const { width, height } = this.floatingSize(panel);
+    const host = this.dockHostElement();
+    const hostWidth = host?.clientWidth || window.innerWidth || 1200;
+    const hostHeight = host?.clientHeight || window.innerHeight || 760;
+    const rightX = Math.max(12, hostWidth - width - 14);
+    const bottomY = Math.max(12, hostHeight - height - 14);
+    const centeredX = Math.max(12, Math.round((hostWidth - width) / 2));
+    const centeredY = Math.max(12, Math.round((hostHeight - height) / 2));
+    const positionByPanel: Record<PanelId, { x: number; y: number }> = {
+      scene: { x: 12, y: 12 },
+      properties: { x: rightX, y: 12 },
+      assets: { x: Math.max(12, Math.round(hostWidth * 0.34)), y: bottomY },
+      library: { x: centeredX, y: centeredY },
+      tasks: { x: rightX, y: Math.min(Math.max(12, 390), bottomY) },
+      output: { x: centeredX, y: bottomY },
+    };
+    return { ...positionByPanel[panel], width, height };
+  }
+
+  private centerFloatingDefaults(panel: PanelId): { x: number; y: number; width: number; height: number } {
+    const { width, height } = this.floatingSize(panel);
+    const host = this.dockHostElement();
+    const hostWidth = host?.clientWidth || window.innerWidth || 1200;
+    const hostHeight = host?.clientHeight || window.innerHeight || 760;
+    return {
+      x: Math.max(12, Math.round((hostWidth - width) / 2)),
+      y: Math.max(12, Math.round((hostHeight - height) / 2)),
+      width,
+      height,
+    };
+  }
+
+  private floatingSize(panel: PanelId): { width: number; height: number } {
+    const defaults = dockDefaults[panel];
+    const host = this.dockHostElement();
+    const hostWidth = host?.clientWidth || window.innerWidth || 1200;
+    const hostHeight = host?.clientHeight || window.innerHeight || 760;
+    return {
+      width: Math.min(defaults.initialWidth, Math.max(defaults.minimumWidth, hostWidth - 80)),
+      height: Math.min(defaults.initialHeight, Math.max(defaults.minimumHeight, hostHeight - 80)),
+    };
+  }
+
+  private focusDockPanel(panel: IDockviewPanel): void {
+    this.withInternalMutation(() => {
+      this.dockview?.focus();
+      panel.api.group.model.openPanel(panel);
+      panel.api.group.model.setActive(true);
+    });
+  }
+
+  private closeDockPanel(panel: PanelId, options?: { preserveState?: boolean }): void {
+    const dockPanel = this.dockview?.getPanel(panel);
+    if (!dockPanel) return;
+    this.withInternalMutation(() => {
+      if (options?.preserveState) this.preservedPanelRemovals.add(panel);
+      this.dockview?.removePanel(dockPanel);
+    });
+  }
+
+  private syncRuntimeMode(dockview: DockviewApi): void {
+    const gameMode = this.root.dataset.runtimeMode === "game";
+    if (gameMode === this.editorPanelsHiddenForRuntime) return;
+
+    this.editorPanelsHiddenForRuntime = gameMode;
+    if (gameMode) {
+      this.withInternalMutation(() => {
+        for (const panel of panelOrder) this.closeDockPanel(panel, { preserveState: true });
+      });
       return;
     }
-    preview.style.left = `${Math.round(rect.x)}px`;
-    preview.style.top = `${Math.round(rect.y)}px`;
-    preview.style.width = `${Math.round(rect.width)}px`;
-    preview.style.height = `${Math.round(rect.height)}px`;
+
+    this.withInternalMutation(() => {
+      for (const panel of panelOrder) {
+        if (this.panelState[panel] === "open") this.ensureDockPanel(panel);
+      }
+    });
+    this.layoutDockview(dockview);
   }
 
-  private visibleDockingState(): DockingState {
-    return removePanelsFromDockingState(this.dockingState, this.hiddenPanelIds());
+  private applyPlacementDatasets(): void {
+    this.root.dataset.scenePlacement = this.panelPlacement.scene;
+    this.root.dataset.propertiesPlacement = this.panelPlacement.properties;
+    this.root.dataset.assetsPlacement = this.panelPlacement.assets;
+    this.root.dataset.libraryPlacement = this.panelPlacement.library;
+    this.root.dataset.tasksPlacement = this.panelPlacement.tasks;
+    this.root.dataset.outputPlacement = this.panelPlacement.output;
+    this.root.dataset.leftSnap = "closed";
+    this.root.dataset.rightSnap = "closed";
+    this.root.dataset.topSnap = "closed";
+    this.root.dataset.bottomSnap = "closed";
   }
 
-  private hiddenPanelIds(): PanelId[] {
-    return panelOrder.filter((panel) => this.panelState[panel] !== "open");
+  private layoutDockview(dockview: DockviewApi): void {
+    const dockHost = this.dockHostElement();
+    if (!dockHost) return;
+    const width = dockHost.clientWidth || Math.max(360, window.innerWidth - 50);
+    const height = dockHost.clientHeight || Math.max(240, window.innerHeight - 66);
+    dockview.layout(width, height);
   }
 
-  private normalizeUiDropTarget(target: DockDropTarget): DockDropTarget {
-    return target;
+  private hasDockPanel(panel: PanelId): boolean {
+    return Boolean(this.dockview?.getPanel(panel));
   }
 
-  private dockForTarget(target: DockDropTarget): PanelDock {
-    if (target.kind === "panel-edge" && this.dockingState.floating[target.panel]) return "float";
-    if (target.kind === "stack-center") return this.panelWindows[target.panel]?.dock || "float";
-    return targetDockEdge(target);
+  private dockHostElement(): HTMLElement | null {
+    return this.root.querySelector<HTMLElement>('[data-role="dockview"]');
   }
 
-  private visiblePanelHitOrder(): PanelId[] {
-    return panelOrder
-      .filter((panel) => this.panelState[panel] === "open")
-      .sort((left, right) => this.panelWindows[right].z - this.panelWindows[left].z);
+  private createParkingLot(): HTMLElement {
+    const existing = this.root.querySelector<HTMLElement>('[data-role="dockview-parking"]');
+    if (existing) return existing;
+    const parking = document.createElement("div");
+    parking.className = "v2-dock-parking";
+    parking.dataset.role = "dockview-parking";
+    parking.hidden = true;
+    this.root.append(parking);
+    return parking;
   }
 
-  private pointerInWorkspace(event: PointerEvent): { x: number; y: number } {
-    const workspace = this.root.querySelector<HTMLElement>(".v2-workspace");
-    const rect = workspace?.getBoundingClientRect();
-    return {
-      x: event.clientX - (rect?.left || 0),
-      y: event.clientY - (rect?.top || 0),
-    };
+  private requestRender(): void {
+    this.layoutVersion += 1;
+    if (this.internalMutationDepth > 0) return;
+    this.renderAll();
   }
 
-  private workspaceBounds(): { width: number; height: number } {
-    const workspace = this.root.querySelector<HTMLElement>(".v2-workspace");
-    return {
-      width: workspace?.clientWidth || 1200,
-      height: workspace?.clientHeight || 760,
-    };
+  private withInternalMutation<T>(callback: () => T): T {
+    this.internalMutationDepth += 1;
+    try {
+      return callback();
+    } finally {
+      this.internalMutationDepth -= 1;
+    }
   }
 
-  private workspaceRect(): PanelRect {
-    const bounds = this.workspaceBounds();
-    return { x: 0, y: 0, width: bounds.width, height: bounds.height };
+  private nextOpenPanel(): PanelId | undefined {
+    for (const panel of [...panelOrder].reverse()) {
+      if (this.panelState[panel] === "open" && this.hasDockPanel(panel)) return panel;
+    }
+    return undefined;
   }
 }
 
-export function constrainWindowLayout(
-  layout: FloatingPanelLayout,
-  workspace: { width: number; height: number },
-): FloatingPanelLayout {
-  const minWidth = 220;
-  const minHeight = 120;
-  const maxWidth = Math.max(minWidth, workspace.width - 20);
-  const maxHeight = Math.max(minHeight, workspace.height - 20);
-  const width = clamp(layout.width, minWidth, maxWidth);
-  const height = clamp(layout.height, minHeight, maxHeight);
+export function createFixedPanelLayout(
+  panelState: Record<PanelId, PanelState>,
+  panelPlacement: Record<PanelId, PanelPlacement> = defaultPanelPlacement(),
+): FixedPanelLayout[] {
+  return panelOrder.map((panel, index) => {
+    const placement = panelPlacement[panel];
+    const visible = panelState[panel] === "open";
+    return {
+      panel,
+      area: panelAreas[panel],
+      state: panelState[panel],
+      placement,
+      visible,
+      docked: visible && placement === "docked",
+      floating: visible && placement === "floating",
+      order: index,
+    };
+  });
+}
+
+export function resolveStudioWorkspaceMode(width: number): StudioWorkspaceMode {
+  if (width < 760) return "narrow";
+  if (width < 1180) return "compact";
+  return "desktop";
+}
+
+function defaultPanelPlacement(): Record<PanelId, PanelPlacement> {
   return {
-    ...layout,
-    width,
-    height,
-    x: layout.x,
-    y: layout.y,
+    scene: "floating",
+    properties: "floating",
+    assets: "floating",
+    library: "floating",
+    tasks: "floating",
+    output: "floating",
   };
 }
 
-export function detectDockZone(
-  pointer: { x: number; y: number },
-  workspace: { width: number; height: number },
-  previousDock: PanelDock = "float",
-): PanelDock {
-  const threshold = snapThreshold + (previousDock === "float" ? 0 : snapHysteresis);
-  const dockCandidates: Array<{ dock: Exclude<PanelDock, "float">; distance: number }> = [
-    { dock: "left", distance: pointer.x },
-    { dock: "right", distance: workspace.width - pointer.x },
-    { dock: "top", distance: pointer.y },
-    { dock: "bottom", distance: workspace.height - pointer.y },
-  ];
-  const candidates = dockCandidates.filter((candidate) => candidate.distance >= -180 && candidate.distance <= threshold);
-
-  if (!candidates.length) return "float";
-  candidates.sort((left, right) => {
-    const leftScore = left.distance < 0 ? 0 : left.distance;
-    const rightScore = right.distance < 0 ? 0 : right.distance;
-    if (leftScore !== rightScore) return leftScore - rightScore;
-    if (left.dock === previousDock) return -1;
-    if (right.dock === previousDock) return 1;
-    return dockPriority(left.dock) - dockPriority(right.dock);
-  });
-  return candidates[0].dock;
+function coerceDockContentId(value: string | undefined): DockContentId {
+  return asPanelId(value) || "scene";
 }
 
-export function dockRect(
-  dock: PanelDock,
-  workspace: { width: number; height: number },
-  layout: FloatingPanelLayout,
-): PanelRect {
-  const sideWidth = clamp(layout.width, 220, Math.max(220, Math.min(460, Math.round(workspace.width * 0.34))));
-  const bandHeight = clamp(layout.height, 150, Math.max(150, Math.min(360, Math.round(workspace.height * 0.42))));
-  if (dock === "left") return { x: 0, y: 0, width: sideWidth, height: workspace.height };
-  if (dock === "right") return { x: workspace.width - sideWidth, y: 0, width: sideWidth, height: workspace.height };
-  if (dock === "top") return { x: 0, y: 0, width: workspace.width, height: bandHeight };
-  if (dock === "bottom") return { x: 0, y: workspace.height - bandHeight, width: workspace.width, height: bandHeight };
-  return { x: layout.x, y: layout.y, width: layout.width, height: layout.height };
+function asPanelId(value: string | undefined): PanelId | undefined {
+  return panelOrder.includes(value as PanelId) ? (value as PanelId) : undefined;
 }
 
-export function resolveDockedPanelRects(
-  entries: DockedPanelLayout[],
-  workspace: { width: number; height: number },
-): Partial<Record<PanelId, PanelRect>> {
-  const groups = {
-    left: sortDockGroup(entries.filter((entry) => entry.layout.dock === "left"), "left"),
-    right: sortDockGroup(entries.filter((entry) => entry.layout.dock === "right"), "right"),
-    top: sortDockGroup(entries.filter((entry) => entry.layout.dock === "top"), "top"),
-    bottom: sortDockGroup(entries.filter((entry) => entry.layout.dock === "bottom"), "bottom"),
-  } satisfies Record<Exclude<PanelDock, "float">, DockedPanelLayout[]>;
-
-  const verticalBands = allocateOpposingSpans({
-    firstDesired: groups.top.length ? dockBandHeight(groups.top, workspace) : 0,
-    secondDesired: groups.bottom.length ? dockBandHeight(groups.bottom, workspace) : 0,
-    total: workspace.height,
-    firstPresent: groups.top.length > 0,
-    secondPresent: groups.bottom.length > 0,
-    minimum: 120,
-    reserve: minCenterSpan,
-  });
-  const sideY = verticalBands.first;
-  const sideHeight = Math.max(80, workspace.height - verticalBands.first - verticalBands.second);
-  const sideWidths = allocateOpposingSpans({
-    firstDesired: groups.left.length ? dockSideWidth(groups.left, workspace) : 0,
-    secondDesired: groups.right.length ? dockSideWidth(groups.right, workspace) : 0,
-    total: workspace.width,
-    firstPresent: groups.left.length > 0,
-    secondPresent: groups.right.length > 0,
-    minimum: minSideWidth,
-    reserve: minCenterSpan,
-  });
-  const rects: Partial<Record<PanelId, PanelRect>> = {};
-
-  assignHorizontalDockRects(rects, groups.top, workspace, 0, verticalBands.first);
-  assignHorizontalDockRects(rects, groups.bottom, workspace, workspace.height - verticalBands.second, verticalBands.second);
-  assignVerticalDockRects(rects, groups.left, workspace, 0, sideY, sideHeight, sideWidths.first);
-  assignVerticalDockRects(rects, groups.right, workspace, workspace.width - sideWidths.second, sideY, sideHeight, sideWidths.second);
-  return rects;
+function isSelfReferentialDropTarget(
+  transfer: PanelTransfer | undefined,
+  targetGroupId: string | undefined,
+  kind: DockviewGroupDropLocation,
+): boolean {
+  if (!transfer || !targetGroupId || transfer.groupId !== targetGroupId) return false;
+  if (kind === "tab" || kind === "header_space") return false;
+  return true;
 }
 
-export function resolveDockPreviewRect(input: {
-  panel: PanelId;
-  dock: PanelDock;
-  layout: FloatingPanelLayout;
-  entries: DockedPanelLayout[];
-  workspace: { width: number; height: number };
-}): PanelRect | undefined {
-  if (input.dock === "float") return undefined;
-  const entries = input.entries.filter((entry) => entry.panel !== input.panel && entry.layout.dock !== "float");
-  const candidateLayout = constrainWindowLayout({ ...input.layout, dock: input.dock }, input.workspace);
-  const rects = resolveDockedPanelRects([...entries, { panel: input.panel, layout: candidateLayout }], input.workspace);
-  return rects[input.panel];
+class ExistingElementContentRenderer implements IContentRenderer {
+  readonly element = document.createElement("div");
+  private adoptedElement: HTMLElement | undefined;
+
+  constructor(
+    private readonly root: HTMLElement,
+    private readonly parkingLot: HTMLElement,
+    private readonly contentId: DockContentId,
+  ) {
+    this.element.className = "v2-dock-panel-content";
+    this.element.dataset.dockContent = contentId;
+  }
+
+  init(_params: GroupPanelPartInitParameters): void {
+    const source = this.sourceElement();
+    if (!source) return;
+    this.adoptedElement = source;
+    source.dataset.dockviewContent = this.contentId;
+    this.element.replaceChildren(source);
+  }
+
+  layout(width: number, height: number): void {
+    this.element.style.width = `${Math.max(0, Math.round(width))}px`;
+    this.element.style.height = `${Math.max(0, Math.round(height))}px`;
+  }
+
+  dispose(): void {
+    if (!this.adoptedElement) return;
+    this.parkingLot.append(this.adoptedElement);
+    this.adoptedElement = undefined;
+  }
+
+  private sourceElement(): HTMLElement | null {
+    return this.root.querySelector<HTMLElement>(`.v2-window[data-panel="${this.contentId}"]`);
+  }
 }
 
-function assignVerticalDockRects(
-  rects: Partial<Record<PanelId, PanelRect>>,
-  group: DockedPanelLayout[],
-  workspace: { width: number; height: number },
-  x: number,
-  y: number,
-  height: number,
-  width = dockSideWidth(group, workspace),
-): void {
-  if (group.length === 0 || width <= 0 || height <= 0) return;
-  const spans = distributeDockSpans(
-    Math.max(0, height - dockGap * (group.length - 1)),
-    group.map((entry) => entry.layout.height),
-  );
-  let cursor = y;
-  group.forEach((entry, index) => {
-    rects[entry.panel] = { x, y: cursor, width, height: spans[index] };
-    cursor += spans[index] + dockGap;
-  });
+class EmptyWatermarkRenderer implements IWatermarkRenderer {
+  readonly element = document.createElement("div");
+
+  init(): void {
+    this.element.className = "v2-dock-watermark";
+  }
+
+  dispose(): void {
+    this.element.remove();
+  }
 }
 
-function assignHorizontalDockRects(
-  rects: Partial<Record<PanelId, PanelRect>>,
-  group: DockedPanelLayout[],
-  workspace: { width: number; height: number },
-  y: number,
-  height: number,
-): void {
-  if (group.length === 0 || height <= 0) return;
-  const spans = distributeDockSpans(
-    Math.max(0, workspace.width - dockGap * (group.length - 1)),
-    group.map((entry) => entry.layout.width),
-  );
-  let cursor = 0;
-  group.forEach((entry, index) => {
-    rects[entry.panel] = { x: cursor, y, width: spans[index], height };
-    cursor += spans[index] + dockGap;
-  });
-}
+class DockTabRenderer implements ITabRenderer {
+  readonly element = document.createElement("div");
+  private readonly titleElement = document.createElement("span");
+  private readonly closeButton = document.createElement("button");
+  private disposables: Array<() => void> = [];
 
-function dockSideWidth(group: DockedPanelLayout[], workspace: { width: number; height: number }): number {
-  if (group.length === 0) return 0;
-  return Math.max(...group.map((entry) => dockRect(entry.layout.dock, workspace, entry.layout).width));
-}
+  constructor() {
+    this.element.className = "v2-dock-tab";
+    this.titleElement.className = "v2-dock-tab-title";
+    this.closeButton.className = "v2-dock-tab-close";
+    this.closeButton.type = "button";
+    this.closeButton.textContent = "x";
+    this.element.append(this.titleElement, this.closeButton);
+  }
 
-function dockBandHeight(group: DockedPanelLayout[], workspace: { width: number; height: number }): number {
-  if (group.length === 0) return 0;
-  return Math.max(...group.map((entry) => dockRect(entry.layout.dock, workspace, entry.layout).height));
-}
+  init(params: TabPartInitParameters): void {
+    this.titleElement.textContent = params.title;
+    this.closeButton.hidden = params.params?.closable === false;
+    const titleDisposable = params.api.onDidTitleChange((event) => {
+      this.titleElement.textContent = event.title;
+    });
+    const onPointerDown = (event: PointerEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    const onClick = (event: MouseEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+      params.api.close();
+    };
+    this.closeButton.addEventListener("pointerdown", onPointerDown);
+    this.closeButton.addEventListener("click", onClick);
+    this.disposables = [
+      () => titleDisposable.dispose(),
+      () => this.closeButton.removeEventListener("pointerdown", onPointerDown),
+      () => this.closeButton.removeEventListener("click", onClick),
+    ];
+  }
 
-function distributeDockSpans(total: number, desiredSpans: number[]): number[] {
-  if (desiredSpans.length === 0) return [];
-  const minimum = Math.min(minDockedPanelSpan, total / desiredSpans.length);
-  const base = desiredSpans.map(() => minimum);
-  let remaining = Math.max(0, total - minimum * desiredSpans.length);
-  const weights = desiredSpans.map((span) => Math.max(1, span - minimum));
-  const weightTotal = weights.reduce((sum, span) => sum + span, 0) || desiredSpans.length;
-  return base.map((span, index) => {
-    if (index === base.length - 1) return span + remaining;
-    const extra = (remaining * weights[index]) / weightTotal;
-    remaining -= extra;
-    return span + extra;
-  });
-}
-
-function allocateOpposingSpans(input: {
-  firstDesired: number;
-  secondDesired: number;
-  total: number;
-  firstPresent: boolean;
-  secondPresent: boolean;
-  minimum: number;
-  reserve: number;
-}): { first: number; second: number } {
-  if (!input.firstPresent && !input.secondPresent) return { first: 0, second: 0 };
-
-  const first = input.firstPresent ? input.firstDesired : 0;
-  const second = input.secondPresent ? input.secondDesired : 0;
-  const presentCount = Number(input.firstPresent) + Number(input.secondPresent);
-  const usable = Math.max(0, input.total - input.reserve);
-  const minimum = Math.min(input.minimum, presentCount ? usable / presentCount : 0);
-  const desiredTotal = first + second;
-  if (desiredTotal <= usable) return { first, second };
-
-  let remaining = Math.max(0, usable - (input.firstPresent ? minimum : 0) - (input.secondPresent ? minimum : 0));
-  let nextFirst = input.firstPresent ? minimum : 0;
-  let nextSecond = input.secondPresent ? minimum : 0;
-  const firstWeight = input.firstPresent ? Math.max(1, first - minimum) : 0;
-  const secondWeight = input.secondPresent ? Math.max(1, second - minimum) : 0;
-  const weightTotal = firstWeight + secondWeight || 1;
-  nextFirst += remaining * (firstWeight / weightTotal);
-  remaining -= remaining * (firstWeight / weightTotal);
-  nextSecond += remaining;
-  return { first: nextFirst, second: nextSecond };
-}
-
-function sortDockGroup(group: DockedPanelLayout[], dock: Exclude<PanelDock, "float">): DockedPanelLayout[] {
-  const axis = dock === "left" || dock === "right" ? "y" : "x";
-  return [...group].sort((left, right) => {
-    const delta = left.layout[axis] - right.layout[axis];
-    if (delta !== 0) return delta;
-    return panelOrder.indexOf(left.panel) - panelOrder.indexOf(right.panel);
-  });
-}
-
-function dockPriority(dock: Exclude<PanelDock, "float">): number {
-  return ({ left: 0, right: 1, top: 2, bottom: 3 } satisfies Record<Exclude<PanelDock, "float">, number>)[dock];
-}
-
-export function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), Math.max(min, max));
-}
-
-function toDockRect(layout: FloatingPanelLayout): DockRect {
-  return { x: layout.x, y: layout.y, width: layout.width, height: layout.height };
-}
-
-function panelDisplayName(panel: PanelId): string {
-  return ({ scene: "层级", properties: "检查器", assets: "资源", tasks: "任务" } satisfies Record<PanelId, string>)[panel];
-}
-
-function dockDisplayName(dock: PanelDock): string {
-  return ({ float: "浮动区", left: "左侧", right: "右侧", top: "上侧", bottom: "下侧" } satisfies Record<PanelDock, string>)[dock];
+  dispose(): void {
+    for (const dispose of this.disposables) dispose();
+    this.disposables = [];
+  }
 }

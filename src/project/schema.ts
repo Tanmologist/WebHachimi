@@ -96,6 +96,13 @@ export type RenderComponent = {
   color: string;
   opacity: number;
   layerId: string;
+  size?: Vec2;
+  offset?: Vec2;
+  rotation?: number;
+  scale?: Vec2;
+  slot?: string;
+  state?: string;
+  resourceId?: ResourceId;
 };
 
 export type BodyComponent = {
@@ -109,6 +116,8 @@ export type BodyComponent = {
 export type ColliderComponent = {
   shape: ShapeKind;
   size: Vec2;
+  offset?: Vec2;
+  rotation?: number;
   radius?: number;
   points?: Vec2[];
   solid: boolean;
@@ -149,6 +158,7 @@ export type Resource = {
   aiDescription?: string;
   tags: string[];
   attachments: ResourceAttachment[];
+  sprite?: SpriteResourceMetadata;
 };
 
 export type ResourceAttachment = {
@@ -156,6 +166,21 @@ export type ResourceAttachment = {
   fileName: string;
   mime: string;
   path: string;
+};
+
+export type SpriteResourceMode = "sheet" | "sequence";
+
+export type SpriteResourceMetadata = {
+  mode: SpriteResourceMode;
+  columns?: number;
+  rows?: number;
+  frameWidth?: number;
+  frameHeight?: number;
+  frameCount?: number;
+  fps?: number;
+  loop?: boolean;
+  margin?: number;
+  spacing?: number;
 };
 
 export type ResourceBinding = {
@@ -412,11 +437,32 @@ export function normalizeProjectDefaults(project: Project): Project {
   project.testRecords ||= {};
   project.snapshots ||= {};
   project.autonomyRuns ||= {};
+  Object.values(project.resources).forEach((resource) => normalizeResourceDefaults(resource));
   Object.values(project.scenes).forEach((scene) => {
     normalizeSceneSettings(scene.settings);
     Object.values(scene.entities).forEach((entity) => normalizeEntityDefaults(entity));
   });
   return project;
+}
+
+export function normalizeResourceDefaults(resource: Resource): Resource {
+  resource.tags ||= [];
+  resource.attachments ||= [];
+  if (!resource.sprite) return resource;
+  if (resource.sprite.mode !== "sheet" && resource.sprite.mode !== "sequence") {
+    delete resource.sprite;
+    return resource;
+  }
+  if (!Number.isFinite(resource.sprite.fps) || (resource.sprite.fps ?? 0) <= 0) resource.sprite.fps = 8;
+  if (resource.sprite.loop === undefined) resource.sprite.loop = true;
+  if (resource.sprite.frameCount !== undefined) resource.sprite.frameCount = Math.max(1, Math.floor(resource.sprite.frameCount));
+  if (resource.sprite.columns !== undefined) resource.sprite.columns = Math.max(1, Math.floor(resource.sprite.columns));
+  if (resource.sprite.rows !== undefined) resource.sprite.rows = Math.max(1, Math.floor(resource.sprite.rows));
+  if (resource.sprite.frameWidth !== undefined) resource.sprite.frameWidth = Math.max(1, Math.floor(resource.sprite.frameWidth));
+  if (resource.sprite.frameHeight !== undefined) resource.sprite.frameHeight = Math.max(1, Math.floor(resource.sprite.frameHeight));
+  if (resource.sprite.margin !== undefined) resource.sprite.margin = Math.max(0, Math.floor(resource.sprite.margin));
+  if (resource.sprite.spacing !== undefined) resource.sprite.spacing = Math.max(0, Math.floor(resource.sprite.spacing));
+  return resource;
 }
 
 export function normalizeSceneSettings(settings: SceneSettings): SceneSettings {
@@ -427,11 +473,14 @@ export function normalizeSceneSettings(settings: SceneSettings): SceneSettings {
 }
 
 export function normalizeEntityDefaults(entity: Entity): Entity {
+  if (entity.render) normalizeRenderDefaults(entity);
   if (entity.kind !== "entity") return entity;
   if (!entity.collider) {
     entity.collider = {
       shape: "box",
       size: { x: 64, y: 64 },
+      offset: { x: 0, y: 0 },
+      rotation: 0,
       solid: true,
       trigger: false,
       layerMask: ["world"],
@@ -441,6 +490,8 @@ export function normalizeEntityDefaults(entity: Entity): Entity {
     if (!entity.collider.size || entity.collider.size.x <= 0 || entity.collider.size.y <= 0) {
       entity.collider.size = { x: 64, y: 64 };
     }
+    if (!entity.collider.offset) entity.collider.offset = { x: 0, y: 0 };
+    if (!Number.isFinite(entity.collider.rotation)) entity.collider.rotation = 0;
     if (!entity.collider.trigger && !entity.collider.solid) entity.collider.solid = true;
     if (!Array.isArray(entity.collider.layerMask) || entity.collider.layerMask.length === 0) {
       entity.collider.layerMask = ["world"];
@@ -456,4 +507,30 @@ export function normalizeEntityDefaults(entity: Entity): Entity {
     };
   }
   return entity;
+}
+
+function normalizeRenderDefaults(entity: Entity): void {
+  if (!entity.render) return;
+  const bodySize = entity.collider?.size || { x: 64, y: 64 };
+  if (!entity.render.size || entity.render.size.x <= 0 || entity.render.size.y <= 0) {
+    entity.render.size = defaultRenderSize(bodySize);
+  } else if (isLegacyDefaultRenderSize(entity.render.size, bodySize)) {
+    entity.render.size = defaultRenderSize(bodySize);
+  }
+  if (!entity.render.offset) entity.render.offset = { x: 0, y: 0 };
+  if (!Number.isFinite(entity.render.rotation)) entity.render.rotation = 0;
+  if (!entity.render.scale) entity.render.scale = { x: 1, y: 1 };
+  entity.render.slot ||= "current";
+  entity.render.state ||= "current";
+}
+
+function defaultRenderSize(bodySize: Vec2): Vec2 {
+  return {
+    x: Math.max(12, bodySize.x),
+    y: Math.max(12, bodySize.y),
+  };
+}
+
+function isLegacyDefaultRenderSize(renderSize: Vec2, bodySize: Vec2): boolean {
+  return Math.abs(renderSize.x - Math.max(12, bodySize.x * 0.72)) < 0.001 && Math.abs(renderSize.y - Math.max(12, bodySize.y * 0.72)) < 0.001;
 }
