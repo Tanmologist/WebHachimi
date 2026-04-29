@@ -871,6 +871,10 @@ function onCanvasPointerDown(event: PointerEvent): void {
 
 function onCanvasContextMenu(event: MouseEvent): void {
   event.preventDefault();
+  if (activeTool === "superBrush" || pendingBrush || drawingBrush) {
+    undoLastSuperBrushStrokeOrCancel();
+    return;
+  }
   if (activeTool === "polygon" && polygonDraft?.points.length) {
     finishPolygonDraft();
     return;
@@ -1416,9 +1420,10 @@ function applyCreatedEntity(entity: Entity, diffSummary: string): void {
 }
 
 function onKeyDown(event: KeyboardEvent): void {
-  if (event.key === "Escape" && (pendingBrush || drawingBrush || currentStrokePoints.length > 0)) {
+  if (event.key === "Escape" && isSuperBrushModeActive()) {
     event.preventDefault();
-    cancelPendingSuperBrush();
+    if (superBrushTaskDialogOpen) closeSuperBrushTaskDialog();
+    else cancelSuperBrushSession();
     return;
   }
   if (activeTool === "polygon" && polygonDraft?.points.length && !isTypingTarget(event.target)) {
@@ -1869,8 +1874,8 @@ function loop(time: number): void {
   raf = requestAnimationFrame(loop);
 }
 
-function superBrushUiState(): "idle" | "armed" | "drawing" | "pending" {
-  if (superBrushTaskDialogOpen) return "pending";
+function superBrushUiState(): "idle" | "armed" | "drawing" | "pending" | "task" {
+  if (superBrushTaskDialogOpen) return "task";
   if (drawingBrush) return "drawing";
   if (pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush)) return "pending";
   return activeTool === "superBrush" ? "armed" : "idle";
