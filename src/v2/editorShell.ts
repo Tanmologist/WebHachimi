@@ -184,8 +184,6 @@ export function mountEditorShell(root: HTMLElement): void {
           </div>
           <section class="stage" data-role="stage" aria-label="编辑舞台">
             <div class="stage-grid"></div>
-            <div class="stage-object stage-object--hero">玩家</div>
-            <div class="stage-object stage-object--ground"></div>
           </section>
         </section>
       </main>

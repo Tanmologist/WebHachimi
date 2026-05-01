@@ -501,36 +501,6 @@ input {
   pointer-events: none;
 }
 
-.stage-object {
-  position: absolute;
-  z-index: 2;
-  display: grid;
-  place-items: center;
-  color: #eff6ff;
-  border: 1px solid rgba(255, 255, 255, 0.26);
-  border-radius: 6px;
-  background: rgba(47, 143, 237, 0.42);
-  box-shadow: 0 0 0 1px rgba(47, 143, 237, 0.22);
-  font-weight: 700;
-  pointer-events: none;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.28);
-}
-
-.stage-object--hero {
-  left: 34%;
-  top: 32%;
-  width: 110px;
-  height: 148px;
-}
-
-.stage-object--ground {
-  left: 19%;
-  right: 15%;
-  bottom: 18%;
-  height: 28px;
-  background: rgba(74, 163, 111, 0.42);
-}
-
 .v2-canvas {
   position: absolute !important;
   inset: 0;
