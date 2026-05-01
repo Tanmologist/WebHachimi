@@ -87,8 +87,13 @@ type ShapeToolId = Extract<ToolId, "square" | "circle" | "leaf">;
 type ActiveSurface = "canvas" | "world";
 type ContextMenuAction =
   | "select-target"
+  | "select-body"
   | "rename-entity"
   | "duplicate-entity"
+  | "duplicate-here"
+  | "create-box"
+  | "create-circle"
+  | "clear-selection"
   | "delete-target"
   | "toggle-presentation"
   | "reset-presentation"
@@ -117,6 +122,7 @@ type ContextMenuState = {
   title: string;
   entityId?: string;
   part?: CanvasTargetPart;
+  worldPoint?: Vec2;
   items: ContextMenuItem[];
 };
 
@@ -941,31 +947,40 @@ function onCanvasContextMenu(event: MouseEvent): void {
     selectedPart = picked.part;
     selectedIds = [picked.entity.id as EntityId];
     selectionArea = undefined;
-    showEntityContextMenu(picked.entity, picked.part, event.clientX, event.clientY);
+    showEntityContextMenu(picked.entity, picked.part, event.clientX, event.clientY, point);
     return;
   }
 
-  showCanvasContextMenu(event.clientX, event.clientY);
+  showCanvasContextMenu(event.clientX, event.clientY, point);
 }
 
-function showEntityContextMenu(entity: Entity, part: CanvasTargetPart, clientX: number, clientY: number): void {
+function showEntityContextMenu(entity: Entity, part: CanvasTargetPart, clientX: number, clientY: number, worldPoint: Vec2): void {
   const items = contextMenuItemsForEntity(entity, part);
   contextMenu = {
     ...clampedContextMenuPosition(clientX, clientY, items.length),
     title: part === "presentation" ? `${entity.displayName} · 可视体` : entity.displayName,
     entityId: entity.id,
     part,
+    worldPoint,
     items,
   };
   windowMenuOpen = false;
   renderAll();
 }
 
-function showCanvasContextMenu(clientX: number, clientY: number): void {
+function showCanvasContextMenu(clientX: number, clientY: number, worldPoint: Vec2): void {
+  const hasSelection = Boolean(selectedId || selectedIds.length || selectionArea);
+  const items: ContextMenuItem[] = [
+    { action: "create-box", label: "在此创建方块", hint: "64 x 64 静态碰撞体" },
+    { action: "create-circle", label: "在此创建圆形", hint: "64 x 64 静态碰撞体" },
+    ...(hasSelection ? [{ action: "clear-selection" as const, label: "清除选择", separatorBefore: true }] : []),
+    { action: "reset-viewport", label: "重置视角", hint: "回到默认缩放和位置", separatorBefore: true },
+  ];
   contextMenu = {
-    ...clampedContextMenuPosition(clientX, clientY, 1),
+    ...clampedContextMenuPosition(clientX, clientY, items.length),
     title: "画布",
-    items: [{ action: "reset-viewport", label: "重置视角", hint: "回到默认缩放和位置" }],
+    worldPoint,
+    items,
   };
   windowMenuOpen = false;
   renderAll();
@@ -973,20 +988,30 @@ function showCanvasContextMenu(clientX: number, clientY: number): void {
 
 function contextMenuItemsForEntity(entity: Entity, part: CanvasTargetPart): ContextMenuItem[] {
   if (part !== "presentation") {
+    const presentationVisible = entity.render?.visible !== false;
     return [
       { action: "select-target", label: "选择", disabled: selectedId === entity.id && selectedPart === "body" },
-      { action: "rename-entity", label: "重命名", disabled: !entity.persistent },
-      { action: "duplicate-entity", label: "复制", disabled: !entity.persistent },
-      { action: "delete-target", label: "删除", danger: true, disabled: !entity.persistent },
+      { action: "rename-entity", label: "重命名物体", disabled: !entity.persistent },
+      { action: "duplicate-entity", label: "复制物体", hint: "向右下偏移一份", disabled: !entity.persistent },
+      { action: "duplicate-here", label: "复制到右键位置", disabled: !entity.persistent },
+      { action: "toggle-presentation", label: presentationVisible ? "隐藏可视体" : "显示可视体", separatorBefore: true, disabled: !entity.render },
+      { action: "reset-presentation", label: "可视体贴合本体", disabled: !entity.render },
+      { action: "remove-presentation", label: "删除可视体", danger: true, disabled: !entity.render },
+      { action: "delete-target", label: "删除整个物体", danger: true, separatorBefore: true, disabled: !entity.persistent },
       { action: "reset-viewport", label: "重置视角", separatorBefore: true },
     ];
   }
   const presentationVisible = entity.render?.visible !== false;
   return [
-    { action: "select-target", label: "选择", disabled: selectedId === entity.id && selectedPart === "presentation" },
-    { action: "toggle-presentation", label: presentationVisible ? "隐藏" : "显示", disabled: !entity.render },
-    { action: "reset-presentation", label: "贴合本体", disabled: !entity.render },
-    { action: "delete-target", label: "删除", danger: true, disabled: !entity.persistent || !entity.render },
+    { action: "select-target", label: "选择可视体", disabled: selectedId === entity.id && selectedPart === "presentation" },
+    { action: "select-body", label: "选择本体", disabled: selectedId === entity.id && selectedPart === "body" },
+    { action: "rename-entity", label: "重命名物体", separatorBefore: true, disabled: !entity.persistent },
+    { action: "duplicate-entity", label: "复制物体", hint: "向右下偏移一份", disabled: !entity.persistent },
+    { action: "duplicate-here", label: "复制到右键位置", disabled: !entity.persistent },
+    { action: "toggle-presentation", label: presentationVisible ? "隐藏可视体" : "显示可视体", separatorBefore: true, disabled: !entity.render },
+    { action: "reset-presentation", label: "可视体贴合本体", disabled: !entity.render },
+    { action: "remove-presentation", label: "删除可视体", danger: true, disabled: !entity.render },
+    { action: "delete-target", label: "删除整个物体", danger: true, separatorBefore: true, disabled: !entity.persistent },
     { action: "reset-viewport", label: "重置视角", separatorBefore: true },
   ];
 }
@@ -1023,6 +1048,21 @@ function runContextMenuAction(action: ContextMenuAction, state: ContextMenuState
     return;
   }
 
+  if (action === "clear-selection") {
+    selectedId = "";
+    selectedIds = [];
+    selectedPart = "body";
+    selectionArea = undefined;
+    notice = "已清除选择。";
+    renderAll();
+    return;
+  }
+
+  if (action === "create-box" || action === "create-circle") {
+    createEntityFromContextMenu(action === "create-box" ? "square" : "circle", state.worldPoint);
+    return;
+  }
+
   const entity = state.entityId ? editableEntity(state.entityId) : undefined;
   if (!entity) {
     notice = "右键目标已经不存在。";
@@ -1041,6 +1081,16 @@ function runContextMenuAction(action: ContextMenuAction, state: ContextMenuState
     return;
   }
 
+  if (action === "select-body") {
+    selectedId = entity.id;
+    selectedPart = "body";
+    selectedIds = [entity.id as EntityId];
+    selectionArea = undefined;
+    notice = "已选择本体。";
+    renderAll();
+    return;
+  }
+
   if (action === "rename-entity") {
     const nextName = window.prompt("重命名方块", entity.displayName);
     if (nextName === null) {
@@ -1053,15 +1103,6 @@ function runContextMenuAction(action: ContextMenuAction, state: ContextMenuState
   }
 
   if (action === "delete-target") {
-    if (state.part === "presentation") {
-      if (!window.confirm(`删除「${entity.displayName}」的可视体？本体会保留。`)) {
-        notice = "已取消删除。";
-        renderAll();
-        return;
-      }
-      applyContextMenuTransaction(planRemovePresentationTransaction(scene, entity));
-      return;
-    }
     if (!window.confirm(`删除「${entity.displayName}」？这个操作会进入项目历史。`)) {
       notice = "已取消删除。";
       renderAll();
@@ -1073,6 +1114,17 @@ function runContextMenuAction(action: ContextMenuAction, state: ContextMenuState
 
   if (action === "duplicate-entity") {
     applyContextMenuTransaction(planDuplicateEntityTransaction(scene, entity));
+    return;
+  }
+
+  if (action === "duplicate-here") {
+    const positionOffset = state.worldPoint
+      ? {
+          x: state.worldPoint.x - entity.transform.position.x,
+          y: state.worldPoint.y - entity.transform.position.y,
+        }
+      : undefined;
+    applyContextMenuTransaction(planDuplicateEntityTransaction(scene, entity, { positionOffset }));
     return;
   }
 
@@ -1094,6 +1146,33 @@ function runContextMenuAction(action: ContextMenuAction, state: ContextMenuState
     }
     applyContextMenuTransaction(planRemovePresentationTransaction(scene, entity));
   }
+}
+
+function createEntityFromContextMenu(tool: ShapeToolId, point?: Vec2): void {
+  if (world.mode !== "editorFrozen") {
+    notice = "运行中不能创建本体，请先冻结编辑。";
+    renderAll();
+    return;
+  }
+  if (!point) {
+    notice = "没有可用的右键位置，未创建本体。";
+    renderAll();
+    return;
+  }
+  const entity = createEntityFromShapeDrag({
+    pointerId: -1,
+    tool,
+    start: point,
+    current: point,
+    moved: false,
+    points: [point],
+  });
+  if (!entity) {
+    notice = "创建失败：右键位置无效。";
+    renderAll();
+    return;
+  }
+  applyCreatedEntity(entity, `右键创建${toolLabel(tool)}本体：${entity.displayName}`);
 }
 
 function applyContextMenuTransaction(planResult: Result<ContextMenuTransactionPlan>): void {
@@ -2191,8 +2270,10 @@ function renderContextMenu(): void {
     menu.innerHTML = "";
     return;
   }
+  menu.classList.add("v2-context-menu");
   menu.hidden = false;
   menu.setAttribute("aria-hidden", "false");
+  menu.setAttribute("role", "menu");
   menu.setAttribute("aria-label", contextMenu.title);
   menu.style.left = `${contextMenu.x}px`;
   menu.style.top = `${contextMenu.y}px`;
@@ -2264,7 +2345,7 @@ function renderTree(projectSnapshot: Project): void {
       selectedPart = target.part;
       selectedIds = [entity.id];
       selectionArea = undefined;
-      showEntityContextMenu(entity, target.part, target.clientX, target.clientY);
+      showEntityContextMenu(entity, target.part, target.clientX, target.clientY, entity.transform.position);
     },
   });
 }
