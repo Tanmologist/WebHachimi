@@ -285,7 +285,8 @@ input {
   flex-direction: column;
   gap: 1px;
   padding: 8px 6px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .file-tree {
@@ -429,6 +430,7 @@ input {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   min-width: 0;
   padding: 0 10px;
   background: #1b1f25;
@@ -440,6 +442,13 @@ input {
   align-items: center;
   gap: 4px;
   min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.tool-strip::-webkit-scrollbar {
+  display: none;
 }
 
 .tool-strip button,
@@ -459,11 +468,13 @@ input {
 }
 
 .zoom-control {
+  flex: 0 0 auto;
   color: var(--wb-muted);
 }
 
 .stage {
   position: relative;
+  isolation: isolate;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -486,6 +497,8 @@ input {
   z-index: 0;
   content: "";
   border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 70px rgba(0, 0, 0, 0.22);
+  pointer-events: none;
 }
 
 .stage-object {
@@ -498,7 +511,9 @@ input {
   border-radius: 6px;
   background: rgba(47, 143, 237, 0.42);
   box-shadow: 0 0 0 1px rgba(47, 143, 237, 0.22);
+  font-weight: 700;
   pointer-events: none;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.28);
 }
 
 .stage-object--hero {
@@ -522,7 +537,7 @@ input {
   z-index: 1;
   width: 100% !important;
   height: 100% !important;
-  opacity: 0.62;
+  opacity: 0.78;
 }
 
 .inspector-body {
@@ -1387,6 +1402,7 @@ input {
 
 @media (max-width: 720px) {
   .workbench-preview {
+    --bottom-track: clamp(150px, 28vh, 190px);
     grid-template:
       "title title" 35px
       "tools editor" minmax(0, 1fr)
@@ -1401,6 +1417,8 @@ input {
 
   .workbench-titlebar {
     grid-template-columns: auto minmax(140px, 1fr);
+    gap: 8px;
+    padding: 0 8px;
   }
 
   .window-controls {
@@ -1409,6 +1427,58 @@ input {
 
   .window-taskbar {
     grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  .stage-toolbar {
+    padding: 0 8px;
+  }
+
+  .tool-strip button,
+  .panel-tabs button,
+  .panel-tabs span {
+    flex: 0 0 auto;
+  }
+
+  .panel-tabs {
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+  }
+
+  .panel-tabs::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .workbench-preview {
+    --tools-track: 42px;
+    --bottom-track: clamp(132px, 24vh, 168px);
+  }
+
+  .workbench-menu button {
+    padding: 0 7px;
+  }
+
+  .tool-page__button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .stage::after {
+    inset: 12px;
+  }
+
+  .window-button {
+    min-width: 64px;
+    max-width: 108px;
+    padding: 0 8px;
+  }
+}
+
+@media (max-height: 760px) {
+  .workbench-preview {
+    --bottom-track: clamp(128px, 24vh, 176px);
   }
 }
 
