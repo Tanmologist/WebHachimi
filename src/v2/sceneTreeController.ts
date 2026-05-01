@@ -19,6 +19,8 @@ export function renderSceneTreeHtml(
   resources: Record<string, Resource> = {},
   collapsedNodes: ReadonlySet<string> = new Set(),
 ): string {
+  const folderedIds = new Set(scene.folders.flatMap((folder) => folder.entityIds));
+  const looseEntities = entities.filter((entity) => !folderedIds.has(entity.id));
   const folderHtml = scene.folders
     .map((folder) => {
       const nodeId = `folder:${folder.id}`;
@@ -33,36 +35,58 @@ export function renderSceneTreeHtml(
           <header>
             <button class="v2-tree-toggle" data-tree-toggle="${escapeHtml(nodeId)}" type="button">${collapsed ? "▸" : "▾"}</button>
             <span>${escapeHtml(folder.displayName)}</span>
-            <small>${visibleFolderCount(folder.entityIds, entities)}</small>
+            <small>${visibleFolderCount(folder.entityIds, entities)} 项</small>
           </header>
-          ${collapsed ? "" : children || `<p class="v2-empty">拖入对象到这里</p>`}
+          ${collapsed ? "" : children || `<p class="v2-empty">拖入对象到这里，作为一个更清晰的分组。</p>`}
         </section>
       `;
     })
     .join("");
-  const folderedIds = new Set(scene.folders.flatMap((folder) => folder.entityIds));
-  const looseHtml = entities
-    .filter((entity) => !folderedIds.has(entity.id))
+  const looseHtml = looseEntities
     .map((entity) => renderTreeItemHtml(entity, selectedId, selectedPart, resources, collapsedNodes))
     .join("");
   const looseNodeId = "folder:__loose";
   const looseCollapsed = collapsedNodes.has(looseNodeId);
-  return `${folderHtml}${
+  const overview = `
+    <article class="v2-card v2-scene-overview">
+      <small class="v2-kicker">当前场景</small>
+      <b>${escapeHtml(scene.name || "未命名场景")}</b>
+      <p>点击对象可以切换本体或可视体，右键能打开更多操作；拖拽对象到分组里，则能让世界树更容易管理。</p>
+      <div class="v2-metrics">
+        ${renderMetric("分组", scene.folders.length)}
+        ${renderMetric("对象", entities.length)}
+        ${renderMetric("资源", Object.keys(resources).length)}
+        ${renderMetric("未归类", looseEntities.length)}
+      </div>
+    </article>
+  `;
+
+  return `${overview}${folderHtml}${
     looseHtml
       ? `<section class="v2-folder" data-tree-collapsed="${looseCollapsed ? "true" : "false"}">
           <header>
             <button class="v2-tree-toggle" data-tree-toggle="${looseNodeId}" type="button">${looseCollapsed ? "▸" : "▾"}</button>
             <span>未归类</span>
+            <small>${looseEntities.length} 项</small>
           </header>
-          ${looseCollapsed ? "" : looseHtml}
+          ${looseCollapsed ? "" : `<p class="v2-folder-hint">这些对象还没有归到任何分组，适合在结构稳定后再整理。</p>${looseHtml}`}
         </section>`
-      : ""
+      : `<article class="v2-card"><b>当前场景已全部归类</b><p>所有对象都已经落到具体分组，继续新增对象时可以直接拖到对应分组里。</p></article>`
   }`;
 }
 
 function visibleFolderCount(entityIds: EntityId[], entities: Entity[]): number {
   const visibleIds = new Set(entities.map((entity) => entity.id));
   return entityIds.filter((id) => visibleIds.has(id)).length;
+}
+
+function renderMetric(label: string, value: number): string {
+  return `
+    <span>
+      <small>${escapeHtml(label)}</small>
+      <b>${escapeHtml(String(value))}</b>
+    </span>
+  `;
 }
 
 export function bindSceneTreeInteractions(tree: HTMLElement, callbacks: SceneTreeCallbacks): void {

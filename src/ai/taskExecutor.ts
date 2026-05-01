@@ -1,10 +1,11 @@
-import type { Project, RuntimeSnapshot, Task, Transaction } from "../project/schema";
+import type { Project, RuntimeSnapshot, Task, TestRecord, Transaction } from "../project/schema";
 import { transitionTask } from "../project/tasks";
 import type { ProjectStore } from "../project/projectStore";
 import { RuntimeWorld } from "../runtime/world";
 import { err, ok, type Result } from "../shared/types";
 import type { TaskId } from "../shared/types";
 import { SimulationTestRunner } from "../testing/simulationTestRunner";
+import { evaluateProjectChecks } from "../testing/projectVerification";
 import { MemoryTraceSink, summarizeTraceForAi, type TraceSink } from "../testing/telemetry";
 import {
   runReactionWindowSweep as runTestingReactionWindowSweep,
@@ -12,6 +13,8 @@ import {
   type ReactionWindowSweepRunResult,
 } from "../testing/timingSweep";
 import { createIntentPlan } from "./intentPlanner";
+import { decomposeTask } from "./taskDecomposition";
+import { validateExplicitTaskTargets } from "./taskTargets";
 
 export type AiTaskExecutorOptions = {
   store: ProjectStore;
@@ -27,6 +30,7 @@ export type AiTaskExecutionResult = {
   rolledBack: boolean;
   error?: string;
   traceSummary?: string;
+  createdTaskIds?: TaskId[];
 };
 
 export class AiTaskExecutor {
@@ -53,11 +57,33 @@ export class AiTaskExecutor {
     if (!task) return err(`task not found: ${taskId}`);
     if (task.status !== "queued") return err(`task is not queued: ${task.status}`);
 
+    const decomposition = decomposeTask(task);
+    if (!decomposition.ok) return this.failTask(task, decomposition.error);
+    if (decomposition.value) {
+      for (const subtask of decomposition.value.subtasks) this.store.upsertTask(subtask);
+      this.store.upsertTask(decomposition.value.parent);
+      return ok({
+        taskId,
+        status: "passed",
+        rolledBack: false,
+        createdTaskIds: decomposition.value.subtasks.map((subtask) => subtask.id),
+        traceSummary: `Decomposed task ${task.id} into ${decomposition.value.subtasks.length} queued subtask(s).`,
+      });
+    }
+
+    const targets = validateExplicitTaskTargets(project, task);
+    if (!targets.ok) return this.failTask(task, targets.error);
+
     const runningTask = transitionTask(task, "running", normalizeTaskText(task.userText));
     this.store.upsertTask(runningTask);
 
     const plan = createIntentPlan(this.store.project, runningTask);
     if (!plan.ok) return this.failTask(runningTask, plan.error);
+    const plannedTask: Task = {
+      ...runningTask,
+      verificationPlan: plan.value.verificationPlan,
+    };
+    this.store.upsertTask(plannedTask);
 
     const transaction = this.store.createTransaction({
       actor: "ai",
@@ -81,14 +107,26 @@ export class AiTaskExecutor {
       world: new RuntimeWorld({ scene }),
       script: plan.value.testScript,
     });
-    const record = testResult.record;
+    const projectVerification = evaluateProjectChecks(appliedProject, plan.value.verificationPlan.projectChecks);
+    const record: TestRecord = {
+      ...testResult.record,
+      result:
+        testResult.record.result === "passed" && projectVerification.passed
+          ? "passed"
+          : testResult.record.result === "interrupted"
+            ? "interrupted"
+            : "failed",
+      projectChecks: plan.value.verificationPlan.projectChecks,
+      assertionFailures: [...(testResult.record.assertionFailures || []), ...projectVerification.failures],
+      logs: [...testResult.record.logs, ...projectVerification.logs],
+    };
     const traceSummary = this.traceSink instanceof MemoryTraceSink ? summarizeTraceForAi(this.traceSink.drain()) : undefined;
     const recordWithTrace = traceSummary ? { ...record, traceSummary } : record;
 
     const finalStatus = recordWithTrace.result === "passed" ? "passed" : "failed";
     const finishedTask = {
-      ...transitionTask(runningTask, finalStatus, plan.value.normalizedText),
-      transactionRefs: uniqueRefs([...runningTask.transactionRefs, applied.value.id]),
+      ...transitionTask(plannedTask, finalStatus, plan.value.normalizedText),
+      transactionRefs: uniqueRefs([...plannedTask.transactionRefs, applied.value.id]),
     };
     this.store.recordTestResult(recordWithTrace, finishedTask, applied.value, testResult.snapshots);
 

@@ -1,5 +1,6 @@
 import type {
   BodyComponent,
+  BrushCompiledContext,
   ColliderComponent,
   Entity,
   FrameCheck,
@@ -9,11 +10,14 @@ import type {
   RenderComponent,
   Resource,
   ResourceBinding,
+  Scene,
   TargetRef,
   Task,
+  VerificationPlan,
 } from "../project/schema";
 import { cloneJson, err, makeId, ok, type Result } from "../shared/types";
-import type { ResourceId } from "../shared/types";
+import type { EntityId, ResourceId } from "../shared/types";
+import { createVerificationPlan } from "./verificationPlan";
 
 type EntityTarget = Extract<TargetRef, { kind: "entity" }>;
 type ResourceTarget = Extract<TargetRef, { kind: "resource" }>;
@@ -32,6 +36,7 @@ export type AiTaskPlan = {
   patches: ProjectPatch[];
   inversePatches: ProjectPatch[];
   testScript: InputScript;
+  verificationPlan: VerificationPlan;
   diffSummary: string;
 };
 
@@ -126,11 +131,21 @@ export function createIntentPlan(project: Project, task: Task): Result<AiTaskPla
   const normalizedText = normalizeTaskText(task.userText);
   const planned = planAiTaskEdit(project, task, normalizedText);
   if (planned.ok) {
+    const verificationPlan = createVerificationPlan({
+      project,
+      task,
+      normalizedText,
+      patches: planned.value.patches,
+      inversePatches: planned.value.inversePatches,
+      testTarget: planned.value.testTarget,
+      intents: planned.value.intents,
+    });
     return ok({
       normalizedText: planned.value.normalizedText,
       patches: planned.value.patches,
       inversePatches: planned.value.inversePatches,
-      testScript: createSmokeScript(planned.value.testTarget, task.acceptanceCriteria),
+      testScript: createSmokeScript(planned.value.testTarget, verificationPlan.frameChecks, verificationPlan.runtimeSetupSteps),
+      verificationPlan,
       diffSummary: planned.value.diffSummary,
     });
   }
@@ -142,8 +157,11 @@ export function planAiTaskEdit(project: Project, task: Task, normalizedText: str
   if (!scene) return err(`active scene not found: ${project.activeSceneId}`);
 
   const text = normalizedText || task.normalizedText || task.userText;
-  const entityTargets = existingEntityTargets(scene.entities, task.targetRefs);
-  const resourceTargets = existingResourceTargets(project.resources, task.targetRefs);
+  const brushContext = task.brushContext?.compiled;
+  const explicitTargetRefs = effectiveTaskTargets(task);
+  const effectiveTargetRefs = explicitTargetRefs.length ? explicitTargetRefs : inferTextTargets(project, scene, text);
+  const entityTargets = existingEntityTargets(scene.entities, effectiveTargetRefs);
+  const resourceTargets = existingResourceTargets(project.resources, effectiveTargetRefs);
   const patches: ProjectPatch[] = [];
   const inversePatches: ProjectPatch[] = [];
   const intents: string[] = [];
@@ -160,6 +178,19 @@ export function planAiTaskEdit(project: Project, task: Task, normalizedText: str
     Boolean(behaviorDescription) ||
     hasColliderEdit(colliderEdit) ||
     hasRenderEdit(renderEdit);
+
+  applyBrushSpatialEdits({
+    project,
+    scene,
+    text,
+    normalizedText,
+    entityTargets,
+    brushContext,
+    patches,
+    inversePatches,
+    touchedTargets,
+    intents,
+  });
 
   if (hasEntityIntent && entityTargets.length > 0) {
     for (const target of entityTargets) {
@@ -194,7 +225,7 @@ export function planAiTaskEdit(project: Project, task: Task, normalizedText: str
     }
   }
 
-  const bindingUpdate = extractBindingDescriptionUpdate(text, task.targetRefs);
+  const bindingUpdate = extractBindingDescriptionUpdate(text, effectiveTargetRefs);
   if (bindingUpdate && entityTargets.length > 0) {
     const resourceTargetIds = new Set(resourceTargets.map((target) => target.resourceId));
     for (const target of entityTargets) {
@@ -210,8 +241,8 @@ export function planAiTaskEdit(project: Project, task: Task, normalizedText: str
     }
   }
 
-  const resourceUpdate = extractResourceDescriptionUpdate(text, task.targetRefs);
-  if (resourceUpdate && resourceTargets.length > 0 && !wantsBindingDescription(text, task.targetRefs)) {
+  const resourceUpdate = extractResourceDescriptionUpdate(text, effectiveTargetRefs);
+  if (resourceUpdate && resourceTargets.length > 0 && !wantsBindingDescription(text, effectiveTargetRefs)) {
     for (const target of resourceTargets) {
       const resource = project.resources[target.resourceId];
       const next = cloneJson(resource);
@@ -234,6 +265,258 @@ export function planAiTaskEdit(project: Project, task: Task, normalizedText: str
     diffSummary: `AI task edit: ${intents.join("; ")}.`,
     intents,
   });
+}
+
+function effectiveTaskTargets(task: Task): TargetRef[] {
+  return mergeTargets(task.targetRefs, task.brushContext?.compiled?.targetRefs);
+}
+
+function mergeTargets(...targetGroups: Array<TargetRef[] | undefined>): TargetRef[] {
+  const merged = new Map<string, TargetRef>();
+  for (const targets of targetGroups) {
+    for (const target of targets || []) merged.set(targetKey(target), target);
+  }
+  return [...merged.values()];
+}
+
+function inferTextTargets(project: Project, scene: Scene, text: string): TargetRef[] {
+  const lower = text.toLowerCase();
+  const entity = inferTextEntity(scene, lower);
+  if (entity) return [{ kind: "entity", entityId: entity.id }];
+  const resource = inferTextResource(project, lower);
+  if (resource) return [{ kind: "resource", resourceId: resource.id }];
+  return [];
+}
+
+function inferTextEntity(scene: Scene, lowerText: string): Entity | undefined {
+  const entities = Object.values(scene.entities);
+  if (hasAny(lowerText, ["player", "hero", "character"])) {
+    return bestNamedEntity(entities, (entity) => entity.behavior?.builtin === "playerPlatformer" || hasEntityWord(entity, "player"));
+  }
+  if (hasAny(lowerText, ["enemy", "attacker", "foe"])) {
+    return bestNamedEntity(entities, (entity) => entity.behavior?.builtin === "enemyPatrol" || hasEntityWord(entity, "enemy") || hasEntityWord(entity, "attacker"));
+  }
+  return entities.find((entity) => {
+    const name = `${entity.displayName} ${entity.internalName}`.toLowerCase();
+    return name.length > 2 && lowerText.includes(name);
+  });
+}
+
+function inferTextResource(project: Project, lowerText: string): Resource | undefined {
+  if (!hasAny(lowerText, ["resource", "asset", "sprite", "image", "animation", "audio"])) return undefined;
+  const resources = Object.values(project.resources);
+  return resources.find((resource) => {
+    const name = `${resource.displayName} ${resource.internalName}`.toLowerCase();
+    return name.length > 2 && lowerText.includes(name);
+  });
+}
+
+function bestNamedEntity(entities: Entity[], predicate: (entity: Entity) => boolean): Entity | undefined {
+  return entities.find(predicate);
+}
+
+function hasEntityWord(entity: Entity, word: string): boolean {
+  const lower = `${entity.displayName} ${entity.internalName} ${(entity.tags || []).join(" ")}`.toLowerCase();
+  return lower.includes(word);
+}
+
+function applyBrushSpatialEdits(input: {
+  project: Project;
+  scene: Scene;
+  text: string;
+  normalizedText: string;
+  entityTargets: EntityTarget[];
+  brushContext?: BrushCompiledContext;
+  patches: ProjectPatch[];
+  inversePatches: ProjectPatch[];
+  touchedTargets: TargetRef[];
+  intents: string[];
+}): void {
+  const brush = input.brushContext;
+  if (!brush) return;
+
+  const area = primaryBrushArea(brush);
+  const path = primaryBrushPath(brush);
+
+  if (area && wantsBrushAreaEntity(input.text)) {
+    const entity = createBrushAreaEntity(input.scene, area.rect, input.text, input.normalizedText);
+    const entityPath = `/scenes/${input.scene.id}/entities/${entity.id}` as const;
+    input.patches.push({ op: "set", path: entityPath, value: entity });
+    input.inversePatches.push({ op: "delete", path: entityPath });
+    input.touchedTargets.push({ kind: "entity", entityId: entity.id as EntityId });
+    input.intents.push(`super brush area: created ${entity.displayName}`);
+  }
+
+  if (area && wantsColliderFromBrushArea(input.text) && input.entityTargets.length > 0) {
+    for (const target of input.entityTargets) {
+      const entity = input.scene.entities[target.entityId];
+      const entityPath = `/scenes/${input.scene.id}/entities/${entity.id}` as const;
+      const next = existingEntityPatchValue(input.patches, entityPath) || cloneJson(entity);
+      const collider = ensureCollider(next);
+      collider.size = { x: area.rect.w, y: area.rect.h };
+      collider.offset = {
+        x: roundTo(area.rect.x + area.rect.w / 2 - next.transform.position.x, 4),
+        y: roundTo(area.rect.y + area.rect.h / 2 - next.transform.position.y, 4),
+      };
+      upsertEntityPatch(input.patches, input.inversePatches, entityPath, entity, next);
+      input.touchedTargets.push(target);
+      input.intents.push(`${entity.displayName}: collider from super brush area ${area.rect.w}x${area.rect.h}`);
+    }
+  }
+
+  if (path && wantsPatrolPath(input.text) && input.entityTargets.length > 0) {
+    for (const target of input.entityTargets) {
+      const entity = input.scene.entities[target.entityId];
+      const entityPath = `/scenes/${input.scene.id}/entities/${entity.id}` as const;
+      const next = existingEntityPatchValue(input.patches, entityPath) || cloneJson(entity);
+      const params = ensureBehavior(next).params;
+      next.behavior!.builtin = next.behavior!.builtin || "enemyPatrol";
+      next.behavior!.normalizedDescription = input.normalizedText;
+      params.left = roundTo(Math.min(path.start.x, path.end.x), 4);
+      params.right = roundTo(Math.max(path.start.x, path.end.x), 4);
+      if (params.speed === undefined) params.speed = Math.max(30, Math.round(path.length / 2));
+      upsertEntityPatch(input.patches, input.inversePatches, entityPath, entity, next);
+      input.touchedTargets.push(target);
+      input.intents.push(`${entity.displayName}: patrol path from super brush stroke`);
+    }
+  }
+}
+
+function primaryBrushArea(brush: BrushCompiledContext): BrushCompiledContext["areas"][number] | undefined {
+  return [...brush.areas].sort((left, right) => {
+    const score = brushAreaSourceScore(right.source) - brushAreaSourceScore(left.source);
+    if (score !== 0) return score;
+    return areaSize(right.rect) - areaSize(left.rect);
+  })[0];
+}
+
+function primaryBrushPath(brush: BrushCompiledContext): BrushCompiledContext["paths"][number] | undefined {
+  return [...brush.paths].sort((left, right) => right.length - left.length)[0];
+}
+
+function brushAreaSourceScore(source: BrushCompiledContext["areas"][number]["source"]): number {
+  if (source === "target") return 3;
+  if (source === "selectionBox") return 2;
+  return 1;
+}
+
+function areaSize(rect: { w: number; h: number }): number {
+  return Math.max(0, rect.w) * Math.max(0, rect.h);
+}
+
+function wantsBrushAreaEntity(text: string): boolean {
+  const lower = text.toLowerCase();
+  const createIntent = hasAny(lower, [
+    "create",
+    "add",
+    "place",
+    "spawn",
+    "generate",
+    "make",
+    "\u521b\u5efa",
+    "\u6dfb\u52a0",
+    "\u751f\u6210",
+    "\u653e\u7f6e",
+    "\u52a0",
+  ]);
+  return createIntent && Boolean(brushAreaEntityKind(text));
+}
+
+function brushAreaEntityKind(text: string): "hazard" | "trigger" | "platform" | undefined {
+  const lower = text.toLowerCase();
+  if (hasAny(lower, ["hazard", "danger", "damage zone", "spike", "\u5371\u9669", "\u4f24\u5bb3", "\u523a"])) return "hazard";
+  if (hasAny(lower, ["trigger", "sensor", "zone", "\u89e6\u53d1", "\u533a\u57df", "\u611f\u5e94"])) return "trigger";
+  if (hasAny(lower, ["platform", "ground", "block", "floor", "\u5e73\u53f0", "\u5730\u9762", "\u65b9\u5757", "\u5899"])) return "platform";
+  return undefined;
+}
+
+function wantsColliderFromBrushArea(text: string): boolean {
+  const lower = text.toLowerCase();
+  return hasAny(lower, [
+    "collider",
+    "collision",
+    "hitbox",
+    "hurtbox",
+    "body size",
+    "\u78b0\u649e",
+    "\u5224\u5b9a",
+    "\u53d7\u51fb",
+    "\u653b\u51fb\u6846",
+  ]);
+}
+
+function wantsPatrolPath(text: string): boolean {
+  const lower = text.toLowerCase();
+  return hasAny(lower, ["patrol", "path", "route", "walk between", "\u5de1\u903b", "\u8def\u5f84", "\u8def\u7ebf", "\u6765\u56de\u8d70"]);
+}
+
+function createBrushAreaEntity(scene: Scene, rect: { x: number; y: number; w: number; h: number }, text: string, normalizedText: string): Entity {
+  const kind = brushAreaEntityKind(text) || "trigger";
+  const id = makeId<"EntityId">("ent") as EntityId;
+  const displayName = brushAreaEntityDisplayName(kind);
+  const solid = kind === "platform";
+  const trigger = kind !== "platform";
+  return {
+    id,
+    internalName: `${displayName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_${id.slice(-6)}`,
+    displayName,
+    kind: trigger ? "trigger" : "entity",
+    persistent: true,
+    transform: {
+      position: { x: roundTo(rect.x + rect.w / 2, 4), y: roundTo(rect.y + rect.h / 2, 4) },
+      rotation: 0,
+      scale: { x: 1, y: 1 },
+    },
+    render: {
+      visible: true,
+      color: kind === "hazard" ? "#d06969" : kind === "platform" ? "#71818f" : "#d7c84a",
+      opacity: kind === "platform" ? 1 : 0.45,
+      layerId: scene.layers[0]?.id || "world",
+      size: { x: rect.w, y: rect.h },
+      offset: { x: 0, y: 0 },
+      rotation: 0,
+      scale: { x: 1, y: 1 },
+    },
+    body: {
+      mode: "static",
+      velocity: { x: 0, y: 0 },
+      gravityScale: 0,
+      friction: 0.8,
+      bounce: 0,
+    },
+    collider: {
+      shape: "box",
+      size: { x: rect.w, y: rect.h },
+      offset: { x: 0, y: 0 },
+      rotation: 0,
+      solid,
+      trigger,
+      layerMask: ["world"],
+    },
+    behavior: trigger
+      ? {
+          description: kind === "hazard" ? "Super brush generated hazard trigger." : "Super brush generated trigger zone.",
+          normalizedDescription: normalizedText,
+          params: kind === "hazard" ? { damage: 1 } : {},
+        }
+      : undefined,
+    resources: [],
+    tags: ["super-brush", kind],
+  };
+}
+
+function brushAreaEntityDisplayName(kind: "hazard" | "trigger" | "platform"): string {
+  if (kind === "hazard") return "Brush Hazard Zone";
+  if (kind === "platform") return "Brush Platform";
+  return "Brush Trigger Zone";
+}
+
+function targetKey(target: TargetRef): string {
+  if (target.kind === "scene") return `scene:${target.sceneId}`;
+  if (target.kind === "entity") return `entity:${target.entityId}`;
+  if (target.kind === "resource") return `resource:${target.resourceId}`;
+  if (target.kind === "runtime") return `runtime:${target.sceneId || ""}`;
+  return `area:${target.sceneId}:${target.rect.x}:${target.rect.y}:${target.rect.w}:${target.rect.h}`;
 }
 
 function existingEntityTargets(entities: Record<string, Entity>, targets: TargetRef[]): EntityTarget[] {
@@ -283,10 +566,13 @@ function parseBehaviorParamEdits(text: string): Map<BehaviorParamKey, number> {
 function parseRelativeParamRequests(text: string): RelativeParamRequest[] {
   const lower = text.toLowerCase();
   const requests: RelativeParamRequest[] = [];
-  if (hasAny(lower, ["faster", "quicker", "speed up", "\u66f4\u5feb", "\u52a0\u5feb", "\u52a0\u901f"])) {
+  if (hasAny(lower, ["twice as fast", "double speed", "double the speed", "2x speed", "x2 speed"])) {
+    requests.push({ key: "speed", factor: 2, label: "speed x2" });
+  } else if (hasAny(lower, ["half as fast", "half speed", "halve speed", "50% speed"])) {
+    requests.push({ key: "speed", factor: 0.5, label: "speed x0.5" });
+  } else if (hasAny(lower, ["faster", "quicker", "speed up", "\u66f4\u5feb", "\u52a0\u5feb", "\u52a0\u901f"])) {
     requests.push({ key: "speed", factor: 1.25, label: "speed +25%" });
-  }
-  if (hasAny(lower, ["slower", "slow down", "\u66f4\u6162", "\u51cf\u901f", "\u6162\u4e00\u70b9"])) {
+  } else if (hasAny(lower, ["slower", "slow down", "\u66f4\u6162", "\u51cf\u901f", "\u6162\u4e00\u70b9"])) {
     requests.push({ key: "speed", factor: 0.75, label: "speed -25%" });
   }
   if (hasAny(lower, ["jump higher", "higher jump", "\u8df3\u66f4\u9ad8", "\u8df3\u5f97\u66f4\u9ad8"])) {
@@ -363,8 +649,8 @@ function parseColliderEdit(text: string): ColliderEdit {
 
 function parseColliderSize(text: string): { x: number; y: number } | undefined {
   const pairPatterns = [
-    /(?:collider|collision|hitbox|hurtbox|\u78b0\u649e|\u5224\u5b9a|\u78b0\u649e\u4f53).{0,24}?(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)/i,
-    /(?:size|width height|\u5c3a\u5bf8|\u5927\u5c0f|\u5bbd\u9ad8).{0,16}?(\d+(?:\.\d+)?)\s*[xX*]\s*(\d+(?:\.\d+)?)/i,
+    /(?:collider|collision|hitbox|hurtbox|\u78b0\u649e|\u5224\u5b9a|\u78b0\u649e\u4f53).{0,24}?(\d+(?:\.\d+)?)\s*(?:[xX*]|\bby\b)\s*(\d+(?:\.\d+)?)/i,
+    /(?:size|width height|\u5c3a\u5bf8|\u5927\u5c0f|\u5bbd\u9ad8).{0,16}?(\d+(?:\.\d+)?)\s*(?:[xX*]|\bby\b)\s*(\d+(?:\.\d+)?)/i,
   ];
   for (const pattern of pairPatterns) {
     const match = text.match(pattern);
@@ -403,10 +689,11 @@ function parseColor(text: string): string | undefined {
   if (hex) return normalizeHexColor(hex);
   const lower = text.toLowerCase();
   const hasColorIntent = hasAny(lower, ["color", "colour", "tint", "fill", "\u989c\u8272", "\u67d3\u8272", "\u586b\u5145"]);
+  const hasVisualIntent = hasColorIntent || hasAny(lower, ["make", "set", "turn", "change", "become", "paint"]);
   for (const [name, value] of Object.entries(colorNames)) {
     const isAsciiName = /^[a-z]+$/.test(name);
     const matched = isAsciiName ? new RegExp(`\\b${escapeRegExp(name)}\\b`, "i").test(text) : text.includes(name);
-    if (matched && (hasColorIntent || !isAsciiName)) return value;
+    if (matched && (hasVisualIntent || !isAsciiName)) return value;
   }
   return undefined;
 }
@@ -415,6 +702,8 @@ function parseOpacity(text: string): number | undefined {
   const explicit = findNumberForAliases(text, ["opacity", "alpha", "\u900f\u660e\u5ea6", "\u4e0d\u900f\u660e\u5ea6"]);
   if (explicit !== undefined) return normalizeOpacity(explicit);
   const lower = text.toLowerCase();
+  const transparentPercent = lower.match(/(\d+(?:\.\d+)?)\s*%?\s*transparent/);
+  if (transparentPercent) return normalizeOpacity(Number(transparentPercent[1]));
   if (hasAny(lower, ["fully transparent", "\u5b8c\u5168\u900f\u660e"])) return 0;
   if (hasAny(lower, ["semi transparent", "semi-transparent", "half transparent", "\u534a\u900f\u660e"])) return 0.5;
   if (hasAny(lower, ["opaque", "\u4e0d\u900f\u660e"])) return 1;
@@ -644,7 +933,7 @@ function parseImplicitSolid(text: string): boolean | undefined {
 function parseImplicitTrigger(text: string): boolean | undefined {
   const lower = text.toLowerCase();
   if (hasAny(lower, ["not trigger", "disable trigger", "\u5173\u95ed\u89e6\u53d1", "\u4e0d\u662f\u89e6\u53d1"])) return false;
-  if (hasAny(lower, ["trigger zone", "make trigger", "as trigger", "\u89e6\u53d1\u5668", "\u8bbe\u4e3a\u89e6\u53d1"])) return true;
+  if (hasAny(lower, ["trigger zone", "make trigger", "make it a trigger", "as trigger", "a trigger", "\u89e6\u53d1\u5668", "\u8bbe\u4e3a\u89e6\u53d1"])) return true;
   return undefined;
 }
 
@@ -671,7 +960,8 @@ function chooseTestTarget(targets: TargetRef[], activeSceneId: Project["activeSc
 function createFallbackPlan(project: Project, task: Task, normalizedText: string): Result<AiTaskPlan> {
   const scene = project.scenes[project.activeSceneId];
   if (!scene) return err(`active scene not found: ${project.activeSceneId}`);
-  const entityTarget = existingEntityTargets(scene.entities, task.targetRefs)[0];
+  const targets = effectiveTaskTargets(task);
+  const entityTarget = existingEntityTargets(scene.entities, targets)[0];
   if (entityTarget) {
     const entity = scene.entities[entityTarget.entityId];
     const next = cloneJson(entity);
@@ -683,47 +973,67 @@ function createFallbackPlan(project: Project, task: Task, normalizedText: string
       normalizedDescription: normalizedText,
     };
     const path = `/scenes/${scene.id}/entities/${entity.id}` as const;
+    const patches: ProjectPatch[] = [{ op: "set", path, value: next }];
+    const inversePatches: ProjectPatch[] = [{ op: "set", path, value: entity }];
+    const verificationPlan = createVerificationPlan({
+      project,
+      task,
+      normalizedText,
+      patches,
+      inversePatches,
+      testTarget: entityTarget,
+      intents: [`${entity.displayName}: fallback annotation`],
+    });
     return ok({
       normalizedText,
-      patches: [{ op: "set", path, value: next }],
-      inversePatches: [{ op: "set", path, value: entity }],
-      testScript: createSmokeScript(entityTarget, task.acceptanceCriteria),
+      patches,
+      inversePatches,
+      testScript: createSmokeScript(entityTarget, verificationPlan.frameChecks, verificationPlan.runtimeSetupSteps),
+      verificationPlan,
       diffSummary: `AI fallback: update ${entity.displayName} annotation.`,
     });
   }
 
   const resourceId = makeId<"ResourceId">("res") as ResourceId;
   const path = `/resources/${resourceId}` as const;
-  const target = task.targetRefs.find((item) => item.kind === "scene") || { kind: "scene" as const, sceneId: project.activeSceneId };
+  const target = targets.find((item) => item.kind === "scene") || { kind: "scene" as const, sceneId: project.activeSceneId };
+  const resource: Resource = {
+    id: resourceId,
+    internalName: `AiTaskNote_${task.id}`,
+    displayName: `AI Task Note ${task.id}`,
+    type: "note",
+    description: normalizedText,
+    aiDescription: normalizedText.slice(0, 240),
+    tags: ["ai", "task", "note"],
+    attachments: [],
+  };
+  const patches: ProjectPatch[] = [{ op: "set", path, value: resource }];
+  const inversePatches: ProjectPatch[] = [{ op: "delete", path }];
+  const verificationPlan = createVerificationPlan({
+    project,
+    task,
+    normalizedText,
+    patches,
+    inversePatches,
+    testTarget: target,
+    intents: ["fallback resource note"],
+  });
   return ok({
     normalizedText,
-    patches: [
-      {
-        op: "set",
-        path,
-        value: {
-          id: resourceId,
-          internalName: `AiTaskNote_${task.id}`,
-          displayName: `AI Task Note ${task.id}`,
-          type: "note",
-          description: normalizedText,
-          aiDescription: normalizedText.slice(0, 240),
-          tags: ["ai", "task", "note"],
-          attachments: [],
-        },
-      },
-    ],
-    inversePatches: [{ op: "delete", path }],
-    testScript: createSmokeScript(target, task.acceptanceCriteria),
+    patches,
+    inversePatches,
+    testScript: createSmokeScript(target, verificationPlan.frameChecks, verificationPlan.runtimeSetupSteps),
+    verificationPlan,
     diffSummary: `AI fallback: add task note for ${task.id}.`,
   });
 }
 
-function createSmokeScript(target: TargetRef, acceptanceCriteria: FrameCheck[] = []): InputScript {
+function createSmokeScript(target: TargetRef, acceptanceCriteria: FrameCheck[] = [], setupSteps: InputScript["steps"] = []): InputScript {
   const checks = acceptanceCriteria.filter((check) => check.target.kind !== "resource");
   return {
     steps: [
       { op: "wait", ticks: 2 },
+      ...setupSteps,
       {
         op: "freezeAndInspect",
         checks: checks.length ? checks : [{ label: "target remains available after AI edit", target, expect: { exists: true } }],

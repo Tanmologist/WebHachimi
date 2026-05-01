@@ -1,4 +1,3 @@
-import "dockview-core/dist/styles/dockview.css";
 import "./styles.css";
 import type { AutonomyLoop } from "../ai/autonomyLoop";
 import type { AiTaskExecutionResult, AiTaskExecutor } from "../ai/taskExecutor";
@@ -12,6 +11,7 @@ import {
   createTaskFromSuperBrush,
   hasMeaningfulSuperBrushContext,
   mergeSuperBrushTargets,
+  rebuildSuperBrushDraftTargets,
   summarizeSuperBrushDraft,
   type SuperBrushDraft,
 } from "../editor/superBrush";
@@ -63,7 +63,7 @@ import {
   scriptedRunSummary,
   type AutonomousGeneratedTask,
 } from "./summaryModels";
-import { buildProjectForSave, loadProjectForEditor, saveProjectFromEditor, saveProjectLocallyFromEditor } from "./persistenceController";
+import { buildProjectForSave, forceLoadProjectFromDiskForEditor, loadProjectForEditor, saveProjectFromEditor, saveProjectLocallyFromEditor } from "./persistenceController";
 import {
   isImageFileLike,
   looksLikeExternalResource,
@@ -148,6 +148,7 @@ let world = new RuntimeWorld({ scene });
 if (handoff?.snapshot) world.restoreSnapshot(handoff.snapshot);
 const renderer = new V2Renderer();
 let animatedResourcePresent = sceneHasVisibleAnimatedResource(project);
+const DISK_AUTO_LOAD_INTERVAL_MS = 4000;
 
 let selectedId = Object.keys(scene.entities)[0] || "";
 let selectedPart: CanvasTargetPart = "body";
@@ -156,6 +157,9 @@ let selectionArea: Rect | undefined;
 let activeTool: ToolId = "select";
 let previewTaskId = "";
 let localClipboardFallbackToken = 0;
+let lastSeenDiskProjectSignature = projectDiskSignature(project);
+let diskAutoLoadInFlight = false;
+let pendingDiskUpdateSignature = "";
 let notice = handoff
   ? `已从游戏暂停帧 ${handoff.snapshot.frame} 进入编辑器。按 Z 可继续运行。`
   : initialProject.notice;
@@ -201,7 +205,9 @@ const uiRenderState = {
 const autoSave = new AutoSaveController({
   initialStatus: initialProject.loadedFromDisk ? "已从磁盘载入，自动保存就绪" : "自动保存就绪",
   saveProject: async () => {
-    const result = await saveProjectFromEditor(buildCurrentProjectForSave());
+    const projectForSave = buildCurrentProjectForSave();
+    const result = await saveProjectFromEditor(projectForSave);
+    if (result.result.storage === "api") lastSeenDiskProjectSignature = projectDiskSignature(projectForSave);
     return result.notice;
   },
   saveProjectLocally: () => saveProjectLocallyFromEditor(buildCurrentProjectForSave()).notice,
@@ -234,8 +240,14 @@ const taskWorkflow = createTaskWorkflowController({
   },
   clearTaskInput: () => {
     taskInput.value = "";
+    const visibleTaskInput = root.querySelector<HTMLTextAreaElement>('[data-role="visible-task-input"]');
+    if (visibleTaskInput) visibleTaskInput.value = "";
   },
-  focusTaskInput: () => taskInput.focus(),
+  focusTaskInput: () => {
+    const visibleTaskInput = root.querySelector<HTMLTextAreaElement>('[data-role="visible-task-input"]');
+    if (visibleTaskInput && !visibleTaskInput.hidden) visibleTaskInput.focus();
+    else taskInput.focus();
+  },
   setPreviewTaskId: (taskId) => {
     previewTaskId = taskId;
   },
@@ -255,6 +267,9 @@ bindUi();
 renderUi();
 loop(lastTime);
 window.setInterval(runScheduledProjectMaintenance, 10 * 60 * 1000);
+window.setInterval(() => {
+  void autoLoadProjectFromDisk();
+}, DISK_AUTO_LOAD_INTERVAL_MS);
 
 async function loadInitialProject(handoffProject?: Project): Promise<{ project: Project; notice: string; loadedFromDisk: boolean }> {
   if (handoffProject) {
@@ -303,26 +318,43 @@ async function getAutonomyLoop(): Promise<AutonomyLoop> {
 }
 
 function bindUi(): void {
-  root.querySelector('[data-action="toggle-run"]')?.addEventListener("click", toggleRun);
-  root.querySelector('[data-action="step"]')?.addEventListener("click", () => {
-    world.runFixedFrame();
-    renderAll();
+  const visibleTaskInput = root.querySelector<HTMLTextAreaElement>('[data-role="visible-task-input"]');
+  root.querySelectorAll('[data-action="toggle-run"]').forEach((button) => button.addEventListener("click", toggleRun));
+  root.querySelectorAll('[data-action="step"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      world.runFixedFrame();
+      renderAll();
+    });
   });
-  root.querySelector('[data-action="capture"]')?.addEventListener("click", () => {
-    const snapshot = world.freezeForInspection();
-    store.recordRuntimeSnapshot(snapshot);
-    markProjectDirty("已捕捉冻结帧");
-    notice = `已捕捉冻结帧 ${snapshot.frame}`;
-    renderAll();
+  root.querySelectorAll('[data-action="capture"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      const snapshot = world.freezeForInspection();
+      store.recordRuntimeSnapshot(snapshot);
+      markProjectDirty("已捕捉冻结帧");
+      notice = `已捕捉冻结帧 ${snapshot.frame}`;
+      renderAll();
+    });
   });
-  root.querySelector('[data-action="reload-project"]')?.addEventListener("click", refreshProjectFromDisk);
+  root.querySelectorAll('[data-action="save-project"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      void saveCurrentProject();
+    });
+  });
+  root.querySelectorAll('[data-action="reload-project"]').forEach((button) => button.addEventListener("click", refreshProjectFromDisk));
+  root.querySelectorAll('[data-action="force-reload-project"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      void forceRefreshProjectFromDisk("manual");
+    });
+  });
   root.querySelector('[data-action="toggle-window-menu"]')?.addEventListener("click", (event) => {
     event.stopPropagation();
     windowMenuOpen = !windowMenuOpen;
     if (!windowMenuOpen) clearPendingWindowMenuClick();
     renderAll();
   });
-  root.querySelector('[data-action="queue-task"]')?.addEventListener("click", () => taskWorkflow.queueTaskFromText(taskInput.value));
+  root.querySelectorAll('[data-action="queue-task"]').forEach((button) => {
+    button.addEventListener("click", () => queueTaskFromComposer(visibleTaskInput));
+  });
   root.querySelector('[data-action="confirm-super-brush"]')?.addEventListener("click", openSuperBrushTaskDialog);
   root.querySelector('[data-action="back-super-brush"]')?.addEventListener("click", closeSuperBrushTaskDialog);
   root.querySelector('[data-action="queue-super-brush-task"]')?.addEventListener("click", queueSuperBrushTaskFromDialog);
@@ -337,6 +369,14 @@ function bindUi(): void {
   });
   taskInput.addEventListener("paste", onTaskInputPaste);
   taskInput.addEventListener("keydown", onResourcePasteKeyDown);
+  visibleTaskInput?.addEventListener("paste", onTaskInputPaste);
+  visibleTaskInput?.addEventListener("keydown", (event) => {
+    onResourcePasteKeyDown(event);
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      queueTaskFromComposer(visibleTaskInput);
+    }
+  });
   resourceFileInput.addEventListener("change", () => {
     void importResourceFiles(Array.from(resourceFileInput.files || []));
     resourceFileInput.value = "";
@@ -487,6 +527,13 @@ function bindUi(): void {
     }
     if (changed) renderAll();
   });
+}
+
+function queueTaskFromComposer(visibleTaskInput: HTMLTextAreaElement | null): void {
+  const text = (visibleTaskInput?.value || taskInput.value).trim();
+  if (visibleTaskInput) taskInput.value = text;
+  taskWorkflow.queueTaskFromText(text);
+  if (visibleTaskInput && !text) visibleTaskInput.focus();
 }
 
 function scheduleWindowMenuPanelClick(panel: PanelId): void {
@@ -796,6 +843,8 @@ function startSuperBrushStroke(event: PointerEvent, point: Vec2): void {
     strokes: pendingBrush?.strokes || [],
     annotations: pendingBrush?.annotations || [],
     selectionTargets: startTargets,
+    strokeTargetRefs: pendingBrush?.strokeTargetRefs,
+    manualTargetRefs: pendingBrush?.manualTargetRefs,
     capturedSnapshotId: pendingBrush?.capturedSnapshotId || snapshot.id,
     selectionBox: pendingBrush?.selectionBox || selectionBoxFromTargets(startTargets),
   };
@@ -1161,25 +1210,34 @@ function onCanvasPointerUp(event: PointerEvent): void {
   const createdStroke = createSuperBrushStroke(finishedPoints);
   if (createdStroke.ok) {
     const strokeTargets = targetsForCompletedSuperBrushStroke(finishedPoints);
-    pendingBrush = {
+    const strokeTargetRefs = {
+      ...(pendingBrush?.strokeTargetRefs || {}),
+      [createdStroke.value.id]: strokeTargets,
+    };
+    pendingBrush = rebuildSuperBrushDraftTargets({
       strokes: [...(pendingBrush?.strokes || []), createdStroke.value],
       annotations: pendingBrush?.annotations || [],
-      selectionTargets: mergeSuperBrushTargets(pendingBrush?.selectionTargets, strokeTargets),
+      selectionTargets: pendingBrush?.selectionTargets || [],
+      strokeTargetRefs,
+      manualTargetRefs: pendingBrush?.manualTargetRefs,
       capturedSnapshotId: pendingBrush?.capturedSnapshotId,
-      selectionBox: mergedSelectionBox(pendingBrush?.selectionBox, selectionBoxFromTargets(strokeTargets)),
-    };
+      selectionBox: pendingBrush?.selectionBox,
+    });
     notice = superBrushRecordedNotice();
   } else if (finishedStart && distance(finishedStart, finishedEnd) < superBrushClickDistance()) {
     const clickTargets = targetsForSuperBrushClick(finishedEnd);
-    pendingBrush = clickTargets.length > 0
-      ? {
-          strokes: pendingBrush?.strokes || [],
-          annotations: pendingBrush?.annotations || [],
-          selectionTargets: mergeSuperBrushTargets(pendingBrush?.selectionTargets, clickTargets),
-          capturedSnapshotId: pendingBrush?.capturedSnapshotId,
-          selectionBox: mergedSelectionBox(pendingBrush?.selectionBox, selectionBoxFromTargets(clickTargets)),
-        }
-      : pendingBrush;
+    pendingBrush =
+      clickTargets.length > 0
+        ? rebuildSuperBrushDraftTargets({
+            strokes: pendingBrush?.strokes || [],
+            annotations: pendingBrush?.annotations || [],
+            selectionTargets: pendingBrush?.selectionTargets || [],
+            strokeTargetRefs: pendingBrush?.strokeTargetRefs,
+            manualTargetRefs: mergeSuperBrushTargets(pendingBrush?.manualTargetRefs, clickTargets),
+            capturedSnapshotId: pendingBrush?.capturedSnapshotId,
+            selectionBox: pendingBrush?.selectionBox,
+          })
+        : pendingBrush;
     if (pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush)) {
       notice = superBrushRecordedNotice();
     } else {
@@ -1289,10 +1347,10 @@ function undoLastSuperBrushStrokeOrCancel(): void {
     cancelSuperBrushSession();
     return;
   }
-  pendingBrush = {
+  pendingBrush = rebuildSuperBrushDraftTargets({
     ...pendingBrush,
     strokes: pendingBrush.strokes.slice(0, -1),
-  };
+  });
   notice = `已撤销上一笔：${summarizeSuperBrushDraft(pendingBrush)}。`;
   renderAll();
 }
@@ -1482,6 +1540,7 @@ async function saveCurrentProject(): Promise<void> {
       entities: world.entities.values(),
     });
     const result = await saveProjectFromEditor(projectForSave);
+    if (result.result.storage === "api") lastSeenDiskProjectSignature = projectDiskSignature(projectForSave);
     notice = result.notice;
   } catch (error) {
     notice = `保存失败：${error instanceof Error ? error.message : String(error)}`;
@@ -1555,31 +1614,110 @@ async function refreshProjectFromDisk(): Promise<void> {
       renderAll();
       return;
     }
-    store.replace(normalizeProjectDefaults(repairKnownStarterLabels(result.project)));
-    rebuildWorldFromStore();
-    selectedId = Object.keys(scene.entities)[0] || "";
-    selectedPart = "body";
-    selectedIds = selectedId ? [selectedId as EntityId] : [];
-    selectionArea = undefined;
-    previewTaskId = "";
-    resetTaskUiEvidence();
-    drawingBrush = false;
-    drawingBrushPointerId = undefined;
-    brushStartPoint = undefined;
-    pendingBrush = undefined;
-    superBrushTaskDialogOpen = false;
-    superBrushTaskError = "";
-    superBrushTaskInput.value = "";
-    currentStrokePoints = [];
-    canvasDrag = undefined;
-    shapeDrag = undefined;
-    polygonDraft = undefined;
-    autoSave.reset("已从磁盘刷新，自动保存就绪");
-    notice = `已从磁盘刷新。${result.notice}`;
+    applyLoadedProjectFromDisk(result.project, "已从磁盘刷新，自动保存就绪", `已从磁盘刷新。${result.notice}`);
   } catch (error) {
     notice = `刷新失败：${error instanceof Error ? error.message : String(error)}`;
   }
   renderAll();
+}
+
+async function forceRefreshProjectFromDisk(source: "manual" | "auto"): Promise<void> {
+  try {
+    const result = await forceLoadProjectFromDiskForEditor({ writeLocal: true });
+    if (!result.project) {
+      notice = result.notice;
+      autoSave.setStatus("磁盘没有可载入项目");
+      renderAll();
+      return;
+    }
+    applyLoadedProjectFromDisk(
+      result.project,
+      source === "auto" ? "已自动载入磁盘更新，自动保存就绪" : "已强制从磁盘刷新，自动保存就绪",
+      source === "auto" ? `检测到磁盘项目更新，已自动载入。${result.notice}` : `已强制从磁盘刷新。${result.notice}`,
+    );
+  } catch (error) {
+    notice = `强制刷新失败：${error instanceof Error ? error.message : String(error)}`;
+  }
+  renderAll();
+}
+
+async function autoLoadProjectFromDisk(): Promise<void> {
+  if (diskAutoLoadInFlight || document.hidden) return;
+  if (autoSave.hasPendingChanges || drawingBrush || Boolean(canvasDrag || shapeDrag || polygonDraft)) return;
+  diskAutoLoadInFlight = true;
+  try {
+    const result = await forceLoadProjectFromDiskForEditor({ writeLocal: false });
+    if (!result.project) return;
+    const diskSignature = projectDiskSignature(result.project);
+    if (diskSignature === lastSeenDiskProjectSignature) return;
+    if (!isProjectNewerThanCurrent(result.project)) return;
+    if (isTypingTarget(document.activeElement)) {
+      if (pendingDiskUpdateSignature !== diskSignature) {
+        pendingDiskUpdateSignature = diskSignature;
+        notice = "检测到磁盘项目更新；当前正在输入，结束输入后会自动载入，或点右侧“从磁盘刷新”。";
+        renderAll();
+      }
+      return;
+    }
+    await forceRefreshProjectFromDisk("auto");
+  } finally {
+    diskAutoLoadInFlight = false;
+  }
+}
+
+function applyLoadedProjectFromDisk(projectFromDisk: Project, saveStatus: string, nextNotice: string): void {
+  const normalizedProject = normalizeProjectDefaults(repairKnownStarterLabels(projectFromDisk));
+  store.replace(normalizedProject);
+  saveProjectLocallyFromEditor(normalizedProject);
+  rebuildWorldFromStore();
+  selectedId = Object.keys(scene.entities)[0] || "";
+  selectedPart = "body";
+  selectedIds = selectedId ? [selectedId as EntityId] : [];
+  selectionArea = undefined;
+  previewTaskId = "";
+  resetTaskUiEvidence();
+  drawingBrush = false;
+  drawingBrushPointerId = undefined;
+  brushStartPoint = undefined;
+  pendingBrush = undefined;
+  superBrushTaskDialogOpen = false;
+  superBrushTaskError = "";
+  superBrushTaskInput.value = "";
+  currentStrokePoints = [];
+  canvasDrag = undefined;
+  shapeDrag = undefined;
+  polygonDraft = undefined;
+  invalidateUiRenderCache();
+  lastSeenDiskProjectSignature = projectDiskSignature(normalizedProject);
+  pendingDiskUpdateSignature = "";
+  autoSave.reset(saveStatus);
+  notice = nextNotice;
+}
+
+function projectDiskSignature(projectSnapshot: Project): string {
+  return [
+    projectSnapshot.meta.updatedAt,
+    projectSnapshot.activeSceneId,
+    Object.keys(projectSnapshot.scenes).length,
+    Object.keys(projectSnapshot.resources).length,
+    Object.keys(projectSnapshot.tasks).length,
+    Object.keys(projectSnapshot.transactions).length,
+  ].join("|");
+}
+
+function isProjectNewerThanCurrent(projectFromDisk: Project): boolean {
+  const diskTime = Date.parse(projectFromDisk.meta.updatedAt);
+  const currentTime = Date.parse(store.snapshot().project.meta.updatedAt);
+  if (Number.isNaN(diskTime) || Number.isNaN(currentTime)) {
+    return projectDiskSignature(projectFromDisk) !== projectDiskSignature(store.snapshot().project);
+  }
+  return diskTime > currentTime;
+}
+
+function invalidateUiRenderCache(): void {
+  (Object.keys(uiRenderState) as Array<keyof typeof uiRenderState>).forEach((key) => {
+    uiRenderState[key] = "";
+  });
 }
 
 function saveDirtyProjectLocallyNow(): void {
@@ -1908,6 +2046,16 @@ function superBrushSummaryText(): string {
 }
 
 function renderUi(projectSnapshot?: Project): void {
+  void projectSnapshot;
+  root.hidden = false;
+  root.removeAttribute("aria-hidden");
+  root.dataset.ui = "workbench-preview";
+  root.dataset.tool = activeTool;
+  root.dataset.superBrushState = superBrushUiState();
+  root.dataset.superBrushActive = String(isSuperBrushModeActive());
+  root.dataset.runtimeMode = world.mode;
+  applyPanelLayoutIfNeeded();
+
   const snapshotProject = projectSnapshot || store.snapshot().project;
   renderTree(snapshotProject);
   renderTasks(snapshotProject);
@@ -1978,7 +2126,8 @@ function renderUi(projectSnapshot?: Project): void {
   const brushSummaryNode = query<HTMLElement>('[data-role="super-brush-summary"]');
   brushSummaryNode.textContent = brushSummary;
   const confirmBrushButton = root.querySelector<HTMLButtonElement>('[data-action="confirm-super-brush"]');
-  if (confirmBrushButton) confirmBrushButton.disabled = drawingBrush || !pendingBrush || !hasMeaningfulSuperBrushContext(pendingBrush);
+  const canConfirmBrush = Boolean(pendingBrush && !drawingBrush && hasMeaningfulSuperBrushContext(pendingBrush as SuperBrushDraft));
+  if (confirmBrushButton) (confirmBrushButton as HTMLButtonElement).disabled = !canConfirmBrush;
   const brushTaskModal = query<HTMLElement>('[data-role="super-brush-task-modal"]');
   brushTaskModal.hidden = !superBrushTaskDialogOpen;
   brushTaskModal.setAttribute("aria-hidden", String(!superBrushTaskDialogOpen));
@@ -2072,7 +2221,7 @@ function renderContextMenu(): void {
 }
 
 function renderFrame(): void {
-  const text = `tick ${world.clock.frame} · ${(world.clock.timeMs / 1000).toFixed(2)}s · ${Math.round(1000 / world.clock.fixedStepMs)}t/s · ${editorPerformance.frameText}`;
+  const text = `帧 ${world.clock.frame} · ${(world.clock.timeMs / 1000).toFixed(2)}秒 · ${Math.round(1000 / world.clock.fixedStepMs)}刻/秒 · ${editorPerformance.frameText}`;
   if (uiRenderState.frame === text) return;
   uiRenderState.frame = text;
   query<HTMLElement>('[data-role="frame"]').textContent = text;
@@ -2839,13 +2988,21 @@ function liveBrushContext(): BrushContext | undefined {
     const liveTargets = liveStrokeResult.ok
       ? targetsForCompletedSuperBrushStroke(currentStrokePoints)
       : mergeSuperBrushTargets(pendingBrush?.selectionTargets);
-    const draft: SuperBrushDraft = {
+    const strokeTargetRefs = liveStrokeResult.ok
+      ? {
+          ...(pendingBrush?.strokeTargetRefs || {}),
+          [liveStrokeResult.value.id]: liveTargets,
+        }
+      : pendingBrush?.strokeTargetRefs;
+    const draft: SuperBrushDraft = rebuildSuperBrushDraftTargets({
       strokes: [...(pendingBrush?.strokes || []), ...(liveStrokeResult.ok ? [liveStrokeResult.value] : [])],
       annotations: pendingBrush?.annotations || [],
       selectionTargets: mergeSuperBrushTargets(pendingBrush?.selectionTargets, liveTargets),
+      strokeTargetRefs,
+      manualTargetRefs: pendingBrush?.manualTargetRefs,
       capturedSnapshotId: pendingBrush?.capturedSnapshotId,
-      selectionBox: mergedSelectionBox(pendingBrush?.selectionBox, selectionBoxFromTargets(liveTargets)),
-    };
+      selectionBox: pendingBrush?.selectionBox,
+    });
     return hasMeaningfulSuperBrushContext(draft) ? createBrushContextFromSuperBrushDraft(draft) : undefined;
   }
   if (!pendingBrush) return undefined;

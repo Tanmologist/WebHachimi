@@ -1,4 +1,4 @@
-import type { BrushAnnotation, BrushContext, BrushStroke, Task, TargetRef } from "../project/schema";
+import type { BrushAnnotation, BrushCompiledContext, BrushContext, BrushStroke, Task, TargetRef } from "../project/schema";
 import { err, makeId, ok, type Result } from "../shared/types";
 import type { BrushAnnotationId, BrushStrokeId, Rect, TaskId, Vec2 } from "../shared/types";
 
@@ -6,6 +6,8 @@ export type SuperBrushDraft = {
   strokes: BrushStroke[];
   annotations: BrushAnnotation[];
   selectionTargets: TargetRef[];
+  strokeTargetRefs?: Partial<Record<string, TargetRef[]>>;
+  manualTargetRefs?: TargetRef[];
   capturedSnapshotId?: string;
   selectionBox?: BrushContext["selectionBox"];
 };
@@ -91,18 +93,34 @@ export function summarizeSuperBrushDraft(draft: SuperBrushDraft): string {
 }
 
 export function normalizeSuperBrushDraft(draft: SuperBrushDraft): SuperBrushDraft {
-  const selectionTargets = mergeSuperBrushTargets(draft.selectionTargets);
-  const normalized: SuperBrushDraft = {
-    strokes: draft.strokes,
-    annotations: draft.annotations,
-    selectionTargets,
-    capturedSnapshotId: draft.capturedSnapshotId,
-    selectionBox: draft.selectionBox,
-  };
+  const normalized = rebuildSuperBrushDraftTargets(draft);
   return {
     ...normalized,
     capturedSnapshotId: draft.capturedSnapshotId,
     selectionBox: superBrushSelectionBox(normalized),
+  };
+}
+
+export function rebuildSuperBrushDraftTargets(draft: SuperBrushDraft): SuperBrushDraft {
+  const strokeTargetRefs = normalizeStrokeTargetRefs(draft.strokeTargetRefs, draft.strokes);
+  const manualTargetRefs = mergeSuperBrushTargets(draft.manualTargetRefs);
+  const hasTargetMetadata = Boolean(strokeTargetRefs || draft.manualTargetRefs);
+  const selectionTargets = hasTargetMetadata
+    ? mergeSuperBrushTargets(
+        manualTargetRefs,
+        ...draft.strokes.map((stroke) => strokeTargetRefs?.[stroke.id] || []),
+      )
+    : mergeSuperBrushTargets(draft.selectionTargets);
+  const rebuilt: SuperBrushDraft = {
+    ...draft,
+    selectionTargets,
+    strokeTargetRefs,
+    manualTargetRefs: manualTargetRefs.length > 0 ? manualTargetRefs : undefined,
+    selectionBox: hasTargetMetadata ? undefined : draft.selectionBox,
+  };
+  return {
+    ...rebuilt,
+    selectionBox: superBrushSelectionBox(rebuilt),
   };
 }
 
@@ -118,13 +136,78 @@ export function hasMeaningfulSuperBrushContext(draft: SuperBrushDraft): boolean 
 
 export function createBrushContextFromSuperBrushDraft(draft: SuperBrushDraft): BrushContext {
   const normalized = normalizeSuperBrushDraft(draft);
+  const compiled = compileSuperBrushContext(normalized);
   return {
+    version: 1,
     strokes: normalized.strokes,
     annotations: normalized.annotations,
     selectionBox: superBrushSelectionBox(normalized),
-    targetEntityIds: superBrushTargetEntityIds(normalized.selectionTargets),
+    targetEntityIds: compiled.targetEntityIds,
     capturedSnapshotId: normalized.capturedSnapshotId as BrushContext["capturedSnapshotId"],
     summary: summarizeSuperBrushDraft(normalized),
+    raw: {
+      strokes: normalized.strokes,
+      annotations: normalized.annotations,
+      targetRefs: normalized.selectionTargets,
+      selectionBox: superBrushSelectionBox(normalized),
+      capturedSnapshotId: normalized.capturedSnapshotId as BrushContext["capturedSnapshotId"],
+    },
+    compiled,
+  };
+}
+
+export function compileSuperBrushContext(draft: SuperBrushDraft): BrushCompiledContext {
+  const normalized = normalizeSuperBrushDraft(draft);
+  const annotationTargets = normalized.annotations
+    .map((annotation) => annotation.targetRef)
+    .filter((target): target is TargetRef => Boolean(target));
+  const targetRefs = mergeSuperBrushTargets(normalized.selectionTargets, annotationTargets);
+  const strokeTargets = normalized.strokes.map((stroke) => {
+    const refs = mergeSuperBrushTargets(normalized.strokeTargetRefs?.[stroke.id]);
+    return {
+      strokeId: stroke.id,
+      targetRefs: refs,
+      bounds: rectFromPoints(stroke.points, Math.max(1, stroke.width / 2)),
+      length: roundCoord(strokeLength(stroke.points)),
+      pointCount: stroke.points.length,
+      confidence: refs.length > 0 ? 0.85 : 0.55,
+    };
+  });
+  const areas = compileBrushAreas(normalized, strokeTargets);
+  const paths = normalized.strokes
+    .filter((stroke) => stroke.points.length >= 2 && strokeLength(stroke.points) >= 12)
+    .map((stroke, index) => {
+      const refs = mergeSuperBrushTargets(normalized.strokeTargetRefs?.[stroke.id]);
+      const length = strokeLength(stroke.points);
+      return {
+        id: `path:${stroke.id || index}`,
+        strokeId: stroke.id,
+        points: stroke.points,
+        start: stroke.points[0],
+        end: stroke.points[stroke.points.length - 1],
+        length: roundCoord(length),
+        targetRefs: refs,
+        confidence: refs.some((target) => target.kind === "entity") ? 0.7 : 0.6,
+      };
+    });
+  const annotations = normalized.annotations.map((annotation) => ({
+    annotationId: annotation.id,
+    text: annotation.text,
+    position: annotation.position,
+    targetRef: annotation.targetRef,
+    confidence: annotation.targetRef ? 0.85 : 0.65,
+  }));
+  const evidence = compileBrushEvidence(normalized, targetRefs, areas.length, paths.length);
+  return {
+    version: 1,
+    targetRefs,
+    targetEntityIds: superBrushTargetEntityIds(targetRefs),
+    strokeTargets,
+    areas,
+    paths,
+    annotations,
+    confidence: brushConfidence(targetRefs, strokeTargets.length, areas.length, annotations.length),
+    evidence,
   };
 }
 
@@ -159,6 +242,77 @@ function areaTargetBox(targets: TargetRef[]): BrushContext["selectionBox"] {
   return targets.find((target): target is Extract<TargetRef, { kind: "area" }> => target.kind === "area")?.rect;
 }
 
+function compileBrushAreas(
+  draft: SuperBrushDraft,
+  strokeTargets: BrushCompiledContext["strokeTargets"],
+): BrushCompiledContext["areas"] {
+  const areas = new Map<string, BrushCompiledContext["areas"][number]>();
+  const addArea = (source: BrushCompiledContext["areas"][number]["source"], rect: Rect | undefined, targetRefs: TargetRef[], confidence: number) => {
+    if (!rect) return;
+    const normalizedRect = normalizeRect(rect);
+    const key = `${source}:${normalizedRect.x}:${normalizedRect.y}:${normalizedRect.w}:${normalizedRect.h}`;
+    areas.set(key, {
+      id: key,
+      source,
+      rect: normalizedRect,
+      targetRefs: mergeSuperBrushTargets(targetRefs),
+      confidence,
+    });
+  };
+
+  addArea("selectionBox", draft.selectionBox, draft.selectionTargets, 0.75);
+  for (const target of draft.selectionTargets) {
+    if (target.kind === "area") addArea("target", target.rect, [target], 0.85);
+  }
+  for (const strokeTarget of strokeTargets) {
+    const areaTargets = strokeTarget.targetRefs.filter((target): target is Extract<TargetRef, { kind: "area" }> => target.kind === "area");
+    if (areaTargets.length > 0) {
+      for (const target of areaTargets) addArea("target", target.rect, [target], 0.85);
+    } else if (strokeTarget.targetRefs.length === 0) {
+      addArea("stroke", strokeTarget.bounds, [], 0.55);
+    }
+  }
+  return [...areas.values()];
+}
+
+function compileBrushEvidence(draft: SuperBrushDraft, targets: TargetRef[], areaCount: number, pathCount: number): string[] {
+  const evidence = [
+    `${draft.strokes.length} stroke${draft.strokes.length === 1 ? "" : "s"}`,
+    `${draft.annotations.length} annotation${draft.annotations.length === 1 ? "" : "s"}`,
+    `${targets.length} compiled target${targets.length === 1 ? "" : "s"}`,
+  ];
+  if (areaCount > 0) evidence.push(`${areaCount} area${areaCount === 1 ? "" : "s"}`);
+  if (pathCount > 0) evidence.push(`${pathCount} path${pathCount === 1 ? "" : "s"}`);
+  if (draft.capturedSnapshotId) evidence.push("runtime snapshot captured");
+  return evidence;
+}
+
+function brushConfidence(
+  targets: TargetRef[],
+  strokeCount: number,
+  areaCount: number,
+  annotationCount: number,
+): number {
+  const targetScore = targets.some((target) => target.kind === "entity" || target.kind === "resource") ? 0.35 : 0;
+  const areaScore = areaCount > 0 ? 0.2 : 0;
+  const strokeScore = strokeCount > 0 ? 0.2 : 0;
+  const annotationScore = annotationCount > 0 ? 0.15 : 0;
+  return roundCoord(clamp(0.2 + targetScore + areaScore + strokeScore + annotationScore, 0.2, 0.95));
+}
+
+function normalizeStrokeTargetRefs(
+  strokeTargetRefs: SuperBrushDraft["strokeTargetRefs"],
+  strokes: BrushStroke[],
+): SuperBrushDraft["strokeTargetRefs"] {
+  if (!strokeTargetRefs) return undefined;
+  const normalized: Record<string, TargetRef[]> = {};
+  for (const stroke of strokes) {
+    const targets = mergeSuperBrushTargets(strokeTargetRefs[stroke.id]);
+    if (targets.length > 0) normalized[stroke.id] = targets;
+  }
+  return Object.keys(normalized).length > 0 ? normalized : undefined;
+}
+
 function superBrushTargetKey(target: TargetRef): string {
   if (target.kind === "scene") return `scene:${target.sceneId}`;
   if (target.kind === "entity") return `entity:${target.entityId}`;
@@ -184,6 +338,37 @@ function strokeLength(points: Vec2[]): number {
     total += Math.hypot(points[index].x - points[index - 1].x, points[index].y - points[index - 1].y);
   }
   return total;
+}
+
+function rectFromPoints(points: Vec2[], padding = 0): Rect {
+  if (points.length === 0) return { x: 0, y: 0, w: 1, h: 1 };
+  let minX = points[0].x;
+  let minY = points[0].y;
+  let maxX = points[0].x;
+  let maxY = points[0].y;
+  for (const point of points.slice(1)) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  return normalizeRect({
+    x: minX - padding,
+    y: minY - padding,
+    w: Math.max(1, maxX - minX) + padding * 2,
+    h: Math.max(1, maxY - minY) + padding * 2,
+  });
+}
+
+function normalizeRect(rect: Rect): Rect {
+  const x = roundCoord(rect.w < 0 ? rect.x + rect.w : rect.x);
+  const y = roundCoord(rect.h < 0 ? rect.y + rect.h : rect.y);
+  return {
+    x,
+    y,
+    w: Math.max(1, roundCoord(Math.abs(rect.w))),
+    h: Math.max(1, roundCoord(Math.abs(rect.h))),
+  };
 }
 
 function unionRects(rects: Array<Rect | undefined>): Rect | undefined {

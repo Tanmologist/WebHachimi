@@ -1,4 +1,4 @@
-import type { FrameCheck, InputScript, InputStep, RuntimeSnapshot, TestLog, TestRecord, TestTiming } from "../project/schema";
+import type { AssertionFailure, FrameCheck, InputScript, InputStep, RuntimeSnapshot, TestLog, TestRecord, TestTiming } from "../project/schema";
 import { makeId } from "../shared/types";
 import type { TaskId, TestRecordId, TransactionId } from "../shared/types";
 import type { RuntimeWorld } from "../runtime/world";
@@ -28,6 +28,7 @@ export class SimulationTestRunner {
 
   run(options: SimulationTestOptions): SimulationTestResult {
     const logs: TestLog[] = [];
+    const assertionFailures: AssertionFailure[] = [];
     const checks: FrameCheck[] = [];
     const timings: TestTiming[] = [];
     const snapshots: RuntimeSnapshot[] = [];
@@ -96,8 +97,9 @@ export class SimulationTestRunner {
           this.emit(options, "test", "info", `freeze and inspect ${step.checks.length} checks`, {
             snapshotId: snapshot.id,
           });
-          const evaluation = evaluateFrameChecks(snapshot, step.checks, options.world.clock.frame);
+          const evaluation = evaluateFrameChecks(snapshot, step.checks, options.world.clock.frame, snapshot.id);
           logs.push(...evaluation.logs);
+          assertionFailures.push(...evaluation.failures);
           if (!evaluation.passed && result === "passed") {
             result = "failed";
             failureSnapshotRef = snapshot.id;
@@ -143,6 +145,7 @@ export class SimulationTestRunner {
         failureSnapshotRef,
         snapshotRefs: snapshots.map((snapshot) => snapshot.id),
         logs,
+        assertionFailures,
         timings,
         tickRate: worldTickRate,
         scriptTickRate,

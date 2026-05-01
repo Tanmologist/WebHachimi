@@ -1,5 +1,6 @@
 import { err, makeId, ok, type EntityId, type Result, type Vec2 } from "../shared/types";
 import type {
+  AssertionFailure,
   CombatEvent,
   FrameCheck,
   InputScript,
@@ -78,6 +79,7 @@ export type ReactionWindowSweepCaseResult = {
   failureSnapshotRef?: TestRecord["failureSnapshotRef"];
   traceSummary: string;
   logs: TestLog[];
+  assertionFailures: AssertionFailure[];
   script: InputScript;
 };
 
@@ -256,6 +258,7 @@ export function runReactionWindowSweep(options: ReactionWindowSweepRunOptions): 
       failureSnapshotRef: record.failureSnapshotRef,
       traceSummary: summarizeTraceForAi(traceSink.drain(), options.traceLimit),
       logs: record.logs,
+      assertionFailures: record.assertionFailures || [],
       script: testCase.script,
     };
   });
@@ -337,6 +340,7 @@ export function runReactionWindowEdgeSearch(options: {
       failureSnapshotRef: run.value.record.failureSnapshotRef,
       traceSummary: run.value.traceSummary,
       logs: run.value.logs,
+      assertionFailures: run.value.record.assertionFailures || [],
       script: run.value.script,
     };
     cache.set(defenseOffset, next);

@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
@@ -361,8 +361,23 @@ async function saveStoredProject(project: Record<string, unknown>): Promise<stri
   const savedAt = new Date().toISOString();
   const copy = JSON.parse(JSON.stringify(project)) as Record<string, unknown>;
   await extractDataUrlAttachments(copy);
-  await writeFile(projectFile, `${JSON.stringify(copy, null, 2)}\n`, "utf8");
+  await writeFileAtomic(projectFile, `${JSON.stringify(copy, null, 2)}\n`, "utf8");
   return savedAt;
+}
+
+async function writeFileAtomic(filePath: string, data: string | Buffer, encoding?: BufferEncoding): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const tempFile = path.join(
+    path.dirname(filePath),
+    `.${path.basename(filePath)}.${process.pid}.${Date.now()}.${randomBytes(6).toString("hex")}.tmp`,
+  );
+  try {
+    await writeFile(tempFile, data, encoding);
+    await rename(tempFile, filePath);
+  } catch (error) {
+    await rm(tempFile, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 async function readStoredProject(): Promise<unknown | null> {
@@ -453,7 +468,7 @@ async function extractDataUrlAttachments(root: unknown): Promise<void> {
         const rawId = typeof attachment.id === "string" ? attachment.id : `asset-${Date.now()}-${writes.length}`;
         const id = rawId.replace(/[^a-z0-9_-]/gi, "-");
         const rel = `data/assets/${id}.${ext}`;
-        writes.push(writeFile(path.join(rootDir, rel), parsed.buffer));
+        writes.push(writeFileAtomic(path.join(rootDir, rel), parsed.buffer));
         delete attachment.dataUrl;
         attachment.path = rel;
       });

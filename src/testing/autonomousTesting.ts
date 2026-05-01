@@ -1,14 +1,34 @@
-import type { FrameCheck, InputScript, RuntimeSnapshot, Scene, TestLog, TestRecord, TestTiming } from "../project/schema";
-import type { EntityId, TaskId, TransactionId } from "../shared/types";
+import type {
+  AssertionFailure,
+  FrameCheck,
+  InputScript,
+  Project,
+  RuntimeSnapshot,
+  Scene,
+  Task,
+  TestLog,
+  TestRecord,
+  TestTiming,
+  Transaction,
+  VerificationPlan,
+} from "../project/schema";
+import { makeId } from "../shared/types";
+import type { EntityId, TaskId, TestRecordId, TransactionId } from "../shared/types";
 import { RuntimeWorld } from "../runtime/world";
+import { evaluateProjectChecks } from "./projectVerification";
 import { SimulationTestRunner } from "./simulationTestRunner";
 import { MemoryTraceSink, summarizeTraceForAi } from "./telemetry";
+import { planAutonomousTests, type AutonomousTestPlan } from "./testPlanner";
 import { runReactionWindowEdgeSearch, runScriptedReactionPlan } from "./timingSweep";
 
 export type AutonomousTestStatus = "passed" | "failed" | "interrupted";
 
 export type AutonomousTestSuiteOptions = {
+  project?: Project;
   scene: Scene;
+  task?: Task;
+  transaction?: Transaction;
+  verificationPlan?: VerificationPlan;
   initialSnapshot?: RuntimeSnapshot;
   taskId?: TaskId;
   transactionId?: TransactionId;
@@ -39,7 +59,7 @@ export type AutonomousTimingSummary = {
 export type AutonomousTestCaseReport = {
   id: string;
   label: string;
-  kind: "structure" | "scriptedReaction" | "reactionBoundary";
+  kind: "structure" | "projectVerification" | "scriptedReaction" | "reactionBoundary";
   status: AutonomousTestStatus;
   record?: TestRecord;
   snapshots: RuntimeSnapshot[];
@@ -48,6 +68,7 @@ export type AutonomousTestCaseReport = {
   traceSummary: string;
   logs: AutonomousLogSummary;
   timings: AutonomousTimingSummary;
+  assertionFailures: AssertionFailure[];
   aiNotes: string[];
 };
 
@@ -57,6 +78,7 @@ export type AutonomousTestSuiteReport = {
   traceSummary: string;
   logs: AutonomousLogSummary;
   timings: AutonomousTimingSummary;
+  testPlan: AutonomousTestPlan;
   snapshots: RuntimeSnapshot[];
   usedFrozenSnapshot: boolean;
   aiNextSteps: string[];
@@ -65,14 +87,31 @@ export type AutonomousTestSuiteReport = {
 export function runAutonomousTestSuite(options: AutonomousTestSuiteOptions): AutonomousTestSuiteReport {
   const traceLimit = options.traceLimit ?? 80;
   const usedFrozenSnapshot = Boolean(options.initialSnapshot && options.initialSnapshot.sceneId === options.scene.id);
-  const cases: AutonomousTestCaseReport[] = [runStructureCase(options, usedFrozenSnapshot, traceLimit)];
+  const verificationPlan = options.verificationPlan || options.task?.verificationPlan;
+  const testPlan = planAutonomousTests({
+    scene: options.scene,
+    task: options.task,
+    transaction: options.transaction,
+    verificationPlan,
+    includeReactionCase: options.includeReactionCase,
+    includeReactionBoundaryCase: options.includeReactionBoundaryCase,
+  });
+  const cases: AutonomousTestCaseReport[] = [];
 
-  if (options.includeReactionCase !== false) {
+  if (testPlan.runProjectVerification && options.project && verificationPlan) {
+    cases.push(runProjectVerificationCase(options, verificationPlan));
+  }
+
+  if (testPlan.runStructure) {
+    cases.push(runStructureCase(options, verificationPlan, usedFrozenSnapshot, traceLimit));
+  }
+
+  if (testPlan.runReaction) {
     const reactionCase = runAutonomousReactionCase(options, usedFrozenSnapshot, traceLimit);
     if (reactionCase) cases.push(reactionCase);
   }
 
-  if (options.includeReactionBoundaryCase !== false) {
+  if (testPlan.runReactionBoundary) {
     const boundaryCase = runAutonomousReactionBoundaryCase(options, usedFrozenSnapshot, traceLimit);
     if (boundaryCase) cases.push(boundaryCase);
   }
@@ -89,13 +128,70 @@ export function runAutonomousTestSuite(options: AutonomousTestSuiteOptions): Aut
     traceSummary: cases.map((testCase) => `## ${testCase.label}\n${testCase.traceSummary || "(no trace)"}`).join("\n\n"),
     logs: mergeLogSummaries(cases.map((testCase) => testCase.logs)),
     timings: mergeTimingSummaries(cases.map((testCase) => testCase.timings)),
+    testPlan,
     snapshots: uniqueSnapshots(cases.flatMap((testCase) => testCase.snapshots)),
     usedFrozenSnapshot,
-    aiNextSteps: buildNextSteps(status, cases, options, usedFrozenSnapshot),
+    aiNextSteps: buildNextSteps(status, cases, options, usedFrozenSnapshot, testPlan),
   };
 }
 
-function runStructureCase(options: AutonomousTestSuiteOptions, usedFrozenSnapshot: boolean, traceLimit: number): AutonomousTestCaseReport {
+function runProjectVerificationCase(options: AutonomousTestSuiteOptions, verificationPlan: VerificationPlan): AutonomousTestCaseReport {
+  const project = options.project;
+  if (!project) {
+    const log: TestLog = { level: "warning", frame: 0, message: "Project verification skipped because no project was supplied." };
+    return {
+      id: "project-verification",
+      label: "Project verification",
+      kind: "projectVerification",
+      status: "interrupted",
+      snapshots: [],
+      traceSummary: verificationPlan.summary,
+      logs: summarizeLogs([log]),
+      timings: summarizeTimings([]),
+      assertionFailures: [],
+      aiNotes: ["Supply the project to run project-level verification checks."],
+    };
+  }
+  const evaluation = evaluateProjectChecks(project, verificationPlan.projectChecks);
+  const record: TestRecord = {
+    id: makeId<"TestRecordId">("test") as TestRecordId,
+    taskId: options.taskId,
+    transactionId: options.transactionId,
+    script: { steps: [] },
+    result: evaluation.passed ? "passed" : "failed",
+    frameChecks: [],
+    projectChecks: verificationPlan.projectChecks,
+    assertionFailures: evaluation.failures,
+    logs: evaluation.logs,
+    timings: [],
+    createdAt: new Date().toISOString(),
+  };
+
+  return {
+    id: "project-verification",
+    label: "Project verification",
+    kind: "projectVerification",
+    status: record.result,
+    record,
+    snapshots: [],
+    testRecordId: record.id,
+    traceSummary: verificationPlan.summary,
+    logs: summarizeLogs(record.logs),
+    timings: summarizeTimings([]),
+    assertionFailures: evaluation.failures,
+    aiNotes:
+      record.result === "passed"
+        ? ["Project-level expectations matched the planned transaction."]
+        : ["Inspect structured assertionFailures for the exact project field mismatch."],
+  };
+}
+
+function runStructureCase(
+  options: AutonomousTestSuiteOptions,
+  verificationPlan: VerificationPlan | undefined,
+  usedFrozenSnapshot: boolean,
+  traceLimit: number,
+): AutonomousTestCaseReport {
   const traceSink = new MemoryTraceSink();
   const world = new RuntimeWorld({ scene: options.scene });
   if (usedFrozenSnapshot && options.initialSnapshot) world.restoreSnapshot(options.initialSnapshot);
@@ -107,7 +203,8 @@ function runStructureCase(options: AutonomousTestSuiteOptions, usedFrozenSnapsho
     timeScaleReason: "Autonomous structure smoke test keeps real-time pacing.",
     steps: [
       { op: "wait", ticks: 1 },
-      { op: "freezeAndInspect", checks: buildStructureChecks(options.scene, options.maxEntityChecks ?? 12) },
+      ...(verificationPlan?.runtimeSetupSteps || []),
+      { op: "freezeAndInspect", checks: buildStructureChecks(options.scene, options.maxEntityChecks ?? 12, verificationPlan?.frameChecks || []) },
     ],
   };
   const testResult = new SimulationTestRunner({ traceSink }).run({
@@ -132,6 +229,7 @@ function runStructureCase(options: AutonomousTestSuiteOptions, usedFrozenSnapsho
     traceSummary: summarizeTraceForAi(traceSink.drain(), traceLimit),
     logs: summarizeLogs(logs),
     timings: summarizeTimings(record.timings || []),
+    assertionFailures: record.assertionFailures || [],
     aiNotes: record.result === "passed" ? ["Scene and sampled runtime entities survived a freeze inspection."] : ["Inspect failed frame checks first."],
   };
 }
@@ -184,6 +282,7 @@ function runAutonomousReactionCase(
       traceSummary: "",
       logs: summarizeLogs([log]),
       timings: summarizeTimings([]),
+      assertionFailures: [],
       aiNotes: ["Could not derive a reliable hit frame for the player/enemy pair."],
     };
   }
@@ -199,6 +298,7 @@ function runAutonomousReactionCase(
     traceSummary: result.value.traceSummary,
     logs: summarizeLogs(result.value.logs),
     timings: summarizeTimings(result.value.timings),
+    assertionFailures: result.value.record.assertionFailures || [],
     aiNotes: [
       result.value.plan.calculationSummary,
       result.value.status === "passed" ? "Parry timing matched the generated reaction plan." : "Review combat trace and timing window.",
@@ -257,6 +357,7 @@ function runAutonomousReactionBoundaryCase(
       traceSummary: "",
       logs: summarizeLogs([log]),
       timings: summarizeTimings([]),
+      assertionFailures: [],
       aiNotes: ["Could not search for a stable reaction boundary window."],
     };
   }
@@ -280,6 +381,7 @@ function runAutonomousReactionBoundaryCase(
     traceSummary,
     logs: summarizeLogs(boundaryLogs),
     timings: summarizeTimings([]),
+    assertionFailures: result.value.cases.flatMap((item) => item.assertionFailures || []),
     aiNotes: [
       result.value.foundPassingWindow
         ? `Parry window ${String(result.value.bounds.firstPassingOffset)}f..${String(result.value.bounds.lastPassingOffset)}f`
@@ -313,7 +415,7 @@ function resolveReactionPair(
   return bestPair ? { attacker: bestPair.attacker, defender: bestPair.defender } : undefined;
 }
 
-function buildStructureChecks(scene: Scene, maxEntityChecks: number): FrameCheck[] {
+function buildStructureChecks(scene: Scene, maxEntityChecks: number, plannedChecks: FrameCheck[] = []): FrameCheck[] {
   const checks: FrameCheck[] = [
     {
       label: "scene snapshot matches active scene",
@@ -329,7 +431,7 @@ function buildStructureChecks(scene: Scene, maxEntityChecks: number): FrameCheck
       expect: { exists: true },
     });
   }
-  return checks;
+  return mergeFrameChecks([...checks, ...plannedChecks.filter((check) => check.target.kind !== "resource")]);
 }
 
 function addSnapshotLog(logs: TestLog[], options: AutonomousTestSuiteOptions, usedFrozenSnapshot: boolean): TestLog[] {
@@ -399,14 +501,19 @@ function buildNextSteps(
   cases: AutonomousTestCaseReport[],
   options: AutonomousTestSuiteOptions,
   usedFrozenSnapshot: boolean,
+  testPlan: AutonomousTestPlan,
 ): string[] {
   const steps: string[] = [];
   const boundaryCase = cases.find((testCase) => testCase.kind === "reactionBoundary");
+  const failedAssertion = cases.flatMap((testCase) => testCase.assertionFailures)[0];
   if (options.initialSnapshot && !usedFrozenSnapshot) steps.push("Capture a fresh frozen snapshot for this scene before rerunning.");
+  if (failedAssertion) steps.push(`Inspect assertion failure: ${failedAssertion.label} at ${failedAssertion.path}.`);
   if (status === "failed") steps.push("Open the first failed case logs and inspect its failureSnapshotRef.");
   if (status === "interrupted") steps.push("Add or tune combat-capable player/enemy behaviors so the reaction planner can derive an impact frame.");
   if (boundaryCase?.status === "failed") steps.push("Inspect the reaction boundary case to see whether the timing window shifted or developed gaps.");
-  if (!cases.some((testCase) => testCase.kind === "scriptedReaction")) steps.push("Add a playerPlatformer and enemyPatrol pair to enable autonomous reaction-window coverage.");
+  if (testPlan.runReaction && !cases.some((testCase) => testCase.kind === "scriptedReaction")) {
+    steps.push("Add a playerPlatformer and enemyPatrol pair to enable autonomous reaction-window coverage.");
+  }
   if (status === "passed") steps.push("Broaden coverage with scene-specific checks for resources, triggers, or task acceptance criteria.");
   return steps;
 }
@@ -420,6 +527,16 @@ function uniqueSnapshots(snapshots: RuntimeSnapshot[]): RuntimeSnapshot[] {
   return snapshots.filter((snapshot) => {
     if (seen.has(snapshot.id)) return false;
     seen.add(snapshot.id);
+    return true;
+  });
+}
+
+function mergeFrameChecks(checks: FrameCheck[]): FrameCheck[] {
+  const seen = new Set<string>();
+  return checks.filter((check) => {
+    const key = `${check.label}:${JSON.stringify(check.target)}:${JSON.stringify(check.expect)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }

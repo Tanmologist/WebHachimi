@@ -1,14 +1,22 @@
-import type { FrameCheck, RuntimeSnapshot, TargetRef, TestLog } from "../project/schema";
+import type { AssertionFailure, FrameCheck, RuntimeSnapshot, TargetRef, TestLog } from "../project/schema";
+import type { SnapshotId } from "../shared/types";
 
 export type CheckEvaluation = {
   passed: boolean;
   logs: TestLog[];
+  failures: AssertionFailure[];
 };
 
 type MatcherObject = Record<string, unknown>;
 
-export function evaluateFrameChecks(snapshot: RuntimeSnapshot, checks: FrameCheck[], frame: number): CheckEvaluation {
+export function evaluateFrameChecks(
+  snapshot: RuntimeSnapshot,
+  checks: FrameCheck[],
+  frame: number,
+  snapshotRef: SnapshotId | undefined = snapshot.id,
+): CheckEvaluation {
   const logs: TestLog[] = [];
+  const failures: AssertionFailure[] = [];
   let passed = true;
 
   for (const check of checks) {
@@ -17,15 +25,28 @@ export function evaluateFrameChecks(snapshot: RuntimeSnapshot, checks: FrameChec
       const evaluation = evaluateCheckExpectation(context, snapshot, key, expected);
       if (evaluation.passed) continue;
       passed = false;
+      const message = `${check.label}: expected ${key} to be ${JSON.stringify(evaluation.expected)}, got ${JSON.stringify(evaluation.actual)}.`;
+      failures.push({
+        source: "frame",
+        label: check.label,
+        target: check.target,
+        path: key,
+        expected: evaluation.expected,
+        actual: evaluation.actual,
+        matcher: matcherLabel(evaluation.expected),
+        frame,
+        snapshotRef,
+        message,
+      });
       logs.push({
         level: "error",
         frame,
-        message: `${check.label}: expected ${key} to be ${JSON.stringify(evaluation.expected)}, got ${JSON.stringify(evaluation.actual)}.`,
+        message,
       });
     }
   }
 
-  return { passed, logs };
+  return { passed, logs, failures };
 }
 
 export function frameChecksPass(snapshot: RuntimeSnapshot, checks: FrameCheck[]): boolean {
@@ -134,4 +155,9 @@ function matchesApproximateNumber(actual: unknown, operand: unknown): boolean {
   const value = (operand as Record<string, unknown>).value;
   const tolerance = (operand as Record<string, unknown>).tolerance;
   return typeof value === "number" && Math.abs(actual - value) <= (typeof tolerance === "number" ? tolerance : 0.0001);
+}
+
+function matcherLabel(expected: unknown): string | undefined {
+  if (!isMatcherObject(expected)) return undefined;
+  return Object.keys(expected).join(",");
 }

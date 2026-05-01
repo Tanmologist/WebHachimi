@@ -11,12 +11,15 @@ const rootElement = document.querySelector<HTMLElement>("#player-root");
 if (!rootElement) throw new Error("missing #player-root");
 const root = rootElement;
 
+root.hidden = false;
+root.removeAttribute("aria-hidden");
+
 root.innerHTML = `
   <section class="player-stage" data-role="stage"></section>
   <nav class="player-controls" aria-label="game controls">
     <section class="player-pad" aria-label="movement">
-      <button class="player-button" data-input="left" type="button" aria-label="left">左</button>
-      <button class="player-button" data-input="right" type="button" aria-label="right">右</button>
+      <button class="player-button" data-input="left" type="button" aria-label="left">←</button>
+      <button class="player-button" data-input="right" type="button" aria-label="right">→</button>
     </section>
     <button class="player-button player-jump" data-input="jump" type="button" aria-label="jump">跳</button>
   </nav>

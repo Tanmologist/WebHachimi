@@ -57,6 +57,33 @@ export async function loadProject(endpoint = V2_PROJECT_ENDPOINT): Promise<LoadP
   return { empty: true, project: null, storage: "api" };
 }
 
+export async function loadProjectFromDisk(
+  endpoint = V2_PROJECT_ENDPOINT,
+  options: { writeLocal?: boolean } = {},
+): Promise<LoadProjectResult> {
+  try {
+    const response = await fetch(endpoint, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+    });
+    const payload = await readJson(response);
+    if (!response.ok) throw apiError("load project failed", payload);
+
+    const body = objectPayload(payload);
+    const project = body.project ?? body.scene ?? null;
+    if (project !== null) {
+      if (!isProject(project)) throw new ProjectPersistenceError("project response has an invalid shape");
+      if (options.writeLocal !== false) writeLocalProject(project);
+      return { empty: false, project, storage: "api" };
+    }
+    if (body.empty === true) return { empty: true, project: null, storage: "api" };
+    throw new ProjectPersistenceError("project response has an invalid shape");
+  } catch (error) {
+    return { empty: true, project: null, storage: "api", warning: errorMessage(error) };
+  }
+}
+
 export async function saveProject(project: Project, endpoint = V2_PROJECT_ENDPOINT): Promise<SaveProjectResult> {
   writeLocalProject(project);
   try {

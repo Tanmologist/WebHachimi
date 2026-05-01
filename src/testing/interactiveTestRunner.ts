@@ -167,7 +167,7 @@ export class InteractiveTestRunner {
   capture(options: CaptureOptions = {}): CaptureResult {
     const snapshot = options.freeze ? this.options.world.freezeForInspection() : this.options.world.captureSnapshot();
     if (options.recordSnapshot !== false) this.snapshots.push(snapshot);
-    const evaluation = options.checks ? evaluateFrameChecks(snapshot, options.checks, this.frame) : { passed: true, logs: [] };
+    const evaluation = options.checks ? evaluateFrameChecks(snapshot, options.checks, this.frame, snapshot.id) : { passed: true, logs: [], failures: [] };
     this.logs.push(...evaluation.logs);
     if (options.label) {
       const suffix = options.checks ? ` (${options.checks.length} checks)` : "";

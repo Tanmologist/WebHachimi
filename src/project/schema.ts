@@ -200,8 +200,12 @@ export type Task = {
   userText: string;
   normalizedText?: string;
   acceptanceCriteria?: AcceptanceCriterion[];
+  verificationPlan?: VerificationPlan;
   status: TaskStatus;
   targetRefs: TargetRef[];
+  parentTaskId?: TaskId;
+  subtaskIds?: TaskId[];
+  decomposition?: TaskDecomposition;
   brushContext?: BrushContext;
   snapshotRef?: SnapshotId;
   transactionRefs: TransactionId[];
@@ -218,12 +222,71 @@ export type TargetRef =
   | { kind: "runtime"; sceneId?: SceneId };
 
 export type BrushContext = {
+  version?: 1;
   strokes: BrushStroke[];
   annotations: BrushAnnotation[];
   selectionBox?: Rect;
   targetEntityIds: EntityId[];
   capturedSnapshotId?: SnapshotId;
   summary?: string;
+  raw?: BrushRawContext;
+  compiled?: BrushCompiledContext;
+};
+
+export type BrushRawContext = {
+  strokes: BrushStroke[];
+  annotations: BrushAnnotation[];
+  targetRefs: TargetRef[];
+  selectionBox?: Rect;
+  capturedSnapshotId?: SnapshotId;
+};
+
+export type BrushCompiledContext = {
+  version: 1;
+  targetRefs: TargetRef[];
+  targetEntityIds: EntityId[];
+  strokeTargets: BrushStrokeTargetContext[];
+  areas: BrushAreaContext[];
+  paths: BrushPathContext[];
+  annotations: BrushAnnotationContext[];
+  confidence: number;
+  evidence: string[];
+};
+
+export type BrushStrokeTargetContext = {
+  strokeId: BrushStrokeId;
+  targetRefs: TargetRef[];
+  bounds: Rect;
+  length: number;
+  pointCount: number;
+  confidence: number;
+};
+
+export type BrushAreaContext = {
+  id: string;
+  source: "selectionBox" | "target" | "stroke";
+  rect: Rect;
+  targetRefs: TargetRef[];
+  confidence: number;
+};
+
+export type BrushPathContext = {
+  id: string;
+  strokeId: BrushStrokeId;
+  points: Vec2[];
+  start: Vec2;
+  end: Vec2;
+  length: number;
+  targetRefs: TargetRef[];
+  confidence: number;
+};
+
+export type BrushAnnotationContext = {
+  annotationId: BrushAnnotationId;
+  text: string;
+  position: Vec2;
+  targetRef?: TargetRef;
+  confidence: number;
 };
 
 export type BrushStroke = {
@@ -319,6 +382,8 @@ export type TestRecord = {
   script: InputScript;
   result: "passed" | "failed" | "interrupted";
   frameChecks: FrameCheck[];
+  projectChecks?: ProjectCheck[];
+  assertionFailures?: AssertionFailure[];
   initialSnapshotRef?: SnapshotId;
   failureSnapshotRef?: SnapshotId;
   snapshotRefs?: SnapshotId[];
@@ -356,6 +421,55 @@ export type FrameCheck = {
 };
 
 export type AcceptanceCriterion = FrameCheck;
+
+export type ProjectCheck = {
+  label: string;
+  target: TargetRef;
+  expect: Record<string, unknown>;
+};
+
+export type VerificationTestIntent =
+  | "structure"
+  | "project"
+  | "resource"
+  | "spatial"
+  | "collision"
+  | "behavior"
+  | "visual"
+  | "combat"
+  | "timing"
+  | "runtime";
+
+export type VerificationPlan = {
+  version: 1;
+  summary: string;
+  frameChecks: FrameCheck[];
+  runtimeSetupSteps: InputStep[];
+  projectChecks: ProjectCheck[];
+  testIntents: VerificationTestIntent[];
+  notes: string[];
+};
+
+export type TaskDecomposition = {
+  version: 1;
+  reason: string;
+  parentText: string;
+  segments: string[];
+  createdTaskIds: TaskId[];
+};
+
+export type AssertionFailure = {
+  source: "frame" | "project";
+  label: string;
+  target: TargetRef;
+  path: string;
+  expected: unknown;
+  actual: unknown;
+  matcher?: string;
+  frame?: number;
+  snapshotRef?: SnapshotId;
+  message: string;
+};
 
 export type AutonomyRun = {
   id: AutonomyRunId;

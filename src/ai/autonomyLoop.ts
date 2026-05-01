@@ -94,10 +94,15 @@ export class AutonomyLoop {
     const scene = activeScene(projectAfterTask);
     if (!scene) return err(`active scene not found: ${projectAfterTask.activeSceneId}`);
     const transaction = currentTransaction(projectAfterTask, executorResult?.transaction);
+    const currentTask = readyTask ? projectAfterTask.tasks[readyTask.id] || readyTask : undefined;
     const frozenSnapshot =
       options.initialSnapshot && options.initialSnapshot.sceneId === scene.id ? options.initialSnapshot : undefined;
     const suite = runAutonomousTestSuite({
+      project: projectAfterTask,
       scene,
+      task: currentTask,
+      transaction,
+      verificationPlan: currentTask?.verificationPlan,
       initialSnapshot: frozenSnapshot,
       taskId: readyTask?.id,
       transactionId: transaction?.id,
@@ -456,6 +461,7 @@ function executorFailureTaskText(parentTask: Task, execution: AiTaskExecutionRes
     execution.transaction ? `Transaction: ${execution.transaction.id} (${execution.transaction.status}).` : "",
     record ? `Test record: ${record.id} (${record.result}).` : "",
     record?.failureSnapshotRef ? `Failure snapshot: ${record.failureSnapshotRef}.` : "",
+    record?.assertionFailures?.length ? `Assertion failures: ${formatAssertionFailures(record.assertionFailures)}` : "",
     record?.traceSummary || execution.traceSummary ? `Trace summary: ${record?.traceSummary || execution.traceSummary}` : "",
     "Next step: inspect the referenced test record and snapshot, then make the smallest fix that turns this task green.",
   ]
@@ -470,12 +476,20 @@ function failureTaskText(testCase: AutonomousTestCaseReport, parentTask: Task | 
     `Status: ${testCase.status}.`,
     testCase.failureSnapshotRef ? `Failure snapshot: ${testCase.failureSnapshotRef}.` : "",
     testCase.testRecordId || testCase.record?.id ? `Test record: ${testCase.testRecordId || testCase.record?.id}.` : "",
+    testCase.assertionFailures.length ? `Assertion failures: ${formatAssertionFailures(testCase.assertionFailures)}` : "",
     testCase.aiNotes.length ? `AI notes: ${testCase.aiNotes.join(" ")}` : "",
     testCase.traceSummary ? `Trace summary: ${testCase.traceSummary}` : "",
     "Next step: inspect the failure snapshot/test record, repair the underlying scene or behavior issue, and rerun the autonomous suite.",
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function formatAssertionFailures(failures: NonNullable<TestRecord["assertionFailures"]>): string {
+  return failures
+    .slice(0, 3)
+    .map((failure) => `${failure.source}:${failure.label} path=${failure.path} expected=${JSON.stringify(failure.expected)} actual=${JSON.stringify(failure.actual)}`)
+    .join("; ");
 }
 
 function normalizeTaskText(text: string): string {

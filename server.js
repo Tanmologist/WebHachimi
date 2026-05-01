@@ -17,6 +17,7 @@ const PROJECT_FILE = path.join(LOCAL_DATA_DIR, 'project.json');
 const V2_PROJECT_SEED_FILE = path.join(DATA_DIR, 'v2-project.json');
 const V2_PROJECT_FILE = path.join(LOCAL_DATA_DIR, 'v2-project.json');
 const ASSETS_DIR = path.join(DATA_DIR, 'assets');
+const DIST_V2_DIR = path.join(ROOT, 'dist-v2');
 const PORT = Number(process.env.WEBHACHIMI_PORT) || 5577;
 const MAX_BODY = 50 * 1024 * 1024;
 const execFileAsync = promisify(execFile);
@@ -65,6 +66,11 @@ const ROOT_STATIC_FILES = new Set([
   'styles.css',
   'editor-preview.html',
   'editor-preview.css',
+  'player.html',
+  'v2.html',
+]);
+
+const BUILT_APP_FILES = new Set([
   'player.html',
   'v2.html',
 ]);
@@ -203,7 +209,7 @@ async function saveProject(project, file = PROJECT_FILE) {
   await fsp.mkdir(ASSETS_DIR, { recursive: true });
   const copy = Object.assign({}, project, { savedAt: new Date().toISOString() });
   await extractDataUrlAttachments(copy);
-  await fsp.writeFile(file, JSON.stringify(copy, null, 2), 'utf8');
+  await writeFileAtomic(file, JSON.stringify(copy, null, 2), 'utf8');
   return { ok: true, savedAt: copy.savedAt };
 }
 
@@ -213,8 +219,23 @@ async function saveV2Project(project) {
   const savedAt = new Date().toISOString();
   const copy = JSON.parse(JSON.stringify(project));
   await extractDataUrlAttachments(copy);
-  await fsp.writeFile(V2_PROJECT_FILE, JSON.stringify(copy, null, 2), 'utf8');
+  await writeFileAtomic(V2_PROJECT_FILE, JSON.stringify(copy, null, 2), 'utf8');
   return { ok: true, savedAt };
+}
+
+async function writeFileAtomic(file, data, encoding) {
+  await fsp.mkdir(path.dirname(file), { recursive: true });
+  const tempFile = path.join(
+    path.dirname(file),
+    `.${path.basename(file)}.${process.pid}.${Date.now()}.${randomBytes(6).toString('hex')}.tmp`,
+  );
+  try {
+    await fsp.writeFile(tempFile, data, encoding);
+    await fsp.rename(tempFile, file);
+  } catch (error) {
+    await fsp.rm(tempFile, { force: true }).catch(() => {});
+    throw error;
+  }
 }
 
 function extFromMime(mime, fallbackName) {
@@ -254,7 +275,7 @@ async function extractDataUrlAttachments(root) {
         const ext = extFromMime(parsed.mime || att.mime, att.name);
         const id = String(att.id || 'asset-' + Date.now()).replace(/[^a-z0-9_-]/gi, '-');
         const rel = 'data/assets/' + id + '.' + ext;
-        writes.push(fsp.writeFile(path.join(ROOT, rel), parsed.buffer));
+        writes.push(writeFileAtomic(path.join(ROOT, rel), parsed.buffer));
         delete att.dataUrl;
         att.path = rel;
       });
@@ -475,11 +496,12 @@ async function handleStatic(req, res, pathname) {
   if (pathname === '/favicon.ico') return send(res, 204, null, { 'Content-Type': 'image/x-icon' });
   const rel = pathname === '/' ? 'index.html' : pathname.slice(1);
   const normalizedRel = rel.replace(/\\/g, '/');
-  if (!isAllowedStaticPath(normalizedRel)) return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
-  if (normalizedRel.startsWith('data/assets/') && !hasLocalApiToken(req)) {
+  const builtAbs = builtStaticPath(normalizedRel);
+  if (!builtAbs && !isAllowedStaticPath(normalizedRel)) return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
+  if (!builtAbs && normalizedRel.startsWith('data/assets/') && !hasLocalApiToken(req)) {
     return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
   }
-  const abs = safeJoin(rel);
+  const abs = builtAbs || safeJoin(rel);
   if (!abs) return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
   if (!fs.existsSync(abs)) return send(res, 404, 'not found', { 'Content-Type': 'text/plain; charset=utf-8' });
   const stat = await fsp.stat(abs);
@@ -489,11 +511,33 @@ async function handleStatic(req, res, pathname) {
   return send(res, 200, data, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
 }
 
+function builtStaticPath(rel) {
+  if (!isSafeStaticRel(rel)) return null;
+  if (BUILT_APP_FILES.has(rel)) {
+    const abs = path.join(DIST_V2_DIR, rel);
+    return fs.existsSync(abs) ? abs : null;
+  }
+  if (!rel.startsWith('assets/') || !isAllowedBuiltAssetPath(rel)) return null;
+  const abs = path.resolve(DIST_V2_DIR, rel);
+  const relative = path.relative(DIST_V2_DIR, abs);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
+  return fs.existsSync(abs) ? abs : null;
+}
+
 function isAllowedStaticPath(rel) {
-  if (!rel || rel.includes('\0') || rel.split('/').some((part) => part.startsWith('.'))) return false;
+  if (!isSafeStaticRel(rel)) return false;
   if (ROOT_STATIC_FILES.has(rel)) return true;
   if (rel.startsWith('data/assets/')) return isAllowedAssetPath(rel);
   return false;
+}
+
+function isSafeStaticRel(rel) {
+  return Boolean(rel) && !rel.includes('\0') && !rel.split('/').some((part) => part.startsWith('.'));
+}
+
+function isAllowedBuiltAssetPath(rel) {
+  const ext = path.extname(rel).toLowerCase();
+  return Boolean(MIME[ext]) && !rel.slice('assets/'.length).includes('/');
 }
 
 function isAllowedAssetPath(rel) {

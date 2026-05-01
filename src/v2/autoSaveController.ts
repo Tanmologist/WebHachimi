@@ -24,6 +24,10 @@ export class AutoSaveController {
     return this.currentStatus;
   }
 
+  get hasPendingChanges(): boolean {
+    return this.dirty || this.saveAgain || this.inFlight;
+  }
+
   markDirty(reason: string): void {
     this.dirty = true;
     this.currentStatus = `${reason}，等待自动保存`;

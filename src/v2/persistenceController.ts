@@ -1,4 +1,4 @@
-import { loadProject, saveProject, saveProjectLocally, type LoadProjectResult, type SaveProjectResult } from "../project/persistence";
+import { loadProject, loadProjectFromDisk, saveProject, saveProjectLocally, type LoadProjectResult, type SaveProjectResult } from "../project/persistence";
 import type { Entity, Project, Scene } from "../project/schema";
 import { cloneJson } from "../shared/types";
 
@@ -50,6 +50,15 @@ export async function loadProjectForEditor(): Promise<LoadProjectOutcome> {
     result,
     project: result.project,
     notice: result.project ? formatLoadNotice(result) : "没有已保存的项目。",
+  };
+}
+
+export async function forceLoadProjectFromDiskForEditor(options: { writeLocal?: boolean } = {}): Promise<LoadProjectOutcome> {
+  const result = await loadProjectFromDisk(undefined, options);
+  return {
+    result,
+    project: result.project,
+    notice: result.project ? formatLoadNotice(result) : result.warning ? `磁盘读取失败：${result.warning}` : "磁盘没有可载入项目。",
   };
 }
 
