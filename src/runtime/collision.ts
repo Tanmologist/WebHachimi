@@ -72,21 +72,23 @@ export function collectPairs(entities: Entity[]): CollisionHit[] {
 
 export function collectDynamicPairs(entities: Entity[]): CollisionHit[] {
   const hits: CollisionHit[] = [];
-  const solidEntities = entities.filter((entity) => entity.collider?.solid);
-  const dynamicEntities = solidEntities.filter((entity) => entity.body?.mode === "dynamic");
+  const dynamicEntities: Entity[] = [];
+  const staticEntities: Entity[] = [];
   const boundsCache = new Map<string, Rect>();
-  const seenPairs = new Set<string>();
 
-  for (const dynamic of dynamicEntities) {
-    for (const other of solidEntities) {
-      if (dynamic.id === other.id) continue;
-      const key = dynamic.id < other.id ? `${dynamic.id}|${other.id}` : `${other.id}|${dynamic.id}`;
-      if (seenPairs.has(key)) continue;
-      seenPairs.add(key);
-      if (!canCollide(dynamic, other)) continue;
-      if (!overlaps(cachedBounds(dynamic, boundsCache), cachedBounds(other, boundsCache))) continue;
-      const hit = collideAabb(dynamic, other);
-      if (hit) hits.push(hit);
+  for (const entity of entities) {
+    if (!entity.collider?.solid) continue;
+    if (entity.body?.mode === "dynamic") dynamicEntities.push(entity);
+    else staticEntities.push(entity);
+  }
+
+  for (let index = 0; index < dynamicEntities.length; index += 1) {
+    const dynamic = dynamicEntities[index];
+    for (let otherIndex = index + 1; otherIndex < dynamicEntities.length; otherIndex += 1) {
+      collectHit(dynamic, dynamicEntities[otherIndex], boundsCache, hits);
+    }
+    for (const other of staticEntities) {
+      collectHit(dynamic, other, boundsCache, hits);
     }
   }
 
@@ -107,6 +109,13 @@ function cachedBounds(entity: Entity, cache: Map<string, Rect>): Rect {
   const bounds = boundsFor(entity);
   cache.set(entity.id, bounds);
   return bounds;
+}
+
+function collectHit(a: Entity, b: Entity, boundsCache: Map<string, Rect>, hits: CollisionHit[]): void {
+  if (!canCollide(a, b)) return;
+  if (!overlaps(cachedBounds(a, boundsCache), cachedBounds(b, boundsCache))) return;
+  const hit = collideAabb(a, b);
+  if (hit) hits.push(hit);
 }
 
 function collideAabb(a: Entity, b: Entity): CollisionHit | null {
@@ -254,11 +263,17 @@ function segmentsIntersect(a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean {
 }
 
 function boundsForPoints(points: Vec2[]): Rect {
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  const x = Math.min(...xs);
-  const y = Math.min(...ys);
-  return { x, y, w: Math.max(...xs) - x, h: Math.max(...ys) - y };
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x);
+    maxY = Math.max(maxY, point.y);
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
 
 function rotateLocalPoint(center: Vec2, local: Vec2, rotation: number): Vec2 {
