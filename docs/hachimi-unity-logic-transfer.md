@@ -69,6 +69,97 @@
 | `src/testing` | 输入脚本、freezeAndInspect、combat trace、AI 自主测试 | 需要针对阶段图、resolver、Unresolved 和完美闪避的专门测试。 |
 | `src/v2` 编辑器 | 面板、任务、超级画笔、资源、输出日志 | 需要战斗调参面板和 hitbox/window 可视化。 |
 
+## 聚焦后的首版目标
+
+用户当前确认的首版核心不是六项全搬，而是先把四个基础动作和编辑器调参结合起来：
+
+- 普通攻击
+- 蓄力攻击
+- 振刀
+- 闪避
+- 每次攻击判定方块的大小、位置、持续时间、阶段窗口可编辑
+
+这里的关键判断：WebHachimi 已经有“对象本体/可视体分离”“碰撞体大小位置编辑”“触发器”“运行时临时对象”“冻结检查”“自动测试”等能力，所以不应该再做一个孤立的 Unity 式 hitbox 编辑器。更好的方案是把战斗动作本身纳入 WebHachimi 的项目数据和编辑器工作流，让 hitbox 既是战斗数据，也是画布上可视、可拖、可测、可回滚的对象。
+
+## 四个动作如何落到 Web 端
+
+| 动作 | Unity 参考要点 | WebHachimi 结合方式 | 首版验收 |
+| --- | --- | --- | --- |
+| 普通攻击 | 左键短按；Startup/Active/Recovery；Active 开 Hitbox；命中后伤害和硬直。 | 新增 `normalAttack` ActionDef；每一段攻击有一个或多个 hitbox window；画布里用半透明触发方块预览当前段的判定区。 | 按攻击键后生成有效攻击窗口，敌人进入判定区会扣血并产生日志。 |
+| 蓄力攻击 | 左键长按进入蓄力，松开释放；蓄力期间可有霸体/减速；蓄力等级影响伤害和范围。 | 输入层记录 hold 时长；ActionContext 保存 `chargeLevel`；编辑器允许为不同蓄力等级设置 hitbox 大小、偏移、伤害倍率。 | 短按走普攻，长按后松开走蓄力；蓄力 hitbox 和伤害明显不同。 |
+| 振刀 | 双键或独立键触发 Parrybox；成功反制攻击并进入奖励窗口。 | 先支持独立 `parry` 输入，后续再加左右键和弦；Parry 是 ActionDef，不是直接给角色无敌；成功由 resolver 输出 `parrySuccess` 和 stun/action ops。 | 敌人攻击窗口内按振刀，玩家不掉血，敌人进入硬直，输出 parrySuccess。 |
+| 闪避 | Shift 触发；短无敌帧；可带残影；完美闪避后慢放/刷新冷却。 | 首版先做 dodge action + invulnerable/shadow window；残影作为 transient entity；完美闪避放到第二步，但数据结构先留 `shadowWindow`。 | 闪避期间可以避开攻击；冻结时能看见闪避状态和残影/窗口信息。 |
+
+## 判定方块编辑器怎么做
+
+| 编辑对象 | 不是这样做 | 推荐这样做 | 复用现有能力 |
+| --- | --- | --- | --- |
+| 攻击判定方块 | 不把 hitbox 做成只能运行时生成的隐藏逻辑。 | 把 hitbox 定义成 ActionDef 的 `WindowDef.shape`，并在编辑器中显示为“动作判定预览对象”。 | `Entity.collider.size/offset/rotation`、`CanvasTransform` 拖拽缩放旋转、触发器可视化。 |
+| 每一段攻击 | 不只给角色一个 `attackRange/attackHeight` 参数。 | 每段拥有独立 `startup/active/recovery`、hitbox 列表、伤害、击退、位移。 | 现有 `behavior.params` 可作为旧兼容，新系统应迁到结构化 action 数据。 |
+| 蓄力等级 | 不把等级差异写死在代码分支里。 | `chargeLevel 0/1/2/3` 可覆盖 hitbox、伤害、hitstop、霸体等级。 | 右侧 inspector + 项目 JSON + 事务系统。 |
+| 可视调试 | 不只在命中时闪一下。 | 时间轴上选择阶段时，画布显示该阶段 hitbox/parrybox/hurtbox；运行时冻结也能看到当前打开窗口。 | 当前 renderer overlay、superBrush 高亮、runtime snapshot。 |
+| 保存回滚 | 不让调参只存在内存。 | 调整 hitbox 产生 ProjectTransaction，可 undo/redo，可被 AI 和测试引用。 | `ProjectStore.applyTransaction()`、diff、任务记录。 |
+
+## 建议的数据结构方向
+
+首版可以先新增一个轻量 `combat` 模块，避免把所有字段继续塞进 `behavior.params`。
+
+```ts
+type CombatActionId = "normalAttack" | "chargeAttack" | "parry" | "dodge";
+
+type CombatActionDef = {
+  id: CombatActionId;
+  displayName: string;
+  input: CombatInputDef;
+  phases: CombatPhaseDef[];
+};
+
+type CombatPhaseDef = {
+  id: string;
+  type: "startup" | "hold" | "active" | "recovery" | "reward";
+  durationFrames: number;
+  windows: CombatWindowDef[];
+  movement?: CombatMovementDef;
+};
+
+type CombatWindowDef = {
+  id: string;
+  type: "hitbox" | "parrybox" | "hurtbox" | "shadow" | "cancel";
+  startFrame: number;
+  endFrame: number;
+  shape: {
+    kind: "box" | "circle" | "polygon";
+    offset: { x: number; y: number };
+    size: { x: number; y: number };
+    rotation: number;
+  };
+  damage?: number;
+  knockback?: { x: number; y: number };
+};
+```
+
+这套结构和 Unity 的 `ActionDef -> PhaseNode -> WindowDef` 对齐，但字段用 Web 运行时和编辑器更容易处理的 frame/shape 数据。后续再加 `InteractionTable`、`Outcome`、慢放、完美闪避，不会推翻这个基础。
+
+## 实现顺序建议
+
+| 阶段 | 要做什么 | 为什么这样排 |
+| --- | --- | --- |
+| A | 新增 `src/combat/types.ts` 和默认四动作数据 | 先把普攻、蓄力、振刀、闪避从散乱 params 变成稳定协议。 |
+| B | 在 runtime 中跑 ActionRunner | 让按键驱动阶段推进和窗口开关，而不是只靠 `attackStartFrame` 几个字段。 |
+| C | 用现有 collision 生成 combat contact facts | 把当前“矩形攻击区域”升级为具体窗口命中事实。 |
+| D | 实现最小 resolver/outcome | 普攻命中、振刀成功、闪避无敌都走统一裁决。 |
+| E | 编辑器显示并编辑 action hitbox | 选中角色后打开“动作”面板，选择动作/阶段/窗口，画布上拖动判定方块。 |
+| F | 测试覆盖四个动作 | 用现有 `InteractiveTestRunner` 验证短按、长按、振刀窗口、闪避窗口。 |
+
+## 特色结合点
+
+| 特色 | 做法 | 价值 |
+| --- | --- | --- |
+| 冻结编辑战斗帧 | 玩家运行时按 `Z` 冻结后，编辑器显示当前动作阶段、打开窗口和临时 hitbox。 | 这是 WebHachimi 区别于 Unity 调参面板的核心体验。 |
+| 超级画笔改判定 | 用户圈出攻击范围并写“蓄力范围再大一点”，AI 改对应 action window 的 shape。 | 把现有 AI/任务系统和战斗调参连起来。 |
+| 自动测试调参 | 每次改 hitbox 后自动跑命中/振刀/闪避 smoke，失败生成任务。 | 避免手感调参把规则打坏。 |
+| 可视体/本体分离 | 角色 sprite 可以独立于碰撞体和攻击判定调整。 | 保持当前 Web 编辑器优势，不被 Unity 组件式写法拖回去。 |
+
 ## 我的疑问
 
 1. Web 版首要目标是“先做出 Unity 玩法手感”，还是“先把可编辑的战斗协议系统搭起来”？我建议先协议，再最小玩法。
@@ -85,9 +176,9 @@
 
 | 决策项 | 当前建议 | 你的决定 | 备注 |
 | --- | --- | --- | --- |
-| 首版迁移范围 | P0 + 最小 P1：协议、主循环、resolver、普攻、振刀、基础 hit/stun | 待定 |  |
-| 动作数据位置 | 先 TS 默认数据，随后进入项目 JSON | 待定 |  |
-| 输入映射 | 桌面沿用 Unity，移动端后补虚拟按钮 | 待定 |  |
-| 首个敌人 | 简单巡逻/靶子，不先做复杂 AI | 待定 |  |
-| 编辑器调参 | 先可视化 hitbox/window，再做完整调参面板 | 待定 |  |
-| 慢放机制 | 完美闪避阶段再接，不放在首个最小闭环 | 待定 |  |
+| 首版迁移范围 | 普攻、蓄力攻击、振刀、闪避 + 判定方块编辑器 | 已确认为当前聚焦范围 | 点刺、飞杀、处决后移。 |
+| 动作数据位置 | 先 TS 默认数据，随后进入项目 JSON | 待定 | 建议不要继续扩 `behavior.params`。 |
+| 输入映射 | 桌面先支持键盘/鼠标，移动端后补虚拟按钮 | 待定 | 振刀先独立键，左右键和弦可作为增强。 |
+| 首个敌人 | 简单巡逻/靶子，不先做复杂 AI | 待定 | 先验证玩家四动作。 |
+| 编辑器调参 | 先可视化 hitbox/window，再做完整调参面板 | 已确认需要编辑每次判定方块大小位置 | 需要动作/阶段/窗口三层选择。 |
+| 慢放机制 | 完美闪避阶段再接，不放在首个最小闭环 | 待定 | 闪避先可用，完美闪避后续增强。 |
