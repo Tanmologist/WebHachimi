@@ -5,9 +5,15 @@ import { renderInspectorHtml, renderTreeItemHtml } from "../editor/panelViews";
 const entity = makeEntity();
 const treeHtml = renderTreeItemHtml(entity, entity.id, "presentation", {});
 const inspectorHtml = renderInspectorHtml(entity, "presentation", {});
+const hiddenEntity = makeEntity();
+if (hiddenEntity.render) hiddenEntity.render.visible = false;
+const hiddenTreeHtml = renderTreeItemHtml(hiddenEntity, hiddenEntity.id, "presentation", {});
 
 assert(treeHtml.includes("品红色可视体"), "unbound visual tree label should use human-readable color naming");
 assert(!treeHtml.includes("#ff00ff"), "tree label should not expose raw color code");
+assert(treeHtml.includes("本体"), "world tree should distinguish the body entity row");
+assert(treeHtml.includes("可视"), "world tree should mark visible presentation rows");
+assert(hiddenTreeHtml.includes("隐藏"), "world tree should mark hidden presentation rows");
 assert(inspectorHtml.includes("当前可视体"), "inspector should use 可视体 terminology");
 assert(!inspectorHtml.includes("表现体"), "inspector should not use old 表现体 terminology");
 

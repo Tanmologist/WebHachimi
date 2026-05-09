@@ -17,6 +17,7 @@ export function renderTreeItemHtml(
   const nodeId = `entity:${entity.id}`;
   const hasPresentation = Boolean(entity.render);
   const collapsed = hasPresentation && collapsedNodes.has(nodeId);
+  const presentationHidden = entity.render?.visible === false;
   return `
     <article class="v2-world-node">
       <div class="v2-tree-row">
@@ -27,12 +28,14 @@ export function renderTreeItemHtml(
         }
         <button class="v2-tree-item ${bodySelected ? "is-selected" : ""}" data-entity-id="${entity.id}" data-part="body" type="button" draggable="true">
           <span>${escapeHtml(entity.displayName)}</span>
+          <small class="v2-tree-badge">本体</small>
         </button>
       </div>
       ${
         hasPresentation && !collapsed
           ? `<button class="v2-tree-item v2-tree-child ${presentationSelected ? "is-selected" : ""}" data-entity-id="${entity.id}" data-part="presentation" type="button">
               <span>↳ ${escapeHtml(presentationName)}</span>
+              <small class="v2-tree-badge ${presentationHidden ? "is-muted" : ""}">${presentationHidden ? "隐藏" : "可视"}</small>
             </button>`
           : ""
       }

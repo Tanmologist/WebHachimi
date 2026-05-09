@@ -2273,10 +2273,10 @@ function renderFrame(): void {
 }
 
 function renderTree(projectSnapshot: Project): void {
-  const signature = [scene.id, projectSnapshot.meta.updatedAt, selectedId, selectedPart, collapsedTreeSignature()].join("||");
+  const entities = editableEntities();
+  const signature = sceneTreeRenderSignature(projectSnapshot, entities);
   if (uiRenderState.tree === signature) return;
   uiRenderState.tree = signature;
-  const entities = editableEntities();
   treeNode.innerHTML = renderSceneTreeHtml(scene, entities, selectedId, selectedPart, projectSnapshot.resources, collapsedTreeNodes);
   bindSceneTreeInteractions(treeNode, {
     onToggleNode: (nodeId) => {
@@ -2311,6 +2311,40 @@ function renderTree(projectSnapshot: Project): void {
       showEntityContextMenu(entity, "body", target.clientX, target.clientY, entity.transform.position);
     },
   });
+}
+
+function sceneTreeRenderSignature(projectSnapshot: Project, entities: Entity[]): string {
+  const entitySignature = entities
+    .map((entity) =>
+      [
+        entity.id,
+        entity.displayName,
+        entity.folderId || "",
+        entity.persistent ? "persistent" : "runtime",
+        entity.render ? "rendered" : "headless",
+        entity.render?.visible === false ? "hidden" : "visible",
+        entity.render?.resourceId || "",
+      ].join(":"),
+    )
+    .sort()
+    .join("|");
+  const folderSignature = scene.folders
+    .map((folder) => [folder.id, folder.displayName, folder.entityIds.join(",")].join(":"))
+    .join("|");
+  const resourceSignature = Object.values(projectSnapshot.resources)
+    .map((resource) => [resource.id, resource.displayName, resource.type].join(":"))
+    .sort()
+    .join("|");
+  return [
+    scene.id,
+    projectSnapshot.meta.updatedAt,
+    selectedId,
+    selectedPart,
+    collapsedTreeSignature(),
+    folderSignature,
+    entitySignature,
+    resourceSignature,
+  ].join("||");
 }
 
 function renderTasks(projectSnapshot: Project): void {
