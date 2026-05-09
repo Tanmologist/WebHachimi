@@ -7,9 +7,8 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
-const projectSeedFile = path.join(rootDir, "data", "v2-project.json");
-const projectFile = path.join(rootDir, "data", "local", "v2-project.json");
-const assetsDir = path.join(rootDir, "resources");
+const hachimiGameDir = path.join(rootDir, "games", "hachimi-nanbei-lvdong");
+const legacyV2ProjectRoute = "/api/v2/project";
 const execFileAsync = promisify(execFile);
 const maxClipboardFiles = 10;
 const maxClipboardFileBytes = 8 * 1024 * 1024;
@@ -46,20 +45,61 @@ const safeAttachmentMime = new Set([
   "font/woff2",
 ]);
 
-export default defineConfig({
+type ProjectProfile = {
+  id: string;
+  routes: string[];
+  projectSeedFile?: string;
+  projectFile: string;
+  assetsDir: string;
+  assetUrlPrefix: string;
+};
+
+const projectProfiles: ProjectProfile[] = [
+  {
+    id: "webhachimi",
+    routes: ["/api/webhachimi/project"],
+    projectFile: path.join(rootDir, "data", "local", "webhachimi-project.json"),
+    assetsDir: path.join(rootDir, "data", "local", "webhachimi-resources"),
+    assetUrlPrefix: "/api/webhachimi/assets",
+  },
+  {
+    id: "hachimi-nanbei-lvdong",
+    routes: ["/api/games/hachimi-nanbei-lvdong/project", legacyV2ProjectRoute],
+    projectSeedFile: path.join(hachimiGameDir, "project.json"),
+    projectFile: path.join(hachimiGameDir, "local", "project.json"),
+    assetsDir: path.join(hachimiGameDir, "resources"),
+    assetUrlPrefix: "/games/hachimi-nanbei-lvdong/resources",
+  },
+];
+
+const projectProfilesByRoute = new Map(projectProfiles.flatMap((profile) => profile.routes.map((route) => [route, profile])));
+
+export default defineConfig(({ mode }) => ({
   base: "./",
   plugins: [projectApiPlugin()],
   build: {
-    outDir: "dist-v2",
+    outDir: buildOutDir(mode),
     emptyOutDir: true,
     rollupOptions: {
-      input: {
-        v2: "v2.html",
-        player: "player.html",
-      },
+      input: buildInputs(mode),
     },
   },
-});
+}));
+
+function buildOutDir(mode: string): string {
+  if (mode === "editor") return "dist-webhachimi";
+  if (mode === "game") return "dist-hachimi-nanbei-lvdong";
+  return "dist-v2";
+}
+
+function buildInputs(mode: string): Record<string, string> {
+  const editor = "apps/webhachimi/editor.html";
+  const game = "games/hachimi-nanbei-lvdong/index.html";
+  const gameEditor = "games/hachimi-nanbei-lvdong/editor.html";
+  if (mode === "editor") return { editor };
+  if (mode === "game") return { game, "game-editor": gameEditor };
+  return { editor, game, "game-editor": gameEditor };
+}
 
 function projectApiPlugin() {
   return {
@@ -98,12 +138,46 @@ function projectApiPlugin() {
         }
       });
 
-      server.middlewares.use("/api/v2/project", async (req, res) => {
+      server.middlewares.use(async (req, res, next) => {
+        const pathname = requestPathname(req.url || "/");
+        const assetProfile = projectProfileForAssetPath(pathname);
+        if (assetProfile) {
+          try {
+            if (req.method !== "GET") {
+              res.statusCode = 405;
+              sendJson(res, { ok: false, error: "method not allowed" });
+              return;
+            }
+            if (!requireLocalApiAccess(req, res)) return;
+            const assetPath = assetFilePath(assetProfile, pathname);
+            if (!assetPath) {
+              res.statusCode = 403;
+              res.setHeader("Content-Type", "text/plain; charset=utf-8");
+              res.end("forbidden");
+              return;
+            }
+            const buffer = await readFile(assetPath);
+            res.setHeader("Content-Type", mimeFromFileName(assetPath));
+            res.end(buffer);
+          } catch {
+            res.statusCode = 404;
+            res.setHeader("Content-Type", "text/plain; charset=utf-8");
+            res.end("not found");
+          }
+          return;
+        }
+
+        const projectProfile = projectProfilesByRoute.get(pathname);
+        if (!projectProfile) {
+          next();
+          return;
+        }
+
         res.setHeader("Content-Type", "application/json; charset=utf-8");
         try {
           if (req.method === "GET") {
             if (!requireLocalApiAccess(req, res)) return;
-            const project = await readStoredProject();
+            const project = await readStoredProject(projectProfile);
             sendJson(res, project ? { project } : { empty: true });
             return;
           }
@@ -122,7 +196,7 @@ function projectApiPlugin() {
               sendJson(res, { ok: false, error: "invalid v2 project payload" });
               return;
             }
-            const savedAt = await saveStoredProject(project);
+            const savedAt = await saveStoredProject(project, projectProfile);
             sendJson(res, { ok: true, savedAt });
             return;
           }
@@ -153,13 +227,31 @@ function requestPathname(url: string): string {
   }
 }
 
+function projectProfileForAssetPath(pathname: string): ProjectProfile | undefined {
+  return projectProfiles.find((profile) => pathname === profile.assetUrlPrefix || pathname.startsWith(`${profile.assetUrlPrefix}/`));
+}
+
+function assetFilePath(profile: ProjectProfile, pathname: string): string | undefined {
+  const prefix = `${profile.assetUrlPrefix}/`;
+  if (!pathname.startsWith(prefix)) return undefined;
+  const fileName = pathname.slice(prefix.length);
+  if (!fileName || fileName.includes("/") || fileName.startsWith(".")) return undefined;
+  const abs = path.resolve(profile.assetsDir, fileName);
+  const relative = path.relative(profile.assetsDir, abs);
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return undefined;
+  return abs;
+}
+
 function isDeniedViteStaticPath(pathname: string, req: { headers: Record<string, string | string[] | undefined> }): boolean {
   const clean = pathname.replace(/\\/g, "/");
   if (clean.startsWith("/.git/")) return true;
   if (clean.endsWith(".log")) return true;
   if (clean.startsWith("/data/local/")) return true;
+  if (clean.startsWith("/games/hachimi-nanbei-lvdong/local/")) return true;
   if (clean.startsWith("/resources/") && !hasLocalApiToken(req)) return true;
-  if (clean === "/data/project.json" || clean === "/data/v2-project.json") return true;
+  if (clean.startsWith("/games/hachimi-nanbei-lvdong/resources/") && !hasLocalApiToken(req)) return true;
+  if (clean === "/data/project.json") return true;
+  if (clean === "/games/hachimi-nanbei-lvdong/project.json") return true;
   if (clean === "/package-lock.json" || clean === "/package.json") return true;
   return false;
 }
@@ -355,13 +447,13 @@ function fileNameWithoutExtension(fileName: string): string {
   return fileName.replace(/\.[^.]+$/, "");
 }
 
-async function saveStoredProject(project: Record<string, unknown>): Promise<string> {
-  await mkdir(path.dirname(projectFile), { recursive: true });
-  await mkdir(assetsDir, { recursive: true });
+async function saveStoredProject(project: Record<string, unknown>, profile: ProjectProfile): Promise<string> {
+  await mkdir(path.dirname(profile.projectFile), { recursive: true });
+  await mkdir(profile.assetsDir, { recursive: true });
   const savedAt = new Date().toISOString();
   const copy = JSON.parse(JSON.stringify(project)) as Record<string, unknown>;
-  await extractDataUrlAttachments(copy);
-  await writeFileAtomic(projectFile, `${JSON.stringify(copy, null, 2)}\n`, "utf8");
+  await extractDataUrlAttachments(copy, profile);
+  await writeFileAtomic(profile.projectFile, `${JSON.stringify(copy, null, 2)}\n`, "utf8");
   return savedAt;
 }
 
@@ -380,10 +472,10 @@ async function writeFileAtomic(filePath: string, data: string | Buffer, encoding
   }
 }
 
-async function readStoredProject(): Promise<unknown | null> {
-  const local = await readProjectFile(projectFile);
+async function readStoredProject(profile: ProjectProfile): Promise<unknown | null> {
+  const local = await readProjectFile(profile.projectFile);
   if (local) return local;
-  return readProjectFile(projectSeedFile);
+  return profile.projectSeedFile ? readProjectFile(profile.projectSeedFile) : null;
 }
 
 async function readProjectFile(filePath: string): Promise<unknown | null> {
@@ -446,7 +538,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
 }
 
-async function extractDataUrlAttachments(root: unknown): Promise<void> {
+async function extractDataUrlAttachments(root: unknown, profile: ProjectProfile): Promise<void> {
   const writes: Promise<void>[] = [];
   const visit = (node: unknown): void => {
     if (!node || typeof node !== "object") return;
@@ -467,10 +559,10 @@ async function extractDataUrlAttachments(root: unknown): Promise<void> {
         const ext = extFromMime(parsed.mime || (typeof attachment.mime === "string" ? attachment.mime : ""), name);
         const rawId = typeof attachment.id === "string" ? attachment.id : `asset-${Date.now()}-${writes.length}`;
         const id = rawId.replace(/[^a-z0-9_-]/gi, "-");
-        const rel = `resources/${id}.${ext}`;
-        writes.push(writeFileAtomic(path.join(rootDir, rel), parsed.buffer));
+        const fileName = `${id}.${ext}`;
+        writes.push(writeFileAtomic(path.join(profile.assetsDir, fileName), parsed.buffer));
         delete attachment.dataUrl;
-        attachment.path = rel;
+        attachment.path = `${profile.assetUrlPrefix}/${fileName}`;
       });
     }
     Object.keys(record).forEach((key) => visit(record[key]));

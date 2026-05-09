@@ -1,6 +1,6 @@
-import { loadProject, saveProject, saveProjectLocally } from "../project/persistence";
+import { loadProject, projectLocalStorageKey, saveProject, saveProjectLocally } from "../project/persistence";
 import { cloneJson } from "../shared/types";
-import { createStarterProject } from "../v2/starterProject";
+import { createStarterProject } from "../editor/starterProject";
 
 async function main(): Promise<void> {
   const storage = new MemoryStorage();
@@ -36,7 +36,7 @@ async function main(): Promise<void> {
   });
 
   const saved = await saveProject(savedProject);
-  const localAfterSave = JSON.parse(storage.getItem("webhachimi:v2:project") || "{}") as { meta?: { name?: string } };
+  const localAfterSave = JSON.parse(storage.getItem(projectLocalStorageKey()) || "{}") as { meta?: { name?: string } };
   assert(localAfterSave.meta?.name === "save-target", "saveProject should write localStorage before API result");
   assert(JSON.parse(postedBody).project.meta.name === "save-target", "saveProject should POST { project }");
   assert(saved.storage === "api", `expected api save source, got ${saved.storage}`);

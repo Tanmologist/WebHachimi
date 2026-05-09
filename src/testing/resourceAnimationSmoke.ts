@@ -6,7 +6,7 @@ import {
   resourceAnimationLabel,
   resourceFrameAtTime,
   resourceFrameCount,
-} from "../v2/resourceAnimation";
+} from "../editor/resourceAnimation";
 
 run("sheet animation selects equal grid frames without mutating the source image", () => {
   const resource = makeResource("sheet", "sheet.png");

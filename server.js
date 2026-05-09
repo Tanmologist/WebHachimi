@@ -12,12 +12,30 @@ const { URL } = require('url');
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
 const LOCAL_DATA_DIR = path.join(DATA_DIR, 'local');
+const HACHIMI_GAME_DIR = path.join(ROOT, 'games', 'hachimi-nanbei-lvdong');
 const PROJECT_SEED_FILE = path.join(DATA_DIR, 'project.json');
 const PROJECT_FILE = path.join(LOCAL_DATA_DIR, 'project.json');
-const V2_PROJECT_SEED_FILE = path.join(DATA_DIR, 'v2-project.json');
-const V2_PROJECT_FILE = path.join(LOCAL_DATA_DIR, 'v2-project.json');
 const ASSETS_DIR = path.join(ROOT, 'resources');
 const DIST_V2_DIR = path.join(ROOT, 'dist-v2');
+const LEGACY_V2_PROJECT_ROUTE = '/api/v2/project';
+const PROJECT_PROFILES = [
+  {
+    id: 'webhachimi',
+    routes: ['/api/webhachimi/project'],
+    projectFile: path.join(LOCAL_DATA_DIR, 'webhachimi-project.json'),
+    assetsDir: path.join(LOCAL_DATA_DIR, 'webhachimi-resources'),
+    assetUrlPrefix: '/api/webhachimi/assets',
+  },
+  {
+    id: 'hachimi-nanbei-lvdong',
+    routes: ['/api/games/hachimi-nanbei-lvdong/project', LEGACY_V2_PROJECT_ROUTE],
+    projectSeedFile: path.join(HACHIMI_GAME_DIR, 'project.json'),
+    projectFile: path.join(HACHIMI_GAME_DIR, 'local', 'project.json'),
+    assetsDir: path.join(HACHIMI_GAME_DIR, 'resources'),
+    assetUrlPrefix: '/games/hachimi-nanbei-lvdong/resources',
+  },
+];
+const PROJECT_PROFILES_BY_ROUTE = new Map(PROJECT_PROFILES.flatMap((profile) => profile.routes.map((route) => [route, profile])));
 const PORT = Number(process.env.WEBHACHIMI_PORT) || 5577;
 const MAX_BODY = 50 * 1024 * 1024;
 const execFileAsync = promisify(execFile);
@@ -66,13 +84,15 @@ const ROOT_STATIC_FILES = new Set([
   'styles.css',
   'editor-preview.html',
   'editor-preview.css',
-  'player.html',
-  'v2.html',
+  'apps/webhachimi/editor.html',
+  'games/hachimi-nanbei-lvdong/index.html',
+  'games/hachimi-nanbei-lvdong/editor.html',
 ]);
 
 const BUILT_APP_FILES = new Set([
-  'player.html',
-  'v2.html',
+  'apps/webhachimi/editor.html',
+  'games/hachimi-nanbei-lvdong/index.html',
+  'games/hachimi-nanbei-lvdong/editor.html',
 ]);
 
 const SAFE_ATTACHMENT_MIME = new Set([
@@ -213,13 +233,13 @@ async function saveProject(project, file = PROJECT_FILE) {
   return { ok: true, savedAt: copy.savedAt };
 }
 
-async function saveV2Project(project) {
-  await fsp.mkdir(path.dirname(V2_PROJECT_FILE), { recursive: true });
-  await fsp.mkdir(ASSETS_DIR, { recursive: true });
+async function saveProfileProject(project, profile) {
+  await fsp.mkdir(path.dirname(profile.projectFile), { recursive: true });
+  await fsp.mkdir(profile.assetsDir, { recursive: true });
   const savedAt = new Date().toISOString();
   const copy = JSON.parse(JSON.stringify(project));
-  await extractDataUrlAttachments(copy);
-  await writeFileAtomic(V2_PROJECT_FILE, JSON.stringify(copy, null, 2), 'utf8');
+  await extractDataUrlAttachments(copy, profile);
+  await writeFileAtomic(profile.projectFile, JSON.stringify(copy, null, 2), 'utf8');
   return { ok: true, savedAt };
 }
 
@@ -257,8 +277,10 @@ function dataUrlToBuffer(dataUrl) {
   return meta.includes(';base64') ? Buffer.from(body, 'base64') : Buffer.from(decodeURIComponent(body), 'utf8');
 }
 
-async function extractDataUrlAttachments(root) {
+async function extractDataUrlAttachments(root, profile) {
   const writes = [];
+  const targetAssetsDir = profile ? profile.assetsDir : ASSETS_DIR;
+  const targetAssetPrefix = profile ? profile.assetUrlPrefix : 'resources';
   function visit(node) {
     if (!node || typeof node !== 'object') return;
     if (Array.isArray(node.attachments)) {
@@ -274,10 +296,10 @@ async function extractDataUrlAttachments(root) {
         if (!parsed || !isSafeAttachment(parsed.mime, parsed.buffer)) return;
         const ext = extFromMime(parsed.mime || att.mime, att.name);
         const id = String(att.id || 'asset-' + Date.now()).replace(/[^a-z0-9_-]/gi, '-');
-        const rel = 'resources/' + id + '.' + ext;
-        writes.push(writeFileAtomic(path.join(ROOT, rel), parsed.buffer));
+        const fileName = id + '.' + ext;
+        writes.push(writeFileAtomic(path.join(targetAssetsDir, fileName), parsed.buffer));
         delete att.dataUrl;
-        att.path = rel;
+        att.path = targetAssetPrefix + '/' + fileName;
       });
     }
     Object.keys(node).forEach((key) => visit(node[key]));
@@ -436,7 +458,32 @@ function isV2Project(value) {
   return isRecord(activeScene) && isRecord(activeScene.entities);
 }
 
+function projectProfileForAssetPath(pathname) {
+  return PROJECT_PROFILES.find((profile) => pathname === profile.assetUrlPrefix || pathname.startsWith(profile.assetUrlPrefix + '/'));
+}
+
+function profileAssetFilePath(profile, pathname) {
+  const prefix = profile.assetUrlPrefix + '/';
+  if (!pathname.startsWith(prefix)) return null;
+  const fileName = pathname.slice(prefix.length);
+  if (!fileName || fileName.includes('/') || fileName.startsWith('.')) return null;
+  const abs = path.resolve(profile.assetsDir, fileName);
+  const relative = path.relative(profile.assetsDir, abs);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) return null;
+  return abs;
+}
+
 async function handleApi(req, res, pathname) {
+  const assetProfile = projectProfileForAssetPath(pathname);
+  if (assetProfile) {
+    if (req.method !== 'GET') return send(res, 405, { ok: false, error: 'method not allowed' });
+    if (!requireLocalApiAccess(req, res)) return true;
+    const abs = profileAssetFilePath(assetProfile, pathname);
+    if (!abs || !fs.existsSync(abs)) return send(res, 404, 'not found', { 'Content-Type': 'text/plain; charset=utf-8' });
+    const ext = path.extname(abs).toLowerCase();
+    const data = await fsp.readFile(abs);
+    return send(res, 200, data, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+  }
   if (pathname === '/api/health') {
     return send(res, 200, { ok: true, app: 'webhachimi-engine', port: PORT });
   }
@@ -448,12 +495,13 @@ async function handleApi(req, res, pathname) {
     }
     return send(res, 200, await readClipboardFileResources());
   }
-  if (pathname === '/api/v2/project' && req.method === 'GET') {
+  const projectProfile = PROJECT_PROFILES_BY_ROUTE.get(pathname);
+  if (projectProfile && req.method === 'GET') {
     if (!requireLocalApiAccess(req, res)) return true;
-    const result = await loadProject(V2_PROJECT_FILE, V2_PROJECT_SEED_FILE);
+    const result = await loadProject(projectProfile.projectFile, projectProfile.projectSeedFile || null);
     return send(res, 200, { ok: true, empty: result.empty, project: result.project });
   }
-  if (pathname === '/api/v2/project' && req.method === 'POST') {
+  if (projectProfile && req.method === 'POST') {
     if (!requireLocalApiAccess(req, res)) return true;
     if (!isJsonRequest(req)) return send(res, 415, { ok: false, error: 'application/json required' });
     const body = await readBody(req);
@@ -468,7 +516,10 @@ async function handleApi(req, res, pathname) {
     if (!isV2Project(project)) {
       return send(res, 400, { ok: false, error: 'invalid v2 project payload' });
     }
-    return send(res, 200, await saveV2Project(project));
+    return send(res, 200, await saveProfileProject(project, projectProfile));
+  }
+  if (projectProfile) {
+    return send(res, 405, { ok: false, error: 'method not allowed' });
   }
   if ((pathname === '/api/project' || pathname === '/api/scene') && req.method === 'GET') {
     if (!requireLocalApiAccess(req, res)) return true;
@@ -501,6 +552,9 @@ async function handleStatic(req, res, pathname) {
   if (!builtAbs && normalizedRel.startsWith('resources/') && !hasLocalApiToken(req)) {
     return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
   }
+  if (!builtAbs && normalizedRel.startsWith('games/hachimi-nanbei-lvdong/resources/') && !hasLocalApiToken(req)) {
+    return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
+  }
   const abs = builtAbs || safeJoin(rel);
   if (!abs) return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
   if (!fs.existsSync(abs)) return send(res, 404, 'not found', { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -528,6 +582,7 @@ function isAllowedStaticPath(rel) {
   if (!isSafeStaticRel(rel)) return false;
   if (ROOT_STATIC_FILES.has(rel)) return true;
   if (rel.startsWith('resources/')) return isAllowedAssetPath(rel);
+  if (rel.startsWith('games/hachimi-nanbei-lvdong/resources/')) return isAllowedAssetPath(rel, 'games/hachimi-nanbei-lvdong/resources/');
   return false;
 }
 
@@ -540,9 +595,9 @@ function isAllowedBuiltAssetPath(rel) {
   return Boolean(MIME[ext]) && !rel.slice('assets/'.length).includes('/');
 }
 
-function isAllowedAssetPath(rel) {
+function isAllowedAssetPath(rel, prefix = 'resources/') {
   const ext = path.extname(rel).toLowerCase();
-  return Boolean(MIME[ext]) && !rel.slice('resources/'.length).includes('/');
+  return Boolean(MIME[ext]) && !rel.slice(prefix.length).includes('/');
 }
 
 const server = http.createServer(async (req, res) => {

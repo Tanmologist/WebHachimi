@@ -2,8 +2,8 @@ import { AiTaskExecutor } from "../ai/taskExecutor";
 import type { Project } from "../project/schema";
 import { ProjectStore } from "../project/projectStore";
 import type { EntityId, TaskId } from "../shared/types";
-import { createStarterProject } from "../v2/starterProject";
-import { createTaskWorkflowController } from "../v2/taskWorkflowController";
+import { createStarterProject } from "../editor/starterProject";
+import { createTaskWorkflowController } from "../editor/taskWorkflowController";
 import {
   compileSuperBrushContext,
   createSuperBrushStroke,

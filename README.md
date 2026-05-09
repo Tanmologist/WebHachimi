@@ -6,23 +6,29 @@ This workspace is the new main project. `E:\Hachimi\WebHachimi` is the reference
 
 ## Recommended Run
 
-Use Vite for the v2 editor:
+Use Vite for the generic WebHachimi editor:
 
 ```powershell
 npm ci
-npm run dev:v2
+npm run dev:editor
 ```
 
 Then open:
 
 ```text
-http://127.0.0.1:5173/v2.html
+http://127.0.0.1:5173/apps/webhachimi/editor.html
 ```
 
-Use the player entry for runtime-only play:
+Use the Hachimi Nanbei Lvdong game entry for the concrete game package:
 
 ```powershell
-npm run dev:player
+npm run dev:game
+```
+
+The game package also has its own editor entry, because the game is the editor/runtime shell plus a concrete project:
+
+```powershell
+npm run dev:game:editor
 ```
 
 ## Legacy Run
@@ -41,10 +47,13 @@ http://localhost:5577/
 
 Legacy direct file mode can still open `index.html`, with browser-local persistence.
 
-## Data Boundary
+## Project Boundary
 
-- v2 editor and player use `/api/v2/project`.
-- v2 seed data lives in `data/v2-project.json`; runtime saves go to ignored `data/local/v2-project.json`.
+- The generic editor shell lives at `apps/webhachimi/editor.html` and uses `/api/webhachimi/project`.
+- The Hachimi Nanbei Lvdong game lives under `games/hachimi-nanbei-lvdong/` and uses `/api/games/hachimi-nanbei-lvdong/project`.
+- The legacy `/api/v2/project` route remains as a compatibility alias for the Hachimi game project.
+- The Hachimi seed project lives in `games/hachimi-nanbei-lvdong/project.json`; runtime saves go to ignored `games/hachimi-nanbei-lvdong/local/project.json`.
+- Hachimi game resources live in `games/hachimi-nanbei-lvdong/resources/`.
 - Legacy editor uses `/api/project`.
 - Legacy seed data lives in `data/project.json`; runtime saves go to ignored `data/local/project.json`.
 
@@ -55,6 +64,8 @@ Keep these paths separate. Do not mix legacy project payloads with v2 project pa
 ```powershell
 npm run typecheck
 npm run build
+npm run build:editor
+npm run build:game
 npm run verify
 ```
 
@@ -116,8 +127,9 @@ Development and editor tooling may use Node.js, TypeScript, downloaded assets, a
 
 ## Important Files
 
-- `v2.html`, `src/v2/*`: current editor main line.
-- `player.html`, `src/player/*`: player/runtime entry.
+- `apps/webhachimi/editor.html`, `src/editor/*`: generic editor shell.
+- `games/hachimi-nanbei-lvdong/index.html`, `src/player/*`: concrete game player entry.
+- `games/hachimi-nanbei-lvdong/editor.html`: concrete game editor entry.
 - `src/project/*`: project schema, transactions, diffs, persistence, tasks, and maintenance.
 - `src/runtime/*`: runtime world, collision, and timing.
 - `src/ai/*`: rule-based task planning and execution loop.
@@ -125,7 +137,7 @@ Development and editor tooling may use Node.js, TypeScript, downloaded assets, a
 - `index.html`, `styles.css`, `app.js`: legacy single-page editor/runtime kept as rebuild reference.
 - `server.js`: local static server plus legacy and v2 project persistence API.
 - `data/project.json`: legacy starter project data.
-- `data/v2-project.json`: v2 starter project data.
+- `games/hachimi-nanbei-lvdong/project.json`: Hachimi Nanbei Lvdong starter project data.
 - `WEBHACHIMI_REBUILD_PLAN.md`: rebuild plan for this workspace.
 
 ## Rebuild Rule

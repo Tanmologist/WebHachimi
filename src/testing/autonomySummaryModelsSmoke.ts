@@ -3,8 +3,8 @@ import { AiTaskExecutor } from "../ai/taskExecutor";
 import type { Project } from "../project/schema";
 import { ProjectStore } from "../project/projectStore";
 import { createTask } from "../project/tasks";
-import { createStarterProject } from "../v2/starterProject";
-import { autonomousRoundSummaryFromCycle, latestAutonomyRoundSummaryFromProject } from "../v2/summaryModels";
+import { createStarterProject } from "../editor/starterProject";
+import { autonomousRoundSummaryFromCycle, latestAutonomyRoundSummaryFromProject } from "../editor/summaryModels";
 
 const store = new ProjectStore(createStarterProject());
 const player = findPlayer(store.project);

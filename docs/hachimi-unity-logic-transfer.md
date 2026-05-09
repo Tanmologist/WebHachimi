@@ -67,7 +67,7 @@
 | `src/runtime/world.ts` | 平台移动、敌人巡逻、薄攻击/格挡事件、冻结快照 | 战斗逻辑仍是直接写 runtime 字段，未分 Action/Resolver/Outcome。 |
 | `src/project/schema.ts` | 项目数据、实体、资源、任务、事务、测试记录、快照 | 需要新增战斗协议数据和更完整 runtime combat state。 |
 | `src/testing` | 输入脚本、freezeAndInspect、combat trace、AI 自主测试 | 需要针对阶段图、resolver、Unresolved 和完美闪避的专门测试。 |
-| `src/v2` 编辑器 | 面板、任务、超级画笔、资源、输出日志 | 需要战斗调参面板和 hitbox/window 可视化。 |
+| `src/editor` 编辑器 | 面板、任务、超级画笔、资源、输出日志 | 需要战斗调参面板和 hitbox/window 可视化。 |
 
 ## 聚焦后的首版目标
 

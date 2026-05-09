@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="penguin monster">
+  <defs>
+    <radialGradient id="belly" cx="50%" cy="42%" r="62%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.72" stop-color="#f5f3eb"/>
+      <stop offset="1" stop-color="#d8d3c8"/>
+    </radialGradient>
+    <linearGradient id="body" x1="28" x2="100" y1="10" y2="118">
+      <stop offset="0" stop-color="#24272d"/>
+      <stop offset="1" stop-color="#050608"/>
+    </linearGradient>
+  </defs>
+  <path d="M29 18 44 34 32 38z" fill="#7155d8" stroke="#211735" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M99 18 84 34 96 38z" fill="#7155d8" stroke="#211735" stroke-width="4" stroke-linejoin="round"/>
+  <ellipse cx="64" cy="65" rx="40" ry="52" fill="url(#body)"/>
+  <path d="M24 64c-16 2-20 16-12 26 8 9 19 4 28-11z" fill="#15171b"/>
+  <path d="M104 64c16 2 20 16 12 26-8 9-19 4-28-11z" fill="#15171b"/>
+  <ellipse cx="64" cy="72" rx="27" ry="34" fill="url(#belly)"/>
+  <circle cx="47" cy="46" r="10" fill="#f6f3e9"/>
+  <circle cx="81" cy="46" r="10" fill="#f6f3e9"/>
+  <circle cx="47" cy="47" r="5" fill="#e84040"/>
+  <circle cx="81" cy="47" r="5" fill="#e84040"/>
+  <circle cx="49" cy="45" r="2" fill="#fff5f5"/>
+  <circle cx="83" cy="45" r="2" fill="#fff5f5"/>
+  <path d="M50 58h28l-14 12z" fill="#ff9b2f" stroke="#924600" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M45 77c7 9 31 9 38 0" fill="none" stroke="#151515" stroke-width="4" stroke-linecap="round"/>
+  <path d="M53 79 58 91 63 79z" fill="#ffffff" stroke="#151515" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M65 79 70 91 75 79z" fill="#ffffff" stroke="#151515" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M38 105 22 118h27z" fill="#ff9b2f" stroke="#924600" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M90 105 106 118H79z" fill="#ff9b2f" stroke="#924600" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M29 90 16 95 29 99 18 108" fill="none" stroke="#e8e1cc" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M99 90 112 95 99 99 110 108" fill="none" stroke="#e8e1cc" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

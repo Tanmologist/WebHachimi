@@ -5,7 +5,7 @@ import {
   type PanelId,
   type PanelPlacement,
   type PanelState,
-} from "../v2/panelLayout";
+} from "../editor/panelLayout";
 
 const openState: Record<PanelId, PanelState> = {
   scene: "open",

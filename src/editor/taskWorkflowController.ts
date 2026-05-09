@@ -3,7 +3,7 @@ import { createTask } from "../project/tasks";
 import type { ProjectStore } from "../project/projectStore";
 import type { TargetRef } from "../project/schema";
 import type { Result, TaskId } from "../shared/types";
-import { createTaskFromSuperBrush, type SuperBrushDraft } from "../editor/superBrush";
+import { createTaskFromSuperBrush, type SuperBrushDraft } from "./superBrush";
 
 export type TaskWorkflowControllerDeps = {
   store: ProjectStore;

@@ -1,8 +1,8 @@
-﻿{
+{
   "kind": "webhachimi-v2-project",
   "version": 1,
   "meta": {
-    "name": "WebHachimi v2 ???",
+    "name": "???????",
     "createdAt": "2026-04-26T14:21:40.430Z",
     "updatedAt": "2026-04-28T14:30:39.600Z"
   },
@@ -1538,7 +1538,7 @@
           "id": "att-4jy5612e-moih9v8x",
           "fileName": "粘贴图片资源",
           "mime": "image/svg+xml",
-          "path": "resources/att-4jy5612e-moih9v8x.svg"
+          "path": "/games/hachimi-nanbei-lvdong/resources/att-4jy5612e-moih9v8x.svg"
         }
       ]
     },
@@ -1556,7 +1556,7 @@
           "id": "att-b2cswk7m-moiihfjf",
           "fileName": "v2-screenshot-1365.png",
           "mime": "image/png",
-          "path": "resources/att-b2cswk7m-moiihfjf.png"
+          "path": "/games/hachimi-nanbei-lvdong/resources/att-b2cswk7m-moiihfjf.png"
         }
       ]
     },
@@ -1574,7 +1574,7 @@
           "id": "att-qunq453v-moioll6v",
           "fileName": "v2-screenshot-390.png",
           "mime": "image/png",
-          "path": "resources/att-qunq453v-moioll6v.png"
+          "path": "/games/hachimi-nanbei-lvdong/resources/att-qunq453v-moioll6v.png"
         }
       ]
     },
@@ -1595,7 +1595,7 @@
           "id": "att-penguin-monster-demo",
           "fileName": "penguin-monster-demo.png",
           "mime": "image/png",
-          "path": "/resources/penguin-monster-demo.png"
+          "path": "/games/hachimi-nanbei-lvdong/resources/penguin-monster-demo.png"
         }
       ]
     },
@@ -1615,7 +1615,7 @@
           "id": "att-cc0-girl-sprite-sheet",
           "fileName": "Girl_Sprite_Sheet.png",
           "mime": "image/png",
-          "path": "/resources/cc0-girl-sprite-sheet.png"
+          "path": "/games/hachimi-nanbei-lvdong/resources/cc0-girl-sprite-sheet.png"
         }
       ],
       "sprite": {
@@ -2055,7 +2055,7 @@
                 "id": "att-4jy5612e-moih9v8x",
                 "fileName": "粘贴图片资源",
                 "mime": "image/svg+xml",
-                "path": "resources/att-4jy5612e-moih9v8x.svg"
+                "path": "/games/hachimi-nanbei-lvdong/resources/att-4jy5612e-moih9v8x.svg"
               }
             ]
           }
@@ -4064,7 +4064,7 @@
                 "id": "att-b2cswk7m-moiihfjf",
                 "fileName": "v2-screenshot-1365.png",
                 "mime": "image/png",
-                "path": "resources/att-b2cswk7m-moiihfjf.png"
+                "path": "/games/hachimi-nanbei-lvdong/resources/att-b2cswk7m-moiihfjf.png"
               }
             ]
           }
@@ -4226,7 +4226,7 @@
                 "id": "att-qunq453v-moioll6v",
                 "fileName": "v2-screenshot-390.png",
                 "mime": "image/png",
-                "path": "resources/att-qunq453v-moioll6v.png"
+                "path": "/games/hachimi-nanbei-lvdong/resources/att-qunq453v-moioll6v.png"
               }
             ]
           }

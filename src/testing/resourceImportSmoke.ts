@@ -5,7 +5,7 @@ import {
   resourceImportMetadataFromText,
   resourceTagsForType,
   sequenceGroupKeyFromFileName,
-} from "../v2/resourceImport";
+} from "../editor/resourceImport";
 
 run("file metadata accepts arbitrary and zero byte files", () => {
   const emptyJson = resourceImportMetadataFromFile({ name: "empty.json", type: "" }, "data:;base64,", 0);

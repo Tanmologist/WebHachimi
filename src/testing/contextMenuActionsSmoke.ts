@@ -11,8 +11,8 @@ import {
   planRenameEntityTransaction,
   planRenameResourceTransaction,
   type ContextMenuTransactionPlan,
-} from "../v2/contextMenuActions";
-import { createStarterProject } from "../v2/starterProject";
+} from "../editor/contextMenuActions";
+import { createStarterProject } from "../editor/starterProject";
 
 run("duplicate creates a persistent copy in the same folder and supports undo redo", () => {
   const store = new ProjectStore(createStarterProject());

@@ -1,6 +1,6 @@
 import type { Entity } from "../project/schema";
 import type { EntityId } from "../shared/types";
-import { applyCanvasDragState, createCanvasDragState, snapRotation } from "../v2/canvasTransform";
+import { applyCanvasDragState, createCanvasDragState, snapRotation } from "../editor/canvasTransform";
 
 run("body east handle scales body from one side without resizing presentation", () => {
   const entity = createEntity();

@@ -13,7 +13,7 @@ import {
   rebuildSuperBrushDraftTargets,
   summarizeSuperBrushDraft,
   type SuperBrushDraft,
-} from "../editor/superBrush";
+} from "./superBrush";
 import { RuntimeWorld } from "../runtime/world";
 import { cloneJson, makeId, type EntityId, type Rect, type ResourceId, type Result, type Transform2D, type Vec2 } from "../shared/types";
 import type { Resource, ResourceBinding, TargetRef, Task } from "../project/schema";

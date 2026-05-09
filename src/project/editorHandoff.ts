@@ -2,7 +2,7 @@ import type { Project, RuntimeSnapshot } from "./schema";
 import type { RuntimeWorld } from "../runtime/world";
 import { cloneJson } from "../shared/types";
 
-const EDITOR_HANDOFF_KEY = "webhachimi:v2:editor-handoff";
+const EDITOR_HANDOFF_KEY = "webhachimi:editor-handoff";
 
 export type EditorHandoff = {
   kind: "webhachimi-v2-editor-handoff";

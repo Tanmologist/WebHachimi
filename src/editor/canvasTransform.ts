@@ -53,6 +53,7 @@ const MIN_SIZE = 4;
 const MAX_SIZE = 4096;
 const EPSILON = 0.001;
 const rotationSnapStep = Math.PI / 12;
+const rotationSnapThreshold = Math.PI / 72;
 const DEFAULT_MOVE_SNAP_THRESHOLD = 8;
 
 let rotationSnapEnabled = true;
@@ -68,7 +69,8 @@ export function setMoveSnapEnabled(enabled: boolean): void {
 
 export function snapRotation(rotation: number): number {
   if (!rotationSnapEnabled) return rotation;
-  return Math.round(rotation / rotationSnapStep) * rotationSnapStep;
+  const snapped = Math.round(rotation / rotationSnapStep) * rotationSnapStep;
+  return Math.abs(snapped - rotation) <= rotationSnapThreshold ? snapped : rotation;
 }
 
 export function createCanvasDragState(
@@ -311,7 +313,7 @@ export function cursorForTransformHandle(handle: TransformHandle): string {
 }
 
 function applyOneSidedScale(entity: Entity, drag: Extract<CanvasDragState, { kind: "scale" }>, point: Vec2): void {
-  const local = toLocal(point, drag.geometry.center, drag.geometry.rotation);
+  const local = toLocal(drag.geometry.center, point, drag.geometry.rotation);
   const sides = scaleSides(drag.handle);
   let left = -drag.geometry.width / 2;
   let right = drag.geometry.width / 2;

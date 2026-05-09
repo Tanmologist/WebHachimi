@@ -1,9 +1,9 @@
 import "./styles.css";
 import { normalizeProjectDefaults, type Project } from "../project/schema";
 import { consumeEditorHandoff, createEditorHandoff, restoreWorldFromHandoff, saveEditorHandoff } from "../project/editorHandoff";
-import { loadProject } from "../project/persistence";
+import { currentProjectProfile, loadProject } from "../project/persistence";
 import { RuntimeWorld } from "../runtime/world";
-import { createStarterProject, repairKnownStarterLabels } from "../v2/starterProject";
+import { createStarterProject, repairKnownStarterLabels } from "../editor/starterProject";
 import { bindPlayerInput } from "./input";
 import { PlayerRenderer } from "./renderer";
 
@@ -63,7 +63,7 @@ function bindEditorHandoffKey(): () => void {
     if (event.repeat) return;
     cancelAnimationFrame(raf);
     saveEditorHandoff(createEditorHandoff(project, world));
-    window.location.href = "./v2.html?from=player-freeze";
+    window.location.href = editorHandoffUrl();
   };
   window.addEventListener("keydown", onKeyDown, { passive: false });
   return () => window.removeEventListener("keydown", onKeyDown);
@@ -83,6 +83,12 @@ function embeddedProject(): Project | null {
   } catch {
     return null;
   }
+}
+
+function editorHandoffUrl(): string {
+  const editorUrl = document.querySelector<HTMLMetaElement>('meta[name="webhachimi-editor-url"]')?.content || "/apps/webhachimi/editor.html";
+  const separator = editorUrl.includes("?") ? "&" : "?";
+  return `${editorUrl}${separator}from=player-freeze&project=${encodeURIComponent(currentProjectProfile())}`;
 }
 
 async function savedProject(): Promise<Project | null> {

@@ -1,7 +1,7 @@
 import type { Project, ProjectPatch } from "../project/schema";
 import { ProjectStore } from "../project/projectStore";
 import type { Transform2D } from "../shared/types";
-import { createStarterProject } from "../v2/starterProject";
+import { createStarterProject } from "../editor/starterProject";
 
 type SmokeResult = {
   name: string;

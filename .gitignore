@@ -1,9 +1,15 @@
 node_modules/
 dist-v2/
-resources/
+/dist-webhachimi/
+/dist-hachimi-nanbei-lvdong/
+/resources/
 logs/
 data/local/
 data/*.local.json
+games/*/local/
+games/*/resources/dockview-core-*.tgz
+games/*/resources/resource-animation-*.png
+codex-layout-vite.*.log
 .chrome-profile-v2-check*/
 .DS_Store
 Thumbs.db

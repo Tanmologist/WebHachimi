@@ -15,8 +15,12 @@ export type SaveProjectResult = {
 };
 
 type ApiObject = Record<string, unknown>;
-const LOCAL_PROJECT_KEY = "webhachimi:v2:project";
-const V2_PROJECT_ENDPOINT = "/api/v2/project";
+const DEFAULT_PROJECT_PROFILE = "webhachimi";
+const PROJECT_ENDPOINT_BY_PROFILE: Record<string, string> = {
+  webhachimi: "/api/webhachimi/project",
+  "hachimi-nanbei-lvdong": "/api/games/hachimi-nanbei-lvdong/project",
+};
+const LEGACY_V2_PROJECT_ENDPOINT = "/api/v2/project";
 
 export class ProjectPersistenceError extends Error {
   constructor(message: string) {
@@ -25,7 +29,25 @@ export class ProjectPersistenceError extends Error {
   }
 }
 
-export async function loadProject(endpoint = V2_PROJECT_ENDPOINT): Promise<LoadProjectResult> {
+export function currentProjectProfile(): string {
+  if (typeof window === "undefined") return DEFAULT_PROJECT_PROFILE;
+  const href = window.location?.href || "http://localhost/";
+  const queryProfile = new URL(href).searchParams.get("project");
+  const metaProfile = typeof document === "undefined"
+    ? undefined
+    : document.querySelector<HTMLMetaElement>('meta[name="webhachimi-project"]')?.content;
+  return normalizeProjectProfile(queryProfile || metaProfile || DEFAULT_PROJECT_PROFILE);
+}
+
+export function defaultProjectEndpoint(profile = currentProjectProfile()): string {
+  return PROJECT_ENDPOINT_BY_PROFILE[normalizeProjectProfile(profile)] || PROJECT_ENDPOINT_BY_PROFILE[DEFAULT_PROJECT_PROFILE];
+}
+
+export function projectLocalStorageKey(endpoint = defaultProjectEndpoint()): string {
+  return `webhachimi:project:${profileForEndpoint(endpoint) || currentProjectProfile()}`;
+}
+
+export async function loadProject(endpoint = defaultProjectEndpoint()): Promise<LoadProjectResult> {
   try {
     const response = await fetch(endpoint, {
       method: "GET",
@@ -39,26 +61,26 @@ export async function loadProject(endpoint = V2_PROJECT_ENDPOINT): Promise<LoadP
     const project = body.project ?? body.scene ?? null;
     if (project !== null) {
       if (!isProject(project)) throw new ProjectPersistenceError("project response has an invalid shape");
-      const local = readLocalProject();
+      const local = readLocalProject(endpoint);
       const selected = local && isProjectNewer(local, project) ? local : project;
-      writeLocalProject(selected);
+      writeLocalProject(selected, endpoint);
       return { empty: false, project: selected, storage: selected === project ? "api" : "local" };
     }
     if (body.empty !== true) throw new ProjectPersistenceError("project response has an invalid shape");
   } catch (error) {
-    const local = readLocalProject();
+    const local = readLocalProject(endpoint);
     const warning = errorMessage(error);
     if (local) return { empty: false, project: local, storage: "local", warning };
     return { empty: true, project: null, storage: "local", warning };
   }
 
-  const local = readLocalProject();
+  const local = readLocalProject(endpoint);
   if (local) return { empty: false, project: local, storage: "local" };
   return { empty: true, project: null, storage: "api" };
 }
 
 export async function loadProjectFromDisk(
-  endpoint = V2_PROJECT_ENDPOINT,
+  endpoint = defaultProjectEndpoint(),
   options: { writeLocal?: boolean } = {},
 ): Promise<LoadProjectResult> {
   try {
@@ -74,7 +96,7 @@ export async function loadProjectFromDisk(
     const project = body.project ?? body.scene ?? null;
     if (project !== null) {
       if (!isProject(project)) throw new ProjectPersistenceError("project response has an invalid shape");
-      if (options.writeLocal !== false) writeLocalProject(project);
+      if (options.writeLocal !== false) writeLocalProject(project, endpoint);
       return { empty: false, project, storage: "api" };
     }
     if (body.empty === true) return { empty: true, project: null, storage: "api" };
@@ -84,8 +106,8 @@ export async function loadProjectFromDisk(
   }
 }
 
-export async function saveProject(project: Project, endpoint = V2_PROJECT_ENDPOINT): Promise<SaveProjectResult> {
-  writeLocalProject(project);
+export async function saveProject(project: Project, endpoint = defaultProjectEndpoint()): Promise<SaveProjectResult> {
+  writeLocalProject(project, endpoint);
   try {
     const response = await fetch(endpoint, {
       method: "POST",
@@ -163,10 +185,10 @@ function isProjectNewer(left: Project, right: Project): boolean {
   return leftTime > rightTime;
 }
 
-function readLocalProject(): Project | null {
+function readLocalProject(endpoint = defaultProjectEndpoint()): Project | null {
   const storage = browserStorage();
   if (!storage) return null;
-  const raw = storage.getItem(LOCAL_PROJECT_KEY);
+  const raw = storage.getItem(projectLocalStorageKey(endpoint));
   if (!raw) return null;
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -176,10 +198,10 @@ function readLocalProject(): Project | null {
   }
 }
 
-function writeLocalProject(project: Project): void {
+function writeLocalProject(project: Project, endpoint = defaultProjectEndpoint()): void {
   const storage = browserStorage();
   if (!storage) return;
-  storage.setItem(LOCAL_PROJECT_KEY, JSON.stringify(project));
+  storage.setItem(projectLocalStorageKey(endpoint), JSON.stringify(project));
 }
 
 function browserStorage(): Storage | null {
@@ -188,4 +210,15 @@ function browserStorage(): Storage | null {
   } catch {
     return null;
   }
+}
+
+function normalizeProjectProfile(value: string): string {
+  const clean = value.trim().toLowerCase();
+  if (/^[a-z0-9_-]+$/.test(clean)) return clean;
+  return DEFAULT_PROJECT_PROFILE;
+}
+
+function profileForEndpoint(endpoint: string): string | undefined {
+  if (endpoint === LEGACY_V2_PROJECT_ENDPOINT) return "hachimi-nanbei-lvdong";
+  return Object.entries(PROJECT_ENDPOINT_BY_PROFILE).find(([, value]) => value === endpoint)?.[0];
 }

@@ -5,7 +5,7 @@ import {
   worldToScreenPoint,
   zoomViewportAt,
   type ViewportScreen,
-} from "../v2/viewportMath";
+} from "../editor/viewportMath";
 
 const screen: ViewportScreen = { width: 1000, height: 700 };
 const center = { x: screen.width / 2, y: screen.height / 2 };

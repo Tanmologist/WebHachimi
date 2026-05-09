@@ -1,8 +1,8 @@
 import { createIntentPlan } from "../ai/intentPlanner";
 import { createTask } from "../project/tasks";
 import { RuntimeWorld } from "../runtime/world";
-import { createStarterProject } from "../v2/starterProject";
-import { renderSceneTreeHtml } from "../v2/sceneTreeController";
+import { createStarterProject } from "../editor/starterProject";
+import { renderSceneTreeHtml } from "../editor/sceneTreeController";
 
 const project = createStarterProject();
 const scene = project.scenes[project.activeSceneId];

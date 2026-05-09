@@ -199,7 +199,7 @@ src/testing/
 
 ### P0: v2 主文件过大
 
-`src/v2/main.ts` 约 2000 多行，承担职责过多：
+`src/editor/main.ts` 约 2000 多行，承担职责过多：
 
 - UI 初始化
 - 状态管理
@@ -266,7 +266,7 @@ UI 操作
 
 ### P1: `runAutonomousRound()` 存在重构残留风险
 
-审查建议指出：`src/v2/main.ts` 中 `runAutonomousRound()` 可能在 `renderAll(); return;` 后保留不可达旧代码。
+审查建议指出：`src/editor/main.ts` 中 `runAutonomousRound()` 可能在 `renderAll(); return;` 后保留不可达旧代码。
 
 后续开工时需要核实并清理。
 
@@ -278,7 +278,7 @@ UI 操作
 - `app.js`
 - `styles.css`
 - `v2.html`
-- `src/v2/*`
+- `src/editor/*`
 - `player.html`
 - `src/player/*`
 - `server.js`
@@ -534,7 +534,7 @@ E:\WebForAll\WebForAll
 
 ### P1
 
-- 拆分 `src/v2/main.ts`。
+- 拆分 `src/editor/main.ts`。
 - 清理 `runAutonomousRound()` 等重构残留。
 - 统一 v2 持久化接口。
 - 整理 README 和开发文档。

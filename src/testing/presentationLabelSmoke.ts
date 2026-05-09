@@ -1,6 +1,6 @@
 import type { Entity } from "../project/schema";
 import type { EntityId } from "../shared/types";
-import { renderInspectorHtml, renderTreeItemHtml } from "../v2/panelViews";
+import { renderInspectorHtml, renderTreeItemHtml } from "../editor/panelViews";
 
 const entity = makeEntity();
 const treeHtml = renderTreeItemHtml(entity, entity.id, "presentation", {});

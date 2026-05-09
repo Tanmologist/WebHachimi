@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 import * as path from "node:path";
 import * as fs from "node:fs";
 
-const URL = "http://localhost:5577/v2.html";
+const URL = "http://localhost:5577/apps/webhachimi/editor.html";
 const SCREENSHOT_DIR = path.resolve("logs/screenshots");
 
 async function main() {

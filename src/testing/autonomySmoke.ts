@@ -4,7 +4,7 @@ import type { Entity, Project, RuntimeSnapshot } from "../project/schema";
 import { ProjectStore } from "../project/projectStore";
 import { createTask } from "../project/tasks";
 import { makeId, type AutonomyRunId, type SnapshotId } from "../shared/types";
-import { createStarterProject } from "../v2/starterProject";
+import { createStarterProject } from "../editor/starterProject";
 
 type SmokeResult = {
   name: string;
