@@ -21,7 +21,7 @@ export function renderTaskPanelHtml(model: TaskPanelViewModel): string {
     .join("");
 
   if (taskList.length === 0) {
-    return `${summaryHtml}<article class="v2-card"><b>暂无任务</b><p>输入任务后会在这里排队显示；任务目标会根据当前选择、框选区域或全局场景自动决定。</p></article>`;
+    return `${summaryHtml}<article class="v2-card"><b>暂无任务</b></article>`;
   }
 
   return summaryHtml + taskList

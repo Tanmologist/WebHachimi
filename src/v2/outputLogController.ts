@@ -29,11 +29,10 @@ export class OutputLogController {
   }
 
   renderHtml(): string {
-    const rows = this.lines
-      .slice()
-      .reverse()
-      .map((line) => renderLogRow(line))
-      .join("");
+    let rows = "";
+    for (let index = this.lines.length - 1; index >= 0; index -= 1) {
+      rows += renderLogRow(this.lines[index]);
+    }
     return rows || `<article class="v2-card"><b>暂无输出</b><p>运行、导入、保存和窗口操作的消息会按时间倒序显示在这里，最多保留最近 80 条。</p></article>`;
   }
 }
@@ -48,6 +47,7 @@ function renderLogRow(line: OutputLogLine): string {
 }
 
 function renderLogMessage(message: string): string {
+  if (!/[\r\n；。]/.test(message)) return escapeHtml(message);
   return splitLogMessage(message)
     .map((segment) => escapeHtml(segment))
     .join("<br>");

@@ -226,6 +226,22 @@ export class RuntimeWorld {
     }
   }
 
+  syncPersistentEntities(scene: Scene): void {
+    const persistentIds = new Set<string>();
+    Object.values(scene.entities).forEach((entity) => {
+      const copy = cloneJson(entity);
+      normalizeEntityDefaults(copy);
+      this.normalizeRuntime(copy);
+      if (!copy.persistent) return;
+      this.entities.set(copy.id, copy);
+      persistentIds.add(copy.id);
+    });
+    for (const entityId of [...this.entities.keys()]) {
+      if (!persistentIds.has(entityId)) this.entities.delete(entityId);
+    }
+    this.invalidateEntityListCache();
+  }
+
   entityById(entityId: EntityId | undefined): Entity | undefined {
     if (!entityId) return undefined;
     return this.entities.get(entityId) || this.transientEntities.get(entityId);

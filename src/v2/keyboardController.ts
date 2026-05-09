@@ -6,6 +6,7 @@ export type KeyboardControllerOptions = {
 
 export function handleEditorKeyDown(event: KeyboardEvent, options: KeyboardControllerOptions): void {
   if (options.isTypingTarget(event.target)) return;
+  if (event.ctrlKey || event.metaKey) return;
   const key = event.key.toLowerCase();
   if (key === "z") {
     event.preventDefault();

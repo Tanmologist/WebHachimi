@@ -260,3 +260,96 @@ function uniqueName(preferred: string, existingNames: Set<string>): string {
   while (existingNames.has(`${preferred} ${index}`)) index += 1;
   return `${preferred} ${index}`;
 }
+
+export function planBatchDeleteEntitiesTransaction(scene: Scene, entityIds: EntityId[]): Result<ContextMenuTransactionPlan> {
+  const allDeletedIds: EntityId[] = [];
+  for (const entityId of entityIds) {
+    const entity = scene.entities[entityId];
+    if (!entity || !entity.persistent) continue;
+    allDeletedIds.push(...collectPersistentDescendantIds(scene, entityId));
+  }
+  const uniqueDeleted = [...new Set(allDeletedIds)];
+  const deletedIdSet = new Set(uniqueDeleted);
+  const nextFolders = scene.folders.map((folder) => ({
+    ...cloneJson(folder),
+    entityIds: folder.entityIds.filter((id) => !deletedIdSet.has(id)),
+  }));
+  const nextSelected = Object.values(scene.entities).find((item) => !deletedIdSet.has(item.id))?.id;
+  const foldersPath = `/scenes/${scene.id}/folders` as ProjectPatch["path"];
+  const patches: ProjectPatch[] = [{ op: "set", path: foldersPath, value: nextFolders }];
+  const inversePatches: ProjectPatch[] = [{ op: "set", path: foldersPath, value: cloneJson(scene.folders) }];
+
+  for (const entityId of uniqueDeleted) {
+    const entityPath = `/scenes/${scene.id}/entities/${entityId}` as ProjectPatch["path"];
+    patches.push({ op: "delete", path: entityPath });
+    inversePatches.push({ op: "set", path: entityPath, value: cloneJson(scene.entities[entityId]) });
+  }
+
+  return ok({
+    patches,
+    inversePatches,
+    diffSummary: `批量删除 ${uniqueDeleted.length} 个本体。`,
+    notice: `已批量删除 ${uniqueDeleted.length} 个本体。`,
+    selectedId: nextSelected,
+    selectedPart: "body",
+    deletedEntityIds: uniqueDeleted,
+  });
+}
+
+export function planBatchDuplicateEntitiesTransaction(scene: Scene, entityIds: EntityId[]): Result<ContextMenuTransactionPlan> {
+  const patches: ProjectPatch[] = [];
+  const inversePatches: ProjectPatch[] = [];
+  const createdIds: EntityId[] = [];
+  const offset = { x: 32, y: 32 };
+
+  for (const entityId of entityIds) {
+    const entity = scene.entities[entityId];
+    if (!entity || !entity.persistent) continue;
+    const copyId = makeId<"EntityId">("ent") as EntityId;
+    const copy = cloneJson(entity);
+    copy.id = copyId;
+    copy.internalName = uniqueInternalName(scene, `${entity.internalName}-copy`);
+    copy.displayName = `${entity.displayName} 副本`;
+    copy.transform = cloneJson(entity.transform);
+    copy.transform.position = {
+      x: entity.transform.position.x + offset.x,
+      y: entity.transform.position.y + offset.y,
+    };
+    if (copy.render) {
+      copy.render = cloneJson(entity.render) as RenderComponent;
+    }
+
+    const entityPath = `/scenes/${scene.id}/entities/${copyId}` as ProjectPatch["path"];
+    patches.push({ op: "set", path: entityPath, value: copy });
+    inversePatches.push({ op: "delete", path: entityPath });
+
+    const sourceFolder = scene.folders.find((folder) => folder.entityIds.includes(entityId));
+    if (sourceFolder) {
+      const folderPath = `/scenes/${scene.id}/folders` as ProjectPatch["path"];
+      const nextFolders = cloneJson(scene.folders);
+      const targetFolder = nextFolders.find((folder) => folder.id === sourceFolder.id);
+      if (targetFolder) {
+        targetFolder.entityIds = [...targetFolder.entityIds, copyId];
+        copy.folderId = sourceFolder.id;
+      }
+      const existingFolderPatch = patches.find((p): p is Extract<typeof p, { op: "set" }> => p.path === folderPath && p.op === "set");
+      if (existingFolderPatch) {
+        existingFolderPatch.value = nextFolders;
+      } else {
+        patches.push({ op: "set", path: folderPath, value: nextFolders });
+        inversePatches.unshift({ op: "set", path: folderPath, value: cloneJson(scene.folders) });
+      }
+    }
+
+    createdIds.push(copyId);
+  }
+
+  return ok({
+    patches,
+    inversePatches,
+    diffSummary: `批量复制 ${createdIds.length} 个本体。`,
+    notice: `已批量复制 ${createdIds.length} 个本体。`,
+    selectedId: createdIds[createdIds.length - 1],
+    selectedPart: "body",
+  });
+}

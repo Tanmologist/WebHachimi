@@ -1,0 +1,699 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>中国象棋 · 觉醒之战 | 雷霆将星决</title>
+    <style>
+        * {
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            background: radial-gradient(circle at 20% 30%, #0a0f1e, #03060c);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', 'YouYuan', 'PingFang SC', 'Microsoft YaHei', monospace;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* 主容器 - 华丽战域 */
+        .battle-container {
+            background: rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(3px);
+            border-radius: 4rem 2rem 4rem 2rem;
+            box-shadow: 0 0 40px rgba(255, 80, 40, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            padding: 20px 25px 25px 25px;
+            border: 1px solid rgba(230, 180, 80, 0.6);
+        }
+
+        .game-wrapper {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+            gap: 20px;
+        }
+
+        /* 棋盘画布区 */
+        .board-area {
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+            margin: 0 auto;
+            box-shadow: 0 0 0 4px #b97f44, 0 15px 35px rgba(0,0,0,0.5), inset 0 0 20px rgba(255,215,0,0.3);
+            border-radius: 12px;
+            cursor: crosshair;
+            transition: filter 0.05s;
+            background: #F7E9C3;
+        }
+
+        /* UI 右侧操作区 */
+        .ui-panel {
+            background: #1e1a14cc;
+            backdrop-filter: blur(12px);
+            border-radius: 36px;
+            padding: 18px 20px;
+            width: 290px;
+            border: 1px solid #ffd966;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.4), inset 0 1px 2px rgba(255,245,170,0.6);
+        }
+
+        .health-bars {
+            background: #0a0602b3;
+            border-radius: 40px;
+            padding: 12px 15px;
+            margin-bottom: 15px;
+        }
+
+        .bar {
+            margin-bottom: 12px;
+        }
+
+        .bar-label {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            text-shadow: 0 0 3px black;
+            color: #ffecb3;
+            letter-spacing: 2px;
+        }
+
+        .bar-bg {
+            background: #3a2a1c;
+            border-radius: 30px;
+            overflow: hidden;
+            height: 18px;
+            margin-top: 5px;
+            box-shadow: inset 0 1px 4px black;
+        }
+
+        .hp-fill {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, #e34d3c, #ff8a5c);
+            border-radius: 30px;
+            transition: width 0.1s cubic-bezier(0.2, 1.3, 0.4, 1);
+        }
+
+        .energy-fill {
+            background: linear-gradient(90deg, #5bc0ff, #b82aff);
+            box-shadow: 0 0 6px cyan;
+        }
+
+        .combo-meter {
+            background: #221c10;
+            border-radius: 40px;
+            text-align: center;
+            padding: 8px;
+            margin: 12px 0;
+            font-size: 24px;
+            font-weight: 800;
+            font-family: monospace;
+            letter-spacing: 4px;
+            color: #ffcc44;
+            text-shadow: 0 0 6px red;
+            box-shadow: inset 0 0 4px gold, 0 0 8px #ffaa33;
+        }
+
+        /* 技能按钮组 */
+        .skill-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin: 18px 0;
+        }
+
+        .skill-btn {
+            background: radial-gradient(ellipse at top, #2c241a, #17120c);
+            border: 2px solid #e4b363;
+            color: #ffdead;
+            padding: 8px 4px;
+            font-size: 18px;
+            font-weight: bold;
+            border-radius: 60px;
+            cursor: pointer;
+            transition: 0.07s linear;
+            font-family: monospace;
+            letter-spacing: 2px;
+            backdrop-filter: blur(2px);
+            box-shadow: 0 4px 0 #7a4c1a;
+        }
+
+        .skill-btn:active {
+            transform: translateY(2px);
+            box-shadow: 0 2px 0 #7a4c1a;
+        }
+
+        .ult-btn {
+            background: radial-gradient(circle at 30% 20%, #ff5e00, #9b2c00);
+            border-color: #ffcc88;
+            color: #fff1b0;
+            text-shadow: 0 0 4px black;
+            box-shadow: 0 0 10px rgb(255 80 0);
+        }
+
+        .battle-log {
+            background: #020202aa;
+            border-radius: 24px;
+            padding: 10px;
+            height: 130px;
+            overflow-y: auto;
+            font-size: 12px;
+            font-family: monospace;
+            color: #ffdd99;
+            margin-top: 15px;
+            border: 1px solid #c9a458;
+        }
+
+        .reset-btn {
+            background: #3e2b1c;
+            width: 100%;
+            margin-top: 12px;
+            border: 1px solid #db9f46;
+            color: #ffddbb;
+        }
+
+        .shortcut-hint {
+            font-size: 10px;
+            text-align: center;
+            color: #c7a86b;
+            margin-top: 8px;
+        }
+
+        button {
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+<div class="battle-container">
+    <div class="game-wrapper">
+        <div class="board-area">
+            <canvas id="chessCanvas" width="780" height="880"></canvas>
+        </div>
+        <div class="ui-panel">
+            <div class="health-bars">
+                <div class="bar">
+                    <div class="bar-label"><span>🔥 赤龙帅 【觉醒】</span><span id="playerHpText">120</span></div>
+                    <div class="bar-bg"><div class="hp-fill" id="playerHpFill" style="width: 100%"></div></div>
+                </div>
+                <div class="bar">
+                    <div class="bar-label"><span>🖤 黑煞将 【魔君】</span><span id="enemyHpText">150</span></div>
+                    <div class="bar-bg"><div class="hp-fill" id="enemyHpFill" style="width: 100%"></div></div>
+                </div>
+                <div class="bar">
+                    <div class="bar-label"><span>⚡ 战魂灵气</span><span id="energyText">100</span></div>
+                    <div class="bar-bg"><div class="hp-fill energy-fill" id="energyFill" style="width: 100%"></div></div>
+                </div>
+            </div>
+            <div class="combo-meter" id="comboDisplay">⚡连击 x0 ⚡</div>
+            <div class="skill-grid">
+                <button class="skill-btn" data-skill="0">🏹 車 · 雷光突</button>
+                <button class="skill-btn" data-skill="1">🐎 馬 · 烈火蹄</button>
+                <button class="skill-btn" data-skill="2">💥 砲 · 炎龍啸</button>
+                <button class="skill-btn" data-skill="3">⚔️ 兵 · 流星闪</button>
+                <button class="skill-btn" data-skill="4">🛡️ 仕 · 护国罡</button>
+                <button class="skill-btn ult-btn" id="ultimateBtn">✨ 觉醒·天威 ✨ [空格]</button>
+            </div>
+            <button class="skill-btn reset-btn" id="resetGameBtn">⚡ 重铸战魂 ⚡</button>
+            <div class="battle-log" id="battleLog">
+                > 觉醒之战 点燃棋盘<br>
+                > 快捷键 1~5 释放技能 | 空格 终极技<br>
+            </div>
+            <div class="shortcut-hint">🎮 [1][2][3][4][5] 技能连斩 | [SPACE] 觉醒降世</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function(){
+        // ------------------- 游戏核心状态 -------------------
+        let playerHP = 120;      // 红方帅
+        let enemyHP = 150;       // 黑方将
+        let energy = 100;        // 灵气
+        let combo = 0;           // 连击数
+        let comboTimeout = null;
+        let gameActive = true;
+        let winner = null;        // 'player', 'enemy'
+        
+        // 特效数组
+        let particles = [];
+        let shockwaves = [];
+        let lightnings = [];
+        let fireParticles = [];
+        let screenShake = 0;
+        let ultCutInActive = false;
+        let cutInTimer = null;
+        
+        // 棋盘画布
+        const canvas = document.getElementById('chessCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // 棋盘参数
+        const cellW = 78;   // 780/10 but 9列, 左右边距
+        const cellH = 78;
+        const offsetX = 70;
+        const offsetY = 70;
+        
+        // 棋子布局 (红帅, 黑将) 展示完整中国象棋氛围
+        const redPieces = {
+            'e8': '帥', 'd9': '士', 'f9': '士', 'c9': '象', 'g9': '象', 'b9': '馬', 'h9': '馬', 'a9': '車', 'i9': '車',
+            'd8': '砲', 'f8': '砲', 'a7': '兵', 'c7': '兵', 'e7': '兵', 'g7': '兵', 'i7': '兵'
+        };
+        const blackPieces = {
+            'e0': '將', 'd1': '士', 'f1': '士', 'c1': '象', 'g1': '象', 'b1': '馬', 'h1': '馬', 'a0': '車', 'i0': '車',
+            'd2': '砲', 'f2': '砲', 'a3': '卒', 'c3': '卒', 'e3': '卒', 'g3': '卒', 'i3': '卒'
+        };
+        
+        function getPieceKey(row, col) { // row 0-9, col 0-8
+            const file = String.fromCharCode(97+col); // a-i
+            return file + (9-row);
+        }
+        
+        // 技能表 (名稱, 基础伤害, 能量消耗, 特效风格)
+        const skills = [
+            { name: "車·雷霆突袭", dmgMin: 15, dmgMax: 26, cost: 12, style: "lightning" },
+            { name: "馬·燎原烈火", dmgMin: 13, dmgMax: 23, cost: 15, style: "fire" },
+            { name: "砲·炎龍炮", dmgMin: 12, dmgMax: 24, cost: 18, style: "fire_blast" },
+            { name: "兵·流星碎甲", dmgMin: 9, dmgMax: 18, cost: 10, style: "shockwave" },
+            { name: "仕·罡风护体", dmgMin: 7, dmgMax: 14, cost: 10, style: "wind" }
+        ];
+        
+        // 辅助UI元素
+        const playerHpFill = document.getElementById('playerHpFill');
+        const enemyHpFill = document.getElementById('enemyHpFill');
+        const playerHpText = document.getElementById('playerHpText');
+        const enemyHpText = document.getElementById('enemyHpText');
+        const energyFill = document.getElementById('energyFill');
+        const energyText = document.getElementById('energyText');
+        const comboDisplay = document.getElementById('comboDisplay');
+        const battleLogDiv = document.getElementById('battleLog');
+        
+        function addLog(msg) {
+            const entry = document.createElement('div');
+            entry.innerHTML = `> ${msg}`;
+            battleLogDiv.appendChild(entry);
+            battleLogDiv.scrollTop = battleLogDiv.scrollHeight;
+            while(battleLogDiv.children.length > 22) battleLogDiv.removeChild(battleLogDiv.firstChild);
+        }
+        
+        function updateUI() {
+            let playerPercent = Math.max(0,(playerHP/120)*100);
+            let enemyPercent = Math.max(0,(enemyHP/150)*100);
+            let energyPercent = Math.max(0,(energy/100)*100);
+            playerHpFill.style.width = `${playerPercent}%`;
+            enemyHpFill.style.width = `${enemyPercent}%`;
+            energyFill.style.width = `${energyPercent}%`;
+            playerHpText.innerText = Math.floor(playerHP);
+            enemyHpText.innerText = Math.floor(enemyHP);
+            energyText.innerText = Math.floor(energy);
+            comboDisplay.innerHTML = `⚡ 连击 x${combo} ⚡ ${combo>=5 ? '觉醒之势!' : ''}`;
+            if(combo>=8) comboDisplay.style.color = "#ffaa66";
+            else comboDisplay.style.color = "#ffcc44";
+        }
+        
+        // 重置连击计时
+        function resetComboTimer() {
+            if(comboTimeout) clearTimeout(comboTimeout);
+            comboTimeout = setTimeout(() => {
+                if(gameActive && combo !== 0){
+                    addLog(`❌ 连击中断！ ${combo}连击消散...`);
+                    combo = 0;
+                    updateUI();
+                }
+                comboTimeout = null;
+            }, 2200);
+        }
+        
+        function addCombo(increment=1) {
+            if(!gameActive) return;
+            combo += increment;
+            if(combo > 30) combo = 30;
+            resetComboTimer();
+            updateUI();
+            // 屏幕微震+ 特效
+            if(combo % 3 === 0) screenShake = 5;
+        }
+        
+        // 技能伤害加成
+        function calculateDamage(skillIdx, baseDmg) {
+            let bonus = 1 + (combo * 0.04);
+            if(bonus > 1.9) bonus = 1.9;
+            let final = Math.floor(baseDmg * bonus);
+            if(skillIdx === 2 && Math.random()<0.3) final = Math.floor(final*1.35); // 砲暴击
+            return final;
+        }
+        
+        // 特效生成器
+        function spawnSkillEffect(skillStyle, centerX, centerY, isUltimate=false) {
+            let cx = centerX || canvas.width/2;
+            let cy = centerY || canvas.height/2;
+            if(isUltimate){
+                for(let i=0;i<30;i++) particles.push({x: cx+(Math.random()-0.5)*180, y: cy+(Math.random()-0.5)*180, life:1, size:5+Math.random()*10, type:'ult'});
+                for(let i=0;i<8;i++) shockwaves.push({x:cx, y:cy, radius:10, maxR:120, alpha:0.9});
+                screenShake = 18;
+                return;
+            }
+            switch(skillStyle){
+                case 'lightning':
+                    for(let i=0;i<12;i++) lightnings.push({sx:cx-30+Math.random()*60, sy:cy-20, ex:cx+Math.random()*80-40, ey:cy+40+Math.random()*50, life:0.5});
+                    screenShake = 4;
+                    break;
+                case 'fire':
+                    for(let i=0;i<18;i++) fireParticles.push({x:cx+(Math.random()-0.5)*70, y:cy+(Math.random()-0.5)*50, life:0.8, size:8});
+                    screenShake = 3;
+                    break;
+                case 'fire_blast':
+                    for(let i=0;i<25;i++) particles.push({x:cx+(Math.random()-0.5)*90, y:cy+(Math.random()-0.5)*70, life:0.7, size:6, type:'fire'});
+                    shockwaves.push({x:cx, y:cy, radius:5, maxR:110, alpha:0.8});
+                    screenShake = 6;
+                    break;
+                default:
+                    for(let i=0;i<12;i++) particles.push({x:cx+(Math.random()-0.5)*70, y:cy+(Math.random()-0.5)*50, life:0.6, size:4, type:'spark'});
+                    screenShake = 3;
+            }
+        }
+        
+        // 玩家释放技能
+        function playerUseSkill(skillIndex, isUltimate = false) {
+            if(!gameActive) { addLog("战局已定，请重铸战魂！"); return false; }
+            if(isUltimate){
+                if(energy >= 100){
+                    // 觉醒技
+                    let ultDmg = 48 + Math.floor(combo * 1.8);
+                    ultDmg = Math.min(ultDmg, 75);
+                    enemyHP -= ultDmg;
+                    if(enemyHP<0) enemyHP=0;
+                    energy = 0;
+                    addLog(`✨✨【觉醒·天威】造成 ${ultDmg} 毁灭伤害！ ✨✨`);
+                    addCombo(3);
+                    spawnSkillEffect(null, canvas.width/2, canvas.height/2, true);
+                    // 终极cut-in
+                    if(ultCutInActive) clearTimeout(ultCutInTimer);
+                    ultCutInActive = true;
+                    if(cutInTimer) clearTimeout(cutInTimer);
+                    cutInTimer = setTimeout(()=>{ ultCutInActive=false; }, 700);
+                    triggerCutInEffect();
+                    screenShake = 15;
+                    updateUI();
+                    checkGameOver();
+                    return true;
+                } else {
+                    addLog(`⚠️灵气不足 (${Math.floor(energy)}/100) 无法觉醒！`);
+                    return false;
+                }
+            }
+            // 普通技能
+            const sk = skills[skillIndex];
+            if(energy < sk.cost){
+                addLog(`⚠️灵气不足，需要 ${sk.cost} 点！`);
+                return false;
+            }
+            let rawDmg = Math.floor(Math.random()*(sk.dmgMax-sk.dmgMin+1)+sk.dmgMin);
+            let finalDmg = calculateDamage(skillIndex, rawDmg);
+            enemyHP -= finalDmg;
+            if(enemyHP<0) enemyHP=0;
+            energy -= sk.cost;
+            if(energy<0) energy=0;
+            addLog(`🔥 ${sk.name} 轰击魔将! 伤害 ${finalDmg} (连击加成${Math.floor(combo*4)}%)`);
+            addCombo(1);
+            // 视觉效果基于棋盘随机坐标产生
+            let xRand = offsetX + Math.random()*canvas.width*0.7;
+            let yRand = offsetY + Math.random()*canvas.height*0.6;
+            spawnSkillEffect(sk.style, xRand, yRand, false);
+            updateUI();
+            checkGameOver();
+            return true;
+        }
+        
+        // AI攻击（黑方反击）
+        let aiInterval = null;
+        function startAI() {
+            if(aiInterval) clearInterval(aiInterval);
+            aiInterval = setInterval(()=>{
+                if(!gameActive) return;
+                if(enemyHP<=0 || playerHP<=0) return;
+                let skillIdx = Math.floor(Math.random() * 5);
+                let sk = skills[skillIdx];
+                let dmg = Math.floor(Math.random()*(sk.dmgMax-sk.dmgMin+1)+sk.dmgMin);
+                dmg = Math.floor(dmg * (0.8+Math.random()*0.6));
+                playerHP -= dmg;
+                if(playerHP<0) playerHP=0;
+                addLog(`🪦 黑方·${sk.name} 反击造成 ${dmg} 伤害！`);
+                // 敌方特效
+                spawnSkillEffect(sk.style, offsetX+400, offsetY+300, false);
+                screenShake = 4;
+                updateUI();
+                checkGameOver();
+            }, 1450);
+        }
+        
+        // 灵气自然恢复
+        let regenInterval = null;
+        function startRegen() {
+            if(regenInterval) clearInterval(regenInterval);
+            regenInterval = setInterval(()=>{
+                if(!gameActive) return;
+                if(energy < 100){
+                    energy = Math.min(100, energy+5);
+                    updateUI();
+                }
+            }, 1000);
+        }
+        
+        function checkGameOver(){
+            if(!gameActive) return;
+            if(playerHP <= 0){
+                gameActive = false;
+                winner = 'enemy';
+                addLog("💀 帅旗倒下... 黑魔君胜利 💀");
+                if(aiInterval) clearInterval(aiInterval);
+                if(regenInterval) clearInterval(regenInterval);
+                ultCutInActive = false;
+            } else if(enemyHP <= 0){
+                gameActive = false;
+                winner = 'player';
+                addLog("🏆 天降赤龙，觉醒之战胜利！🏆");
+                if(aiInterval) clearInterval(aiInterval);
+                if(regenInterval) clearInterval(regenInterval);
+                // 终极庆典特效连发
+                for(let i=0;i<30;i++) particles.push({x:canvas.width/2+(Math.random()-0.5)*300, y:canvas.height/2+(Math.random()-0.5)*200, life:1.2, size:12, type:'win'});
+                screenShake = 12;
+            }
+            updateUI();
+        }
+        
+        function resetGame(){
+            playerHP = 120;
+            enemyHP = 150;
+            energy = 100;
+            combo = 0;
+            gameActive = true;
+            winner = null;
+            if(comboTimeout) clearTimeout(comboTimeout);
+            if(aiInterval) clearInterval(aiInterval);
+            if(regenInterval) clearInterval(regenInterval);
+            particles = [];
+            shockwaves = [];
+            lightnings = [];
+            fireParticles = [];
+            screenShake = 0;
+            ultCutInActive = false;
+            updateUI();
+            addLog("=== 战魂重燃，双方再战 ===");
+            startAI();
+            startRegen();
+        }
+        
+        // 终极cut-in视觉效果
+        function triggerCutInEffect(){
+            ultCutInActive = true;
+            if(cutInTimer) clearTimeout(cutInTimer);
+            cutInTimer = setTimeout(()=>{ ultCutInActive = false; }, 700);
+        }
+        
+        // ----- 棋盘绘制 + 华丽动画  -----
+        function drawBoard(){
+            ctx.clearRect(0,0,canvas.width,canvas.height);
+            ctx.strokeStyle = "#2c1a0c";
+            ctx.lineWidth = 2;
+            // 格子线
+            for(let i=0;i<10;i++){
+                ctx.beginPath();
+                ctx.moveTo(offsetX, offsetY+i*cellH);
+                ctx.lineTo(offsetX+cellW*8, offsetY+i*cellH);
+                ctx.stroke();
+            }
+            for(let i=0;i<9;i++){
+                ctx.beginPath();
+                ctx.moveTo(offsetX+i*cellW, offsetY);
+                ctx.lineTo(offsetX+i*cellW, offsetY+cellH*9);
+                ctx.stroke();
+            }
+            // 楚河汉界装饰 + 炮花
+            ctx.font = "bold 24 'KaiTi'";
+            ctx.fillStyle = "#8b5a2b";
+            ctx.fillText("楚  河", offsetX+cellW*2.8, offsetY+cellH*4.2);
+            ctx.fillText("汉  界", offsetX+cellW*5, offsetY+cellH*5.2);
+            // 九宫斜线
+            ctx.beginPath();
+            ctx.moveTo(offsetX+cellW*3,offsetY); ctx.lineTo(offsetX+cellW*5,offsetY+cellH*2); ctx.stroke();
+            ctx.moveTo(offsetX+cellW*5,offsetY); ctx.lineTo(offsetX+cellW*3,offsetY+cellH*2); ctx.stroke();
+            ctx.moveTo(offsetX+cellW*3,offsetY+cellH*7); ctx.lineTo(offsetX+cellW*5,offsetY+cellH*9); ctx.stroke();
+            ctx.moveTo(offsetX+cellW*5,offsetY+cellH*7); ctx.lineTo(offsetX+cellW*3,offsetY+cellH*9); ctx.stroke();
+            
+            // 绘制棋子
+            function drawPiece(px,py, char, colorTeam){
+                ctx.shadowBlur=0;
+                ctx.beginPath();
+                ctx.arc(px, py, 30, 0, Math.PI*2);
+                ctx.fillStyle = "#FFF3CF";
+                ctx.fill();
+                ctx.strokeStyle = "#be7c3a";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.font = `bold 38 "Noto Serif SC","华文楷书"`;
+                ctx.fillStyle = colorTeam === 'r' ? '#C33A1C' : '#4C3A2F';
+                ctx.shadowColor = "rgba(0,0,0,0.3)";
+                ctx.fillText(char, px-18, py+12);
+                ctx.fillStyle = colorTeam === 'r' ? '#D84A2A' : '#2E241D';
+                ctx.fillText(char, px-19, py+11);
+            }
+            for(let row=0;row<10;row++){
+                for(let col=0;col<9;col++){
+                    let key = getPieceKey(row,col);
+                    let ch = redPieces[key] || blackPieces[key];
+                    if(ch){
+                        let team = redPieces[key] ? 'r' : 'b';
+                        let x = offsetX+col*cellW;
+                        let y = offsetY+row*cellH;
+                        drawPiece(x,y,ch,team);
+                    }
+                }
+            }
+            // 动态特效:粒子,闪电,火焰,冲击波
+            for(let s of shockwaves){
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.radius, 0, Math.PI*2);
+                ctx.fillStyle = `rgba(255, 200, 50, ${s.alpha*0.5})`;
+                ctx.fill();
+                s.radius += 8;
+                s.alpha -= 0.05;
+            }
+            shockwaves = shockwaves.filter(s=>s.alpha>0 && s.radius<s.maxR);
+            
+            for(let l of lightnings){
+                ctx.beginPath();
+                ctx.moveTo(l.sx,l.sy);
+                ctx.lineTo(l.ex,l.ey);
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = `rgba(255, 220, 80, ${l.life})`;
+                ctx.stroke();
+                l.life-=0.08;
+            }
+            lightnings = lightnings.filter(l=>l.life>0);
+            
+            for(let p of particles){
+                ctx.fillStyle = p.type==='ult'? `rgba(255,100,0,${p.life})` : `rgba(255,80,40,${p.life})`;
+                ctx.beginPath();
+                ctx.arc(p.x,p.y,p.size,0,Math.PI*2);
+                ctx.fill();
+                p.life-=0.03;
+            }
+            particles = particles.filter(p=>p.life>0);
+            for(let f of fireParticles){
+                ctx.fillStyle = `rgba(255, 80, 20, ${f.life})`;
+                ctx.beginPath();
+                ctx.arc(f.x,f.y,f.size,0,Math.PI*2);
+                ctx.fill();
+                f.life-=0.04;
+            }
+            fireParticles = fireParticles.filter(f=>f.life>0);
+            
+            // 屏幕震动偏移
+            if(screenShake>0){
+                let sx = (Math.random()-0.5)*screenShake;
+                let sy = (Math.random()-0.5)*screenShake;
+                canvas.style.transform = `translate(${sx}px, ${sy}px)`;
+                screenShake -= 0.8;
+            } else canvas.style.transform = `translate(0px,0px)`;
+        }
+        
+        // 终极cut-in绘制
+        function drawCutIn(){
+            if(ultCutInActive){
+                ctx.fillStyle = "rgba(0,0,0,0.7)";
+                ctx.fillRect(0,0,canvas.width,canvas.height);
+                ctx.font = "bold 48 'YouYuan'";
+                ctx.fillStyle = "#ffba66";
+                ctx.shadowBlur = 12;
+                ctx.fillText("⚡ 觉醒·天威 ⚡", canvas.width/2-160, canvas.height/2);
+                ctx.font = "24 monospace";
+                ctx.fillStyle = "#ffda99";
+                ctx.fillText("终极一击 !", canvas.width/2-80, canvas.height/2+60);
+                ctx.shadowBlur = 0;
+            }
+        }
+        
+        function animate(){
+            drawBoard();
+            drawCutIn();
+            requestAnimationFrame(animate);
+        }
+        animate();
+        
+        // ---- 事件绑定 ----
+        function bindEvents(){
+            const btns = document.querySelectorAll('.skill-btn:not(.reset-btn):not(#ultimateBtn)');
+            btns.forEach((btn, idx)=>{
+                btn.onclick = (e)=>{
+                    e.preventDefault();
+                    if(gameActive) playerUseSkill(idx, false);
+                    else addLog("战局冻结，请重置");
+                };
+            });
+            document.getElementById('ultimateBtn').onclick = (e)=>{
+                e.preventDefault();
+                if(gameActive) playerUseSkill(0, true);
+                else addLog("战斗终结，无法觉醒");
+            };
+            document.getElementById('resetGameBtn').onclick = ()=>{
+                resetGame();
+            };
+            window.addEventListener('keydown', (e)=>{
+                if(e.key === ' '|| e.key === 'Space'){
+                    e.preventDefault();
+                    if(gameActive) playerUseSkill(0, true);
+                } else if(e.key === '1') playerUseSkill(0,false);
+                else if(e.key === '2') playerUseSkill(1,false);
+                else if(e.key === '3') playerUseSkill(2,false);
+                else if(e.key === '4') playerUseSkill(3,false);
+                else if(e.key === '5') playerUseSkill(4,false);
+            });
+            // 画布点击产生华丽冲击爆炸(clickable effect)
+            canvas.addEventListener('click', (e)=>{
+                let rect = canvas.getBoundingClientRect();
+                let x = e.clientX - rect.left;
+                let y = e.clientY - rect.top;
+                for(let i=0;i<12;i++) particles.push({x:x+(Math.random()-0.5)*30, y:y+(Math.random()-0.5)*30, life:0.8, size:7, type:'spark'});
+                shockwaves.push({x:x, y:y, radius:2, maxR:70, alpha:0.9});
+                addLog("✨ 指尖灵韵 · 棋盘共鸣 ✨");
+                screenShake = 3;
+            });
+        }
+        
+        resetGame();    // 启动游戏/AI/再生
+        bindEvents();
+        updateUI();
+    })();
+</script>
+</body>
+</html>
+

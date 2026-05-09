@@ -45,14 +45,14 @@ export class AiTaskExecutor {
   }
 
   executeNextQueuedTask(): Result<AiTaskExecutionResult | undefined> {
-    const task = nextQueuedTask(this.store.project);
+    const task = nextQueuedTask(this.store.peekProject());
     if (!task) return ok(undefined);
     return this.executeTask(task.id);
   }
 
   executeTask(taskId: TaskId): Result<AiTaskExecutionResult> {
     if (this.traceSink instanceof MemoryTraceSink) this.traceSink.clear();
-    const project = this.store.project;
+    const project = this.store.peekProject();
     const task = project.tasks[taskId];
     if (!task) return err(`task not found: ${taskId}`);
     if (task.status !== "queued") return err(`task is not queued: ${task.status}`);
@@ -77,7 +77,7 @@ export class AiTaskExecutor {
     const runningTask = transitionTask(task, "running", normalizeTaskText(task.userText));
     this.store.upsertTask(runningTask);
 
-    const plan = createIntentPlan(this.store.project, runningTask);
+    const plan = createIntentPlan(this.store.peekProject(), runningTask);
     if (!plan.ok) return this.failTask(runningTask, plan.error);
     const plannedTask: Task = {
       ...runningTask,
@@ -99,7 +99,7 @@ export class AiTaskExecutor {
     const applied = this.store.apply(transaction);
     if (!applied.ok) return this.failTask(runningTask, applied.error, transaction, dryRun.value);
 
-    const appliedProject = this.store.project;
+    const appliedProject = this.store.peekProject();
     const scene = appliedProject.scenes[appliedProject.activeSceneId];
     const testResult = this.testRunner.run({
       taskId,
@@ -131,7 +131,7 @@ export class AiTaskExecutor {
     this.store.recordTestResult(recordWithTrace, finishedTask, applied.value, testResult.snapshots);
 
     let rolledBack = false;
-    let finalTransaction = this.store.project.transactions[applied.value.id] || applied.value;
+    let finalTransaction = this.store.peekProject().transactions[applied.value.id] || applied.value;
     if (recordWithTrace.result !== "passed") {
       const rollback = this.store.rollback(applied.value.id);
       if (!rollback.ok) {
@@ -155,8 +155,10 @@ export class AiTaskExecutor {
     config: ReactionWindowSweepConfig,
     options: { taskId?: TaskId; sceneId?: string; traceLimit?: number; initialSnapshot?: RuntimeSnapshot } = {},
   ): Result<ReactionWindowSweepRunResult> {
-    const scene = this.store.project.scenes[options.sceneId || this.store.project.activeSceneId];
-    if (!scene) return err(`scene not found: ${options.sceneId || this.store.project.activeSceneId}`);
+    const project = this.store.peekProject();
+    const sceneId = options.sceneId || project.activeSceneId;
+    const scene = project.scenes[sceneId];
+    if (!scene) return err(`scene not found: ${sceneId}`);
     return ok(
       runTestingReactionWindowSweep({
         scene,

@@ -47,7 +47,8 @@ export function zoomViewportAt(
   deltaY: number,
 ): ViewportState {
   const before = screenToWorldPoint(viewport, screen, local);
-  const wheelFactor = Math.pow(1.0015, -deltaY);
+  const WHEEL_ZOOM_SENSITIVITY = 1.0015;
+  const wheelFactor = Math.pow(WHEEL_ZOOM_SENSITIVITY, -deltaY);
   const zoom = clamp(viewport.zoom * wheelFactor, MIN_VIEWPORT_ZOOM, MAX_VIEWPORT_ZOOM);
   return {
     x: before.x - (local.x - screen.width / 2) / zoom,

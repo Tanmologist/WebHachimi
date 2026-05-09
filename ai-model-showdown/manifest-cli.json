@@ -1,0 +1,31 @@
+{
+  "createdAt": "2026-05-07T13:43:07.267Z",
+  "mode": "claude-cli",
+  "claudeCmd": "C:\\Users\\txy20\\AppData\\Roaming\\npm\\claude.cmd",
+  "results": [
+    {
+      "model": "deepseek-v4-flash",
+      "timedOut": false,
+      "error": "",
+      "status": 0,
+      "signal": null,
+      "wallMs": 14892,
+      "modelUsage": [],
+      "bytes": 0,
+      "file": "ai-model-showdown\\deepseek-v4-flash_xiangqi_awakening.html",
+      "preview": "I'm here and ready to continue. The conversation history shows the system setup and tool configurations are loaded, but there's no prior task in progress — just your \"Return\" message. What would you like to work on?"
+    },
+    {
+      "model": "deepseek-v4-pro",
+      "timedOut": false,
+      "error": "",
+      "status": 0,
+      "signal": null,
+      "wallMs": 46999,
+      "modelUsage": [],
+      "bytes": 0,
+      "file": "ai-model-showdown\\deepseek-v4-pro_xiangqi_awakening.html",
+      "preview": "I don't see any prior conversation state in the attached file beyond the tool definitions and a system reminder — the file ends with \"Return\" with no actual task context, code, or conversation to resume from. Could you d"
+    }
+  ]
+}

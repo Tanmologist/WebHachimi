@@ -1,0 +1,178 @@
+[2m08:31:10[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Transform failed with 1 error:
+
+[31m[PARSE_ERROR] Error:[0m Expected `:` but found `Identifier`
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/v2/main.ts:306:16 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m160 │[0m [38;5;249m [0m[38;5;249m [0m?[38;5;249m [0m[38;5;249m`[0m[38;5;249m宸[0m[38;5;249m蹭[0m[38;5;249m粠[0m[38;5;249m娓[0m[38;5;249m告[0m[38;5;249m垙[0m[38;5;249m鏆[0m[38;5;249m傚[0m[38;5;249m仠[0m[38;5;249m甯[0m[38;5;249m?[0m[38;5;249m$[0m[38;5;249m{[0m[38;5;249mh[0m[38;5;249ma[0m[38;5;249mn[0m[38;5;249md[0m[38;5;249mo[0m[38;5;249mf[0m[38;5;249mf[0m[38;5;249m.[0m[38;5;249ms[0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mp[0m[38;5;249ms[0m[38;5;249mh[0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249m.[0m[38;5;249mf[0m[38;5;249mr[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m}[0m[38;5;249m [0m[38;5;249m杩[0m[38;5;249m涘[0m[38;5;249m叆[0m[38;5;249m缂[0m[38;5;249m栬[0m[38;5;249m緫[0m[38;5;249m鍣[0m[38;5;249mㄣ[0m[38;5;249m€[0m[38;5;249m傛[0m[38;5;249m寜[0m[38;5;249m [0m[38;5;249mZ[0m[38;5;249m [0m[38;5;249m鍙[0m[38;5;249m[0m[38;5;249m户[0m[38;5;249m缁[0m[38;5;249m[0m[38;5;249m繍[0m[38;5;249m琛[0m[38;5;249m屻[0m[38;5;249m€[0m[38;5;249m俙[0m
+ [38;5;240m    │[0m   ┬  
+ [38;5;240m    │[0m   ╰── Conditional starts here
+ [38;5;240m    │[0m 
+ [38;5;246m306 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mc[0m[38;5;249me[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249m`[0m$[38;5;249m{[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249mt[0m[38;5;249m.[0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mc[0m[38;5;249me[0m[38;5;249m}[0m[38;5;249m [0m[38;5;249m鑷[0m[38;5;249m[0m[38;5;249m姩[0m[38;5;249m淇[0m[38;5;249m濆[0m[38;5;249m瓨[0m[38;5;249m宸[0m[38;5;249m插[0m[38;5;249m紑[0m[38;5;249m鍚[0m[38;5;249m[0m[38;5;249m€[0m[38;5;249m俙[0m[38;5;249m,[0m
+ [38;5;240m    │[0m                ┬  
+ [38;5;240m    │[0m                ╰── `:` expected
+[38;5;246m─────╯[0m
+
+  Plugin: [35mvite:oxc[39m
+  File: [36mE:/WebForAll/WebForAll/src/v2/main.ts[39m
+[2m08:31:10[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m Pre-transform error: Transform failed with 1 error:
+
+[31m[PARSE_ERROR] Error:[0m Expected `:` but found `Identifier`
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/v2/main.ts:306:16 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m160 │[0m [38;5;249m [0m[38;5;249m [0m?[38;5;249m [0m[38;5;249m`[0m[38;5;249m宸[0m[38;5;249m蹭[0m[38;5;249m粠[0m[38;5;249m娓[0m[38;5;249m告[0m[38;5;249m垙[0m[38;5;249m鏆[0m[38;5;249m傚[0m[38;5;249m仠[0m[38;5;249m甯[0m[38;5;249m?[0m[38;5;249m$[0m[38;5;249m{[0m[38;5;249mh[0m[38;5;249ma[0m[38;5;249mn[0m[38;5;249md[0m[38;5;249mo[0m[38;5;249mf[0m[38;5;249mf[0m[38;5;249m.[0m[38;5;249ms[0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mp[0m[38;5;249ms[0m[38;5;249mh[0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249m.[0m[38;5;249mf[0m[38;5;249mr[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m}[0m[38;5;249m [0m[38;5;249m杩[0m[38;5;249m涘[0m[38;5;249m叆[0m[38;5;249m缂[0m[38;5;249m栬[0m[38;5;249m緫[0m[38;5;249m鍣[0m[38;5;249mㄣ[0m[38;5;249m€[0m[38;5;249m傛[0m[38;5;249m寜[0m[38;5;249m [0m[38;5;249mZ[0m[38;5;249m [0m[38;5;249m鍙[0m[38;5;249m[0m[38;5;249m户[0m[38;5;249m缁[0m[38;5;249m[0m[38;5;249m繍[0m[38;5;249m琛[0m[38;5;249m屻[0m[38;5;249m€[0m[38;5;249m俙[0m
+ [38;5;240m    │[0m   ┬  
+ [38;5;240m    │[0m   ╰── Conditional starts here
+ [38;5;240m    │[0m 
+ [38;5;246m306 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mc[0m[38;5;249me[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249m`[0m$[38;5;249m{[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249mt[0m[38;5;249m.[0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mc[0m[38;5;249me[0m[38;5;249m}[0m[38;5;249m [0m[38;5;249m鑷[0m[38;5;249m[0m[38;5;249m姩[0m[38;5;249m淇[0m[38;5;249m濆[0m[38;5;249m瓨[0m[38;5;249m宸[0m[38;5;249m插[0m[38;5;249m紑[0m[38;5;249m鍚[0m[38;5;249m[0m[38;5;249m€[0m[38;5;249m俙[0m[38;5;249m,[0m
+ [38;5;240m    │[0m                ┬  
+ [38;5;240m    │[0m                ╰── `:` expected
+[38;5;246m─────╯[0m
+
+  Plugin: [35mvite:oxc[39m
+  File: [36mE:/WebForAll/WebForAll/src/v2/main.ts[39m
+[2m08:31:10[22m [31m[1m[vite][22m[39m [31mInternal server error: Transform failed with 1 error:
+
+[31m[PARSE_ERROR] Error:[0m Expected `:` but found `Identifier`
+     [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/v2/main.ts:306:16 [38;5;246m][0m
+     [38;5;246m│[0m
+ [38;5;246m160 │[0m [38;5;249m [0m[38;5;249m [0m?[38;5;249m [0m[38;5;249m`[0m[38;5;249m宸[0m[38;5;249m蹭[0m[38;5;249m粠[0m[38;5;249m娓[0m[38;5;249m告[0m[38;5;249m垙[0m[38;5;249m鏆[0m[38;5;249m傚[0m[38;5;249m仠[0m[38;5;249m甯[0m[38;5;249m?[0m[38;5;249m$[0m[38;5;249m{[0m[38;5;249mh[0m[38;5;249ma[0m[38;5;249mn[0m[38;5;249md[0m[38;5;249mo[0m[38;5;249mf[0m[38;5;249mf[0m[38;5;249m.[0m[38;5;249ms[0m[38;5;249mn[0m[38;5;249ma[0m[38;5;249mp[0m[38;5;249ms[0m[38;5;249mh[0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249m.[0m[38;5;249mf[0m[38;5;249mr[0m[38;5;249ma[0m[38;5;249mm[0m[38;5;249me[0m[38;5;249m}[0m[38;5;249m [0m[38;5;249m杩[0m[38;5;249m涘[0m[38;5;249m叆[0m[38;5;249m缂[0m[38;5;249m栬[0m[38;5;249m緫[0m[38;5;249m鍣[0m[38;5;249mㄣ[0m[38;5;249m€[0m[38;5;249m傛[0m[38;5;249m寜[0m[38;5;249m [0m[38;5;249mZ[0m[38;5;249m [0m[38;5;249m鍙[0m[38;5;249m[0m[38;5;249m户[0m[38;5;249m缁[0m[38;5;249m[0m[38;5;249m繍[0m[38;5;249m琛[0m[38;5;249m屻[0m[38;5;249m€[0m[38;5;249m俙[0m
+ [38;5;240m    │[0m   ┬  
+ [38;5;240m    │[0m   ╰── Conditional starts here
+ [38;5;240m    │[0m 
+ [38;5;246m306 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mc[0m[38;5;249me[0m[38;5;249m:[0m[38;5;249m [0m[38;5;249m`[0m$[38;5;249m{[0m[38;5;249mr[0m[38;5;249me[0m[38;5;249ms[0m[38;5;249mu[0m[38;5;249ml[0m[38;5;249mt[0m[38;5;249m.[0m[38;5;249mn[0m[38;5;249mo[0m[38;5;249mt[0m[38;5;249mi[0m[38;5;249mc[0m[38;5;249me[0m[38;5;249m}[0m[38;5;249m [0m[38;5;249m鑷[0m[38;5;249m[0m[38;5;249m姩[0m[38;5;249m淇[0m[38;5;249m濆[0m[38;5;249m瓨[0m[38;5;249m宸[0m[38;5;249m插[0m[38;5;249m紑[0m[38;5;249m鍚[0m[38;5;249m[0m[38;5;249m€[0m[38;5;249m俙[0m[38;5;249m,[0m
+ [38;5;240m    │[0m                ┬  
+ [38;5;240m    │[0m                ╰── `:` expected
+[38;5;246m─────╯[0m
+[39m
+  Plugin: [35mvite:oxc[39m
+  File: [36mE:/WebForAll/WebForAll/src/v2/main.ts[39m
+      at transformWithOxc (file:///E:/WebForAll/WebForAll/node_modules/vite/dist/node/chunks/node.js:3343:19)
+      at TransformPluginContext.transform (file:///E:/WebForAll/WebForAll/node_modules/vite/dist/node/chunks/node.js:3411:26)
+      at EnvironmentPluginContainer.transform (file:///E:/WebForAll/WebForAll/node_modules/vite/dist/node/chunks/node.js:30164:51)
+      at async loadAndTransform (file:///E:/WebForAll/WebForAll/node_modules/vite/dist/node/chunks/node.js:24512:26)
+      at async viteTransformMiddleware (file:///E:/WebForAll/WebForAll/node_modules/vite/dist/node/chunks/node.js:24306:20)
+[2m09:38:11[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: this._cancelResize is not a function
+[39m > _Application.destroy node_modules/pixi.js/lib/app/ResizePlugin.mjs:70:9
+ > node_modules/pixi.js/lib/app/Application.mjs:197:21
+ > _Application.destroy node_modules/pixi.js/lib/app/Application.mjs:196:12
+ > V2Renderer.destroy src/v2/renderer.ts:139:13
+    137 |      this.lastRender = undefined;
+    138 |      this.destroyPools();
+    139 |      this.app.destroy(true);
+        |               ^
+    140 |    }
+    141 |  
+ > src/v2/main.ts?t=1778202179983:3694:11
+ > ../../@vite/client:899:13
+
+[2m09:38:18[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: this._cancelResize is not a function
+[39m > _Application.destroy node_modules/pixi.js/lib/app/ResizePlugin.mjs:70:9
+ > node_modules/pixi.js/lib/app/Application.mjs:197:21
+ > _Application.destroy node_modules/pixi.js/lib/app/Application.mjs:196:12
+ > V2Renderer.destroy src/v2/renderer.ts:139:13
+    137 |      this.lastRender = undefined;
+    138 |      this.destroyPools();
+    139 |      this.app.destroy(true);
+        |               ^
+    140 |    }
+    141 |  
+ > src/v2/main.ts?t=1778202179983:3694:11
+ > ../../@vite/client:899:13
+
+[2m09:38:24[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: this._cancelResize is not a function
+[39m > _Application.destroy node_modules/pixi.js/lib/app/ResizePlugin.mjs:70:9
+ > node_modules/pixi.js/lib/app/Application.mjs:197:21
+ > _Application.destroy node_modules/pixi.js/lib/app/Application.mjs:196:12
+ > V2Renderer.destroy src/v2/renderer.ts:139:13
+    137 |      this.lastRender = undefined;
+    138 |      this.destroyPools();
+    139 |      this.app.destroy(true);
+        |               ^
+    140 |    }
+    141 |  
+ > src/v2/main.ts?t=1778202179983:3694:11
+ > ../../@vite/client:899:13
+
+[2m09:38:36[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: this._cancelResize is not a function
+[39m > _Application.destroy node_modules/pixi.js/lib/app/ResizePlugin.mjs:70:9
+ > node_modules/pixi.js/lib/app/Application.mjs:197:21
+ > _Application.destroy node_modules/pixi.js/lib/app/Application.mjs:196:12
+ > V2Renderer.destroy src/v2/renderer.ts:139:13
+    137 |      this.lastRender = undefined;
+    138 |      this.destroyPools();
+    139 |      this.app.destroy(true);
+        |               ^
+    140 |    }
+    141 |  
+ > src/v2/main.ts?t=1778202179983:3694:11
+ > ../../@vite/client:899:13
+
+[2m09:39:01[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: this._cancelResize is not a function
+[39m > _Application.destroy node_modules/pixi.js/lib/app/ResizePlugin.mjs:70:9
+ > node_modules/pixi.js/lib/app/Application.mjs:197:21
+ > _Application.destroy node_modules/pixi.js/lib/app/Application.mjs:196:12
+ > V2Renderer.destroy src/v2/renderer.ts:139:13
+    137 |      this.lastRender = undefined;
+    138 |      this.destroyPools();
+    139 |      this.app.destroy(true);
+        |               ^
+    140 |    }
+    141 |  
+ > src/v2/main.ts?t=1778202179983:3694:11
+ > ../../@vite/client:899:13
+
+[2m09:39:50[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: this._cancelResize is not a function
+[39m > _Application.destroy node_modules/pixi.js/lib/app/ResizePlugin.mjs:70:9
+ > node_modules/pixi.js/lib/app/Application.mjs:197:21
+ > _Application.destroy node_modules/pixi.js/lib/app/Application.mjs:196:12
+ > V2Renderer.destroy src/v2/renderer.ts:139:13
+    137 |      this.lastRender = undefined;
+    138 |      this.destroyPools();
+    139 |      this.app.destroy(true);
+        |               ^
+    140 |    }
+    141 |  
+ > src/v2/main.ts?t=1778202179983:3694:11
+ > ../../@vite/client:899:13
+
+[2m09:39:55[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: this._cancelResize is not a function
+[39m > _Application.destroy node_modules/pixi.js/lib/app/ResizePlugin.mjs:70:9
+ > node_modules/pixi.js/lib/app/Application.mjs:197:21
+ > _Application.destroy node_modules/pixi.js/lib/app/Application.mjs:196:12
+ > V2Renderer.destroy src/v2/renderer.ts:139:13
+    137 |      this.lastRender = undefined;
+    138 |      this.destroyPools();
+    139 |      this.app.destroy(true);
+        |               ^
+    140 |    }
+    141 |  
+ > src/v2/main.ts?t=1778202179983:3694:11
+ > ../../@vite/client:899:13
+
+[2m09:40:28[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: this._cancelResize is not a function
+[39m > _Application.destroy node_modules/pixi.js/lib/app/ResizePlugin.mjs:70:9
+ > node_modules/pixi.js/lib/app/Application.mjs:197:21
+ > _Application.destroy node_modules/pixi.js/lib/app/Application.mjs:196:12
+ > V2Renderer.destroy src/v2/renderer.ts:139:13
+    137 |      this.lastRender = undefined;
+    138 |      this.destroyPools();
+    139 |      this.app.destroy(true);
+        |               ^
+    140 |    }
+    141 |  
+ > src/v2/main.ts?t=1778202179983:3694:11
+ > ../../@vite/client:899:13
+
+[2m09:41:06[22m [31m[1m[vite][22m[39m [31m[2m(client)[22m[39m [31m[Unhandled error] [1mTypeError[22m: this._cancelResize is not a function
+[39m > _Application.destroy node_modules/pixi.js/lib/app/ResizePlugin.mjs:70:9
+ > node_modules/pixi.js/lib/app/Application.mjs:197:21
+ > _Application.destroy node_modules/pixi.js/lib/app/Application.mjs:196:12
+ > V2Renderer.destroy src/v2/renderer.ts:139:13
+    137 |      this.lastRender = undefined;
+    138 |      this.destroyPools();
+    139 |      this.app.destroy(true);
+        |               ^
+    140 |    }
+    141 |  
+ > src/v2/main.ts?t=1778202179983:3694:11
+

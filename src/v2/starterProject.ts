@@ -5,18 +5,18 @@ import { makeId, type EntityId, type ResourceId } from "../shared/types";
 type BuiltinBehavior = NonNullable<Entity["behavior"]>["builtin"];
 
 export function createStarterProject(): Project {
-  const created = createEmptyProject("WebHachimi v2 Workshops");
+  const created = createEmptyProject("WebHachimi v2 工作坊");
   if (!created.ok) throw new Error(created.error);
 
   const project = created.value;
-  project.meta.name = "WebHachimi v2 Workshops";
+  project.meta.name = "WebHachimi v2 工作坊";
 
   const scene = project.scenes[project.activeSceneId];
-  scene.name = "Gameplay Workshop Scene";
+  scene.name = "玩法工作坊场景";
   scene.settings.width = 3200;
   scene.settings.height = 900;
   scene.settings.background = "#111313";
-  scene.layers = [{ id: "world", displayName: "World", order: 0, visible: true, locked: false }];
+  scene.layers = [{ id: "world", displayName: "世界", order: 0, visible: true, locked: false }];
 
   const playerId = makeId<"EntityId">("ent") as EntityId;
   const attackTemplateId = makeId<"EntityId">("ent") as EntityId;
@@ -33,7 +33,7 @@ export function createStarterProject(): Project {
   scene.entities[playerId] = makeBox({
     id: playerId,
     internalName: "Player",
-    displayName: "Parry Player",
+    displayName: "格挡玩家",
     kind: "entity",
     x: 620,
     y: 240,
@@ -62,7 +62,7 @@ export function createStarterProject(): Project {
   scene.entities[attackTemplateId] = makeBox({
     id: attackTemplateId,
     internalName: "Player_Attack_Hitbox",
-    displayName: "Attack Template",
+    displayName: "攻击模板",
     kind: "effect",
     x: 684,
     y: 240,
@@ -79,7 +79,7 @@ export function createStarterProject(): Project {
   scene.entities[combatGroundId] = makeBox({
     id: combatGroundId,
     internalName: "Combat_Ground",
-    displayName: "Combat Ground",
+    displayName: "战斗地面",
     kind: "entity",
     x: 710,
     y: 320,
@@ -93,7 +93,7 @@ export function createStarterProject(): Project {
   scene.entities[enemyId] = makeBox({
     id: enemyId,
     internalName: "Enemy_Patrol",
-    displayName: "Parry Attacker",
+    displayName: "格挡攻击者",
     kind: "entity",
     x: 730,
     y: 240,
@@ -121,7 +121,7 @@ export function createStarterProject(): Project {
   scene.entities[runnerPlayerId] = makeBox({
     id: runnerPlayerId,
     internalName: "Runner_Player",
-    displayName: "Runner Player",
+    displayName: "跑酷玩家",
     kind: "entity",
     x: -1100,
     y: 240,
@@ -143,7 +143,7 @@ export function createStarterProject(): Project {
   scene.entities[runnerGroundId] = makeBox({
     id: runnerGroundId,
     internalName: "Runner_Ground",
-    displayName: "Runner Ground",
+    displayName: "跑酷地面",
     kind: "entity",
     x: -760,
     y: 320,
@@ -157,7 +157,7 @@ export function createStarterProject(): Project {
   scene.entities[runnerObstacleId] = makeBox({
     id: runnerObstacleId,
     internalName: "Runner_Obstacle_Cactus",
-    displayName: "Runner Obstacle",
+    displayName: "跑酷障碍",
     kind: "entity",
     x: -860,
     y: 264,
@@ -171,7 +171,7 @@ export function createStarterProject(): Project {
   scene.entities[runnerFinishId] = makeBox({
     id: runnerFinishId,
     internalName: "Runner_Finish_Marker",
-    displayName: "Runner Finish",
+    displayName: "跑酷终点",
     kind: "entity",
     x: -420,
     y: 220,
@@ -192,7 +192,7 @@ export function createStarterProject(): Project {
   scene.entities[dividerId] = makeBox({
     id: dividerId,
     internalName: "Zone_Divider",
-    displayName: "Zone Divider",
+    displayName: "区域分隔",
     kind: "entity",
     x: -20,
     y: 180,
@@ -206,33 +206,33 @@ export function createStarterProject(): Project {
   project.resources[playerCurrentResourceId] = {
     id: playerCurrentResourceId,
     internalName: "Player_Current_Sprite",
-    displayName: "Player Current Sprite",
+    displayName: "玩家当前可视体",
     type: "sprite",
-    description: "Current visible body for the combat player.",
-    aiDescription: "Main combat player current sprite.",
+    description: "战斗玩家当前显示的可视体。",
+    aiDescription: "战斗玩家的主可视体。",
     tags: ["player", "combat", "current"],
     attachments: [],
   };
   project.resources[playerDeathResourceId] = {
     id: playerDeathResourceId,
     internalName: "Player_Death_Fade_Sprite",
-    displayName: "Player Death Fade",
+    displayName: "玩家死亡淡出",
     type: "sprite",
-    description: "Fade-out sprite used after the combat player dies.",
-    aiDescription: "Combat player death fade sprite.",
+    description: "战斗玩家死亡后使用的淡出可视体。",
+    aiDescription: "战斗玩家死亡淡出可视体。",
     tags: ["player", "death"],
     attachments: [],
   };
 
   scene.entities[playerId].resources.push(
-    makeResourceBinding(playerDeathResourceId, "death", "Death fade sprite"),
-    makeResourceBinding(playerCurrentResourceId, "current", "Current combat sprite"),
+    makeResourceBinding(playerDeathResourceId, "death", "死亡淡出可视体"),
+    makeResourceBinding(playerCurrentResourceId, "current", "当前战斗可视体"),
   );
 
   scene.folders = [
-    { id: "terrain", displayName: "Terrain", entityIds: [combatGroundId, runnerGroundId, runnerObstacleId, runnerFinishId, dividerId] },
-    { id: "characters", displayName: "Characters", entityIds: [playerId, enemyId, runnerPlayerId] },
-    { id: "runtime", displayName: "Runtime", entityIds: [attackTemplateId] },
+    { id: "terrain", displayName: "地形", entityIds: [combatGroundId, runnerGroundId, runnerObstacleId, runnerFinishId, dividerId] },
+    { id: "characters", displayName: "角色", entityIds: [playerId, enemyId, runnerPlayerId] },
+    { id: "runtime", displayName: "运行时", entityIds: [attackTemplateId] },
   ];
 
   return project;
@@ -242,54 +242,80 @@ export function repairKnownStarterLabels(project: Project): Project {
   const scene = project.scenes[project.activeSceneId];
   if (!scene) return project;
 
-  if (isBrokenLabel(project.meta.name)) project.meta.name = "WebHachimi v2 Workshops";
-  if (isBrokenLabel(scene.name)) scene.name = "Gameplay Workshop Scene";
+  if (shouldUseBuiltinLabel(project.meta.name, "WebHachimi v2 Workshops")) project.meta.name = "WebHachimi v2 工作坊";
+  if (shouldUseBuiltinLabel(scene.name, "Gameplay Workshop Scene")) scene.name = "玩法工作坊场景";
+  scene.layers.forEach((layer) => {
+    if (layer.id === "world" && shouldUseBuiltinLabel(layer.displayName, "World")) layer.displayName = "世界";
+  });
 
-  const folderLabels: Record<string, string> = {
-    terrain: "Terrain",
-    characters: "Characters",
-    runtime: "Runtime",
+  const folderLabels: Record<string, { legacy: string; displayName: string }> = {
+    terrain: { legacy: "Terrain", displayName: "地形" },
+    characters: { legacy: "Characters", displayName: "角色" },
+    runtime: { legacy: "Runtime", displayName: "运行时" },
   };
   scene.folders.forEach((folder) => {
     const label = folderLabels[folder.id];
-    if (label && isBrokenLabel(folder.displayName)) folder.displayName = label;
+    if (label && shouldUseBuiltinLabel(folder.displayName, label.legacy)) folder.displayName = label.displayName;
   });
 
-  const entityLabels: Record<string, { displayName: string; tags: string[]; description?: string }> = {
-    Player: { displayName: "Parry Player", tags: ["combat", "player"], description: "Combat player controller." },
-    Player_Attack_Hitbox: { displayName: "Attack Template", tags: ["runtime", "attack"] },
-    Combat_Ground: { displayName: "Combat Ground", tags: ["combat", "ground"] },
-    Enemy_Patrol: { displayName: "Parry Attacker", tags: ["combat", "enemy"], description: "Parry workshop attacker." },
-    Runner_Player: { displayName: "Runner Player", tags: ["runner", "player"], description: "Runner workshop controller." },
-    Runner_Ground: { displayName: "Runner Ground", tags: ["runner", "ground"] },
-    Runner_Obstacle_Cactus: { displayName: "Runner Obstacle", tags: ["runner", "obstacle"] },
-    Runner_Finish_Marker: { displayName: "Runner Finish", tags: ["runner", "finish"] },
-    Zone_Divider: { displayName: "Zone Divider", tags: ["layout", "divider"] },
+  const entityLabels: Record<string, { legacy: string; displayName: string; tags: string[]; legacyDescription?: string; description?: string }> = {
+    Player: { legacy: "Parry Player", displayName: "格挡玩家", tags: ["combat", "player"], legacyDescription: "Combat player controller.", description: "战斗玩家控制器。" },
+    Player_Attack_Hitbox: { legacy: "Attack Template", displayName: "攻击模板", tags: ["runtime", "attack"] },
+    Combat_Ground: { legacy: "Combat Ground", displayName: "战斗地面", tags: ["combat", "ground"] },
+    Enemy_Patrol: { legacy: "Parry Attacker", displayName: "格挡攻击者", tags: ["combat", "enemy"], legacyDescription: "Parry workshop attacker.", description: "格挡工作坊攻击者。" },
+    Runner_Player: { legacy: "Runner Player", displayName: "跑酷玩家", tags: ["runner", "player"], legacyDescription: "Runner workshop controller.", description: "跑酷工作坊玩家控制器。" },
+    Runner_Ground: { legacy: "Runner Ground", displayName: "跑酷地面", tags: ["runner", "ground"] },
+    Runner_Obstacle_Cactus: { legacy: "Runner Obstacle", displayName: "跑酷障碍", tags: ["runner", "obstacle"] },
+    Runner_Finish_Marker: { legacy: "Runner Finish", displayName: "跑酷终点", tags: ["runner", "finish"] },
+    Zone_Divider: { legacy: "Zone Divider", displayName: "区域分隔", tags: ["layout", "divider"] },
   };
 
   Object.values(scene.entities).forEach((entity) => {
     const labels = entityLabels[entity.internalName];
     if (!labels) return;
-    if (isBrokenLabel(entity.displayName)) entity.displayName = labels.displayName;
+    if (shouldUseBuiltinLabel(entity.displayName, labels.legacy)) entity.displayName = labels.displayName;
     if (entity.tags.some(isBrokenLabel)) entity.tags = labels.tags;
-    if (entity.behavior && labels.description && isBrokenLabel(entity.behavior.description)) {
+    const legacyBehaviorDescriptions = [
+      labels.legacyDescription,
+      entity.behavior?.builtin === "playerPlatformer" ? "Combat or runner player controller." : undefined,
+      entity.behavior?.builtin === "enemyPatrol" ? "Patrol attacker controller." : undefined,
+    ];
+    if (
+      entity.behavior &&
+      labels.description &&
+      (isBrokenLabel(entity.behavior.description) || legacyBehaviorDescriptions.some((description) => description === entity.behavior?.description.trim()))
+    ) {
       entity.behavior.description = labels.description;
     }
   });
 
   Object.values(project.resources).forEach((resource) => {
     if (resource.internalName === "Player_Current_Sprite") {
-      if (isBrokenLabel(resource.displayName)) resource.displayName = "Player Current Sprite";
-      if (isBrokenLabel(resource.description)) resource.description = "Current visible body for the combat player.";
-      if (isBrokenLabel(resource.aiDescription || "")) resource.aiDescription = "Main combat player current sprite.";
+      if (shouldUseBuiltinLabel(resource.displayName, "Player Current Sprite")) resource.displayName = "玩家当前可视体";
+      if (shouldUseBuiltinLabel(resource.description, "Current visible body for the combat player.")) resource.description = "战斗玩家当前显示的可视体。";
+      if (shouldUseBuiltinLabel(resource.aiDescription || "", "Main combat player current sprite.")) resource.aiDescription = "战斗玩家的主可视体。";
       if (resource.tags.some(isBrokenLabel)) resource.tags = ["player", "combat", "current"];
     }
     if (resource.internalName === "Player_Death_Fade_Sprite") {
-      if (isBrokenLabel(resource.displayName)) resource.displayName = "Player Death Fade";
-      if (isBrokenLabel(resource.description)) resource.description = "Fade-out sprite used after the combat player dies.";
-      if (isBrokenLabel(resource.aiDescription || "")) resource.aiDescription = "Combat player death fade sprite.";
+      if (shouldUseBuiltinLabel(resource.displayName, "Player Death Fade")) resource.displayName = "玩家死亡淡出";
+      if (shouldUseBuiltinLabel(resource.description, "Fade-out sprite used after the combat player dies.")) resource.description = "战斗玩家死亡后使用的淡出可视体。";
+      if (shouldUseBuiltinLabel(resource.aiDescription || "", "Combat player death fade sprite.")) resource.aiDescription = "战斗玩家死亡淡出可视体。";
       if (resource.tags.some(isBrokenLabel)) resource.tags = ["player", "death"];
     }
+  });
+
+  Object.values(scene.entities).forEach((entity) => {
+    entity.resources.forEach((binding) => {
+      const resource = project.resources[binding.resourceId];
+      if (resource?.internalName === "Player_Current_Sprite") {
+        if (shouldUseBuiltinLabel(binding.description, "Current combat sprite")) binding.description = "当前战斗可视体";
+        if (shouldUseBuiltinLabel(binding.aiDescription || "", "Current combat sprite")) binding.aiDescription = "当前战斗可视体";
+      }
+      if (resource?.internalName === "Player_Death_Fade_Sprite") {
+        if (shouldUseBuiltinLabel(binding.description, "Death fade sprite")) binding.description = "死亡淡出可视体";
+        if (shouldUseBuiltinLabel(binding.aiDescription || "", "Death fade sprite")) binding.aiDescription = "死亡淡出可视体";
+      }
+    });
   });
 
   return project;
@@ -361,7 +387,7 @@ function makeBox(input: BoxInput): Entity {
     behavior: input.behavior
       ? {
           builtin: input.behavior,
-          description: input.behavior === "playerPlatformer" ? "Combat or runner player controller." : "Patrol attacker controller.",
+          description: input.behavior === "playerPlatformer" ? "战斗或跑酷玩家控制器。" : "巡逻攻击者控制器。",
           params: {
             ...(input.behavior === "playerPlatformer"
               ? {
@@ -415,4 +441,9 @@ function isBrokenLabel(value: string): boolean {
   if (!trimmed) return true;
   const questionCount = [...trimmed].filter((char) => char === "?").length;
   return trimmed.includes("锟") || (questionCount >= 2 && questionCount >= Math.ceil(trimmed.length * 0.5));
+}
+
+function shouldUseBuiltinLabel(value: string, legacy?: string): boolean {
+  const trimmed = value.trim();
+  return isBrokenLabel(trimmed) || Boolean(legacy && trimmed === legacy);
 }

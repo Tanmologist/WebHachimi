@@ -16,7 +16,7 @@ const PROJECT_SEED_FILE = path.join(DATA_DIR, 'project.json');
 const PROJECT_FILE = path.join(LOCAL_DATA_DIR, 'project.json');
 const V2_PROJECT_SEED_FILE = path.join(DATA_DIR, 'v2-project.json');
 const V2_PROJECT_FILE = path.join(LOCAL_DATA_DIR, 'v2-project.json');
-const ASSETS_DIR = path.join(DATA_DIR, 'assets');
+const ASSETS_DIR = path.join(ROOT, 'resources');
 const DIST_V2_DIR = path.join(ROOT, 'dist-v2');
 const PORT = Number(process.env.WEBHACHIMI_PORT) || 5577;
 const MAX_BODY = 50 * 1024 * 1024;
@@ -274,7 +274,7 @@ async function extractDataUrlAttachments(root) {
         if (!parsed || !isSafeAttachment(parsed.mime, parsed.buffer)) return;
         const ext = extFromMime(parsed.mime || att.mime, att.name);
         const id = String(att.id || 'asset-' + Date.now()).replace(/[^a-z0-9_-]/gi, '-');
-        const rel = 'data/assets/' + id + '.' + ext;
+        const rel = 'resources/' + id + '.' + ext;
         writes.push(writeFileAtomic(path.join(ROOT, rel), parsed.buffer));
         delete att.dataUrl;
         att.path = rel;
@@ -498,7 +498,7 @@ async function handleStatic(req, res, pathname) {
   const normalizedRel = rel.replace(/\\/g, '/');
   const builtAbs = builtStaticPath(normalizedRel);
   if (!builtAbs && !isAllowedStaticPath(normalizedRel)) return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
-  if (!builtAbs && normalizedRel.startsWith('data/assets/') && !hasLocalApiToken(req)) {
+  if (!builtAbs && normalizedRel.startsWith('resources/') && !hasLocalApiToken(req)) {
     return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
   }
   const abs = builtAbs || safeJoin(rel);
@@ -527,7 +527,7 @@ function builtStaticPath(rel) {
 function isAllowedStaticPath(rel) {
   if (!isSafeStaticRel(rel)) return false;
   if (ROOT_STATIC_FILES.has(rel)) return true;
-  if (rel.startsWith('data/assets/')) return isAllowedAssetPath(rel);
+  if (rel.startsWith('resources/')) return isAllowedAssetPath(rel);
   return false;
 }
 
@@ -542,7 +542,7 @@ function isAllowedBuiltAssetPath(rel) {
 
 function isAllowedAssetPath(rel) {
   const ext = path.extname(rel).toLowerCase();
-  return Boolean(MIME[ext]) && !rel.slice('data/assets/'.length).includes('/');
+  return Boolean(MIME[ext]) && !rel.slice('resources/'.length).includes('/');
 }
 
 const server = http.createServer(async (req, res) => {

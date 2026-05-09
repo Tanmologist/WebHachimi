@@ -9,7 +9,7 @@ import { defineConfig } from "vite";
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
 const projectSeedFile = path.join(rootDir, "data", "v2-project.json");
 const projectFile = path.join(rootDir, "data", "local", "v2-project.json");
-const assetsDir = path.join(rootDir, "data", "assets");
+const assetsDir = path.join(rootDir, "resources");
 const execFileAsync = promisify(execFile);
 const maxClipboardFiles = 10;
 const maxClipboardFileBytes = 8 * 1024 * 1024;
@@ -158,7 +158,7 @@ function isDeniedViteStaticPath(pathname: string, req: { headers: Record<string,
   if (clean.startsWith("/.git/")) return true;
   if (clean.endsWith(".log")) return true;
   if (clean.startsWith("/data/local/")) return true;
-  if (clean.startsWith("/data/assets/") && !hasLocalApiToken(req)) return true;
+  if (clean.startsWith("/resources/") && !hasLocalApiToken(req)) return true;
   if (clean === "/data/project.json" || clean === "/data/v2-project.json") return true;
   if (clean === "/package-lock.json" || clean === "/package.json") return true;
   return false;
@@ -467,7 +467,7 @@ async function extractDataUrlAttachments(root: unknown): Promise<void> {
         const ext = extFromMime(parsed.mime || (typeof attachment.mime === "string" ? attachment.mime : ""), name);
         const rawId = typeof attachment.id === "string" ? attachment.id : `asset-${Date.now()}-${writes.length}`;
         const id = rawId.replace(/[^a-z0-9_-]/gi, "-");
-        const rel = `data/assets/${id}.${ext}`;
+        const rel = `resources/${id}.${ext}`;
         writes.push(writeFileAtomic(path.join(rootDir, rel), parsed.buffer));
         delete attachment.dataUrl;
         attachment.path = rel;

@@ -39,6 +39,7 @@
     "smoke:autonomy": "tsx src/testing/autonomySmoke.ts"
   },
   "devDependencies": {
+    "playwright": "^1.59.1",
     "tsx": "^4.21.0",
     "typescript": "6.0.3",
     "vite": "^8.0.10"

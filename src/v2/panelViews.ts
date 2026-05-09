@@ -1,6 +1,6 @@
 import type { Entity, Resource, ResourceBinding } from "../project/schema";
 import type { RuntimeWorld } from "../runtime/world";
-import { escapeHtml, formatScale, typeLabel } from "./viewText";
+import { bodyModeLabel, escapeHtml, formatScale, typeLabel } from "./viewText";
 import type { CanvasTargetPart } from "./renderer";
 import { imageAttachments, isVisualResource, resourceAnimationLabel } from "./resourceAnimation";
 
@@ -48,9 +48,8 @@ export function renderInspectorHtml(
   if (!entity) {
     return `
       <article class="v2-card">
-        <small class="v2-kicker">检查器</small>
+        <small class="v2-kicker">属性</small>
         <b>未选中对象</b>
-        <p>点击画布里的对象，或在左侧世界树中选择一个节点后，这里会显示它的本体、可视体、标签与行为说明。</p>
       </article>
     `;
   }
@@ -65,9 +64,13 @@ export function renderInspectorHtml(
     entity.persistent ? "持久对象" : "运行时对象",
     entity.render?.visible === false ? "当前可视体已隐藏" : "当前可视体可见",
   ];
+  const bodyMode = entity.body?.mode || "static";
+  const bodyModeOptions = ["static", "dynamic", "kinematic"]
+    .map((m) => `<option value="${m}"${bodyMode === m ? " selected" : ""}>${bodyModeLabel(m)}</option>`)
+    .join("");
   return `
     <article class="v2-card is-primary">
-      <small class="v2-kicker">检查器</small>
+      <small class="v2-kicker">属性</small>
       <b>${escapeHtml(entity.displayName)}</b>
       <p>${editingPresentation ? "当前正在编辑可视体，可直接检查偏移、旋转和资源挂靠。" : "当前正在编辑世界本体，可直接检查碰撞、物理、缩放与对象标签。"}</p>
       <div class="v2-inline-badges">${summaryBadges.map(renderPill).join("")}</div>
@@ -75,6 +78,28 @@ export function renderInspectorHtml(
     <div class="v2-name-edit">
       <input data-entity-name="${escapeHtml(entity.id)}" type="text" value="${escapeHtml(entity.displayName)}" placeholder="对象名称" />
       <button data-action="rename-entity-inline" data-entity-id="${escapeHtml(entity.id)}" type="button" ${entity.persistent ? "" : "disabled"}>重命名</button>
+    </div>
+    <div class="v2-prop-toggles">
+      <label class="v2-prop-row">
+        <input type="checkbox" data-prop="persistent" data-entity-id="${escapeHtml(entity.id)}"${entity.persistent ? " checked" : ""} />
+        <span>持久对象</span>
+      </label>
+      <label class="v2-prop-row">
+        <span>物理模式</span>
+        <select data-prop="bodyMode" data-entity-id="${escapeHtml(entity.id)}">${bodyModeOptions}</select>
+      </label>
+      <label class="v2-prop-row">
+        <input type="checkbox" data-prop="colliderSolid" data-entity-id="${escapeHtml(entity.id)}"${entity.collider?.solid !== false ? " checked" : ""} />
+        <span>实体碰撞</span>
+      </label>
+      <label class="v2-prop-row">
+        <input type="checkbox" data-prop="colliderTrigger" data-entity-id="${escapeHtml(entity.id)}"${entity.collider?.trigger ? " checked" : ""} />
+        <span>触发器</span>
+      </label>
+      <label class="v2-prop-row">
+        <input type="checkbox" data-prop="renderVisible" data-entity-id="${escapeHtml(entity.id)}"${entity.render?.visible !== false ? " checked" : ""} />
+        <span>可视体可见</span>
+      </label>
     </div>
     <small>内部命名：${escapeHtml(entity.internalName)}</small>
     <small>行为说明：${escapeHtml(description)}</small>
@@ -90,7 +115,7 @@ export function renderInspectorHtml(
       <dt>可视旋转</dt><dd>${Math.round(((entity.render?.rotation || 0) * 180) / Math.PI)}°</dd>
       <dt>位置</dt><dd>${Math.round(entity.transform.position.x)}, ${Math.round(entity.transform.position.y)}</dd>
       <dt>大小</dt><dd>${formatScale(entity.transform.scale.x)} × ${formatScale(entity.transform.scale.y)}</dd>
-      <dt>物理</dt><dd>${entity.body?.mode || "none"}</dd>
+      <dt>物理</dt><dd>${bodyModeLabel(bodyMode)}</dd>
       <dt>描述</dt><dd>${escapeHtml(description)}</dd>
       <dt>标签</dt><dd>${escapeHtml(entity.tags.join(" / ") || "暂无")}</dd>
     </dl>
@@ -103,7 +128,6 @@ export function renderResourcesHtml(entities: Entity[], resources: Record<string
       <article class="v2-card">
         <small class="v2-kicker">对象资源</small>
         <b>未选中对象</b>
-        <p>这里显示当前对象的可视体、挂靠图片、说明资源和切帧配置。想管理全局素材，请切到“资源库”。</p>
       </article>
     `;
   }

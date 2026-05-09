@@ -3,6 +3,7 @@ import { ProjectStore } from "../project/projectStore";
 import type { CreateTransactionInput } from "../project/projectStore";
 import { type EntityId } from "../shared/types";
 import {
+  planBatchDeleteEntitiesTransaction,
   planDeleteEntityTransaction,
   planDuplicateEntityTransaction,
   planPresentationVisibilityTransaction,
@@ -55,6 +56,29 @@ run("delete removes entity from scene and folders and supports undo", () => {
   const restored = currentScene(store);
   assert(restored.entities[source.id], "expected entity restored after undo");
   assert(restored.folders.some((folder) => folder.entityIds.includes(source.id)), "expected folder reference restored");
+});
+
+run("batch delete removes selected entities from scene and folders and supports undo", () => {
+  const store = new ProjectStore(createStarterProject());
+  const scene = currentScene(store);
+  const sources = Object.values(scene.entities).filter((item) => item.persistent).slice(0, 2);
+  assert(sources.length === 2, "expected two persistent entities");
+  const ids = sources.map((source) => source.id);
+  const plan = planBatchDeleteEntitiesTransaction(scene, ids);
+  assert(plan.ok, plan.ok ? "" : plan.error);
+
+  applyPlan(store, plan.value);
+  const afterDelete = currentScene(store);
+  for (const id of ids) {
+    assert(!afterDelete.entities[id], `expected ${id} deleted`);
+    assert(!afterDelete.folders.some((folder) => folder.entityIds.includes(id)), `expected ${id} folder reference removed`);
+  }
+  assert(store.undo(), "expected batch delete undo to succeed");
+  const restored = currentScene(store);
+  for (const id of ids) {
+    assert(restored.entities[id], `expected ${id} restored after undo`);
+    assert(restored.folders.some((folder) => folder.entityIds.includes(id)), `expected ${id} folder reference restored`);
+  }
 });
 
 run("rename entity updates display name and supports undo redo", () => {

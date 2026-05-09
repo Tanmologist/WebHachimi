@@ -41,6 +41,16 @@ export function typeLabel(kind: string): string {
   )[kind] || kind;
 }
 
+export function bodyModeLabel(mode: string): string {
+  return (
+    {
+      static: "静态（锚固）",
+      dynamic: "动态（受重力）",
+      kinematic: "运动学（脚本控制）",
+    } satisfies Record<string, string>
+  )[mode] || mode;
+}
+
 export function sourceLabel(source: string): string {
   return (
     {
@@ -155,7 +165,12 @@ export function uniqueStrings(values: string[]): string[] {
 }
 
 export function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (char) => {
-    return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" } as Record<string, string>)[char];
-  });
+  const replacements: Record<string, string> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  };
+  return value.replace(/[&<>"']/g, (char) => replacements[char]);
 }

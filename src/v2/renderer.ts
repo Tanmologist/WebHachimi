@@ -22,6 +22,10 @@ export type PickedCanvasTarget = {
   part: CanvasTargetPart;
 };
 
+export type PickCanvasTargetOptions = {
+  excludeBody?: boolean;
+};
+
 export type TransformHandle =
   | "core"
   | "scale-n"
@@ -77,6 +81,8 @@ type BodyMaterialStyle = {
 };
 
 const emptyResources: Record<string, Resource> = {};
+
+const MIN_SCALE_EPSILON = 0.08;
 
 export class V2Renderer {
   readonly app = new Application();
@@ -156,9 +162,10 @@ export class V2Renderer {
         : undefined;
     const entities = world.allEntities();
     const resources = options.resources || emptyResources;
+    const isMultiSelect = selectedIds && selectedIds.size > 1;
     if (showBodyMaterial) this.drawGrid();
     for (const entity of entities) {
-      const selectedPart = selectedIds?.has(entity.id)
+      const selectedPart = !isMultiSelect && selectedIds?.has(entity.id)
         ? entity.id === options.selectedId
           ? options.selectedPart || "body"
           : "body"
@@ -166,6 +173,10 @@ export class V2Renderer {
       this.drawEntity(world, entity, selectedPart, showBodyMaterial, showEditorDecorations, resources, options.animationTimeMs || 0);
     }
     if (showEditorDecorations) {
+      if (isMultiSelect) {
+        const selectedEntities = entities.filter((e) => selectedIds!.has(e.id));
+        this.drawMultiSelection(selectedEntities);
+      }
       this.drawTaskPreview(world, options.previewTask?.brushContext);
       this.drawTaskPreview(world, options.liveBrush, true);
       this.drawShapeDraft(options.shapeDraft);
@@ -175,8 +186,8 @@ export class V2Renderer {
     this.stats.renderMs = this.stats.renderedAt - started;
   }
 
-  performanceStats(): RendererStats {
-    return { ...this.stats };
+  performanceStats(): Readonly<RendererStats> {
+    return this.stats;
   }
 
   screenToWorld(clientX: number, clientY: number): Vec2 {
@@ -209,17 +220,18 @@ export class V2Renderer {
     return this.pickCanvasTarget(world, point, currentSelectedId ? { entityId: currentSelectedId, part: "body" } : undefined)?.entity;
   }
 
-  pickCanvasTarget(world: RuntimeWorld, point: Vec2, currentSelection?: CanvasSelection): PickedCanvasTarget | undefined {
+  pickCanvasTarget(world: RuntimeWorld, point: Vec2, currentSelection?: CanvasSelection, options?: PickCanvasTargetOptions): PickedCanvasTarget | undefined {
     const hits: PickedCanvasTarget[] = [];
     const entities = world.allEntities();
     for (let index = entities.length - 1; index >= 0; index -= 1) {
       appendCanvasHitTargets(hits, entities[index], point);
     }
-    if (hits.length <= 1) return hits[0];
-    const selectedIndex = hits.findIndex(
+    const filtered = options?.excludeBody ? hits.filter((h) => h.part !== "body") : hits;
+    if (filtered.length <= 1) return filtered[0];
+    const selectedIndex = filtered.findIndex(
       (hit) => hit.entity.id === currentSelection?.entityId && hit.part === currentSelection.part,
     );
-    return hits[(selectedIndex + 1) % hits.length] || hits[0];
+    return filtered[(selectedIndex + 1) % filtered.length] || filtered[0];
   }
 
   pickTransformHandle(entity: Entity | undefined, part: CanvasTargetPart, point: Vec2): TransformHandle | undefined {
@@ -523,8 +535,11 @@ export class V2Renderer {
       overlay.stroke();
     }
     if (core) {
-      overlay.circle(core.position.x, core.position.y, 4);
-      overlay.fill({ color, alpha: 1 });
+      overlay.setStrokeStyle({ width: 2, color: 0x4ecdc4, alpha: 1 });
+      overlay.circle(core.position.x, core.position.y, 6);
+      overlay.stroke();
+      overlay.circle(core.position.x, core.position.y, 3);
+      overlay.fill({ color: 0x4ecdc4, alpha: 1 });
     }
     for (const handle of [...corners, ...edges]) {
       const radius = handle.kind.includes("-") ? 3 : 4;
@@ -540,6 +555,72 @@ export class V2Renderer {
       overlay.stroke();
     }
     this.overlayLayer.addChild(overlay);
+  }
+
+  private drawMultiSelection(entities: Entity[]): void {
+    const bounds = computeMultiSelectionBounds(entities);
+    const overlay = this.takeGraphics();
+    const color = 0xd7a84a;
+    const hw = bounds.width / 2 + 5;
+    const hh = bounds.height / 2 + 5;
+
+    overlay.setStrokeStyle({ width: 1, color, alpha: 0.9 });
+    overlay.rect(bounds.center.x - hw, bounds.center.y - hh, hw * 2, hh * 2);
+    overlay.stroke();
+
+    const handles = multiSelectionHandles(bounds);
+
+    for (const corner of handles.corners) {
+      overlay.rect(corner.x - 4, corner.y - 4, 8, 8);
+      overlay.fill({ color: 0x101211, alpha: 1 });
+      overlay.setStrokeStyle({ width: 1, color, alpha: 1 });
+      overlay.stroke();
+    }
+    for (const edge of handles.edges) {
+      overlay.rect(edge.x - 3, edge.y - 3, 6, 6);
+      overlay.fill({ color: 0x101211, alpha: 1 });
+      overlay.setStrokeStyle({ width: 1, color, alpha: 1 });
+      overlay.stroke();
+    }
+
+    overlay.moveTo(bounds.center.x, bounds.center.y - hh);
+    overlay.lineTo(bounds.center.x, handles.rotate.y);
+    overlay.stroke();
+    overlay.circle(bounds.center.x, handles.rotate.y, 5);
+    overlay.fill({ color: 0x101211, alpha: 1 });
+    overlay.setStrokeStyle({ width: 1, color, alpha: 1 });
+    overlay.stroke();
+
+    overlay.setStrokeStyle({ width: 2, color: 0x4ecdc4, alpha: 1 });
+    overlay.circle(bounds.center.x, bounds.center.y, 6);
+    overlay.stroke();
+    overlay.circle(bounds.center.x, bounds.center.y, 3);
+    overlay.fill({ color: 0x4ecdc4, alpha: 1 });
+
+    this.overlayLayer.addChild(overlay);
+  }
+
+  pickMultiTransformHandle(entities: Entity[], point: Vec2): TransformHandle | undefined {
+    const bounds = computeMultiSelectionBounds(entities);
+    const handles = multiSelectionHandles(bounds);
+
+    const all: Array<{ kind: TransformHandle; position: Vec2; radius: number }> = [
+      { kind: "scale-nw", position: handles.corners[0], radius: 9 },
+      { kind: "scale-ne", position: handles.corners[1], radius: 9 },
+      { kind: "scale-se", position: handles.corners[2], radius: 9 },
+      { kind: "scale-sw", position: handles.corners[3], radius: 9 },
+      { kind: "scale-n", position: handles.edges[0], radius: 8 },
+      { kind: "scale-e", position: handles.edges[1], radius: 8 },
+      { kind: "scale-s", position: handles.edges[2], radius: 8 },
+      { kind: "scale-w", position: handles.edges[3], radius: 8 },
+      { kind: "rotate", position: handles.rotate, radius: 10 },
+      { kind: "core", position: bounds.center, radius: 8 },
+    ];
+
+    for (const handle of all) {
+      if (Math.hypot(point.x - handle.position.x, point.y - handle.position.y) <= handle.radius) return handle.kind;
+    }
+    return undefined;
   }
 
   private drawTaskPreview(world: RuntimeWorld, context?: BrushContext, live = false): void {
@@ -702,6 +783,7 @@ const edgeHandleOrder = ["scale-n", "scale-e", "scale-s", "scale-w"] as const;
 
 function selectionHandles(entity: Entity, part: CanvasTargetPart): Array<{ kind: TransformHandle; position: Vec2; radius: number }> {
   const geometry = targetGeometry(entity, part);
+  const bodyGeometry = targetGeometry(entity, "body");
   const hw = geometry.width / 2 + 5;
   const hh = geometry.height / 2 + 5;
   const corners = [
@@ -720,7 +802,7 @@ function selectionHandles(entity: Entity, part: CanvasTargetPart): Array<{ kind:
     ...corners.map((corner) => ({ kind: corner.kind, position: fromLocal(geometry.center, corner.local, geometry.rotation), radius: 9 })),
     ...edges.map((edge) => ({ kind: edge.kind, position: fromLocal(geometry.center, edge.local, geometry.rotation), radius: 8 })),
     { kind: "rotate", position: fromLocal(geometry.center, { x: 0, y: -hh - 28 }, geometry.rotation), radius: 10 },
-    { kind: "core", position: geometry.center, radius: 8 },
+    { kind: "core", position: bodyGeometry.center, radius: 8 },
   ];
 }
 
@@ -773,8 +855,8 @@ function bodyWorldPolygon(entity: Entity): Vec2[] | undefined {
     fromLocal(
       geometry.center,
       {
-        x: point.x * Math.max(Math.abs(scale.x), 0.08),
-        y: point.y * Math.max(Math.abs(scale.y), 0.08),
+        x: point.x * Math.max(Math.abs(scale.x), MIN_SCALE_EPSILON),
+      y: point.y * Math.max(Math.abs(scale.y), MIN_SCALE_EPSILON),
       },
       geometry.rotation,
     ),
@@ -843,7 +925,7 @@ function cross(left: Vec2, right: Vec2): number {
   return left.x * right.y - left.y * right.x;
 }
 
-function geometryAabb(geometry: { center: Vec2; rotation: number; width: number; height: number }): { x: number; y: number; w: number; h: number } {
+export function geometryAabb(geometry: { center: Vec2; rotation: number; width: number; height: number }): { x: number; y: number; w: number; h: number } {
   const hw = geometry.width / 2;
   const hh = geometry.height / 2;
   const points = [
@@ -871,17 +953,63 @@ function geometryAabb(geometry: { center: Vec2; rotation: number; width: number;
   };
 }
 
+export function computeMultiSelectionBounds(entities: Entity[]): { center: Vec2; width: number; height: number } {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const entity of entities) {
+    const geom = targetGeometry(entity, "body");
+    const aabb = geometryAabb(geom);
+    if (aabb.x < minX) minX = aabb.x;
+    if (aabb.y < minY) minY = aabb.y;
+    if (aabb.x + aabb.w > maxX) maxX = aabb.x + aabb.w;
+    if (aabb.y + aabb.h > maxY) maxY = aabb.y + aabb.h;
+  }
+  const width = maxX - minX;
+  const height = maxY - minY;
+  return {
+    center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
+    width: Math.max(width, 4),
+    height: Math.max(height, 4),
+  };
+}
+
 function normalizeRect(rect: { x: number; y: number; w: number; h: number }): { x: number; y: number; w: number; h: number } {
   const x = rect.w < 0 ? rect.x + rect.w : rect.x;
   const y = rect.h < 0 ? rect.y + rect.h : rect.y;
   return { x, y, w: Math.abs(rect.w), h: Math.abs(rect.h) };
 }
 
+function multiSelectionHandles(bounds: { center: Vec2; width: number; height: number }): {
+  corners: Vec2[];
+  edges: Vec2[];
+  rotate: Vec2;
+} {
+  const hw = bounds.width / 2 + 5;
+  const hh = bounds.height / 2 + 5;
+  return {
+    corners: [
+      { x: bounds.center.x - hw, y: bounds.center.y - hh },
+      { x: bounds.center.x + hw, y: bounds.center.y - hh },
+      { x: bounds.center.x + hw, y: bounds.center.y + hh },
+      { x: bounds.center.x - hw, y: bounds.center.y + hh },
+    ],
+    edges: [
+      { x: bounds.center.x, y: bounds.center.y - hh },
+      { x: bounds.center.x + hw, y: bounds.center.y },
+      { x: bounds.center.x, y: bounds.center.y + hh },
+      { x: bounds.center.x - hw, y: bounds.center.y },
+    ],
+    rotate: { x: bounds.center.x, y: bounds.center.y - hh - 28 },
+  };
+}
+
 function rectsIntersect(left: { x: number; y: number; w: number; h: number }, right: { x: number; y: number; w: number; h: number }): boolean {
   return left.x < right.x + right.w && left.x + left.w > right.x && left.y < right.y + right.h && left.y + left.h > right.y;
 }
 
-function targetGeometry(entity: Entity, part: CanvasTargetPart): { center: Vec2; rotation: number; width: number; height: number } {
+export function targetGeometry(entity: Entity, part: CanvasTargetPart): { center: Vec2; rotation: number; width: number; height: number } {
   const transformScale = entity.transform.scale || { x: 1, y: 1 };
   if (part === "presentation") {
     const bodySize = entity.collider?.size || { x: 60, y: 60 };
@@ -894,8 +1022,8 @@ function targetGeometry(entity: Entity, part: CanvasTargetPart): { center: Vec2;
         y: entity.transform.position.y + offset.y,
       },
       rotation: (entity.transform.rotation || 0) + (entity.render?.rotation || 0),
-      width: size.x * Math.max(Math.abs(scale.x), 0.08) * Math.max(Math.abs(transformScale.x), 0.08),
-      height: size.y * Math.max(Math.abs(scale.y), 0.08) * Math.max(Math.abs(transformScale.y), 0.08),
+      width: size.x * Math.max(Math.abs(scale.x), MIN_SCALE_EPSILON) * Math.max(Math.abs(transformScale.x), MIN_SCALE_EPSILON),
+      height: size.y * Math.max(Math.abs(scale.y), MIN_SCALE_EPSILON) * Math.max(Math.abs(transformScale.y), MIN_SCALE_EPSILON),
     };
   }
   const size = entity.collider?.size || entity.render?.size || { x: 60, y: 60 };
@@ -906,8 +1034,8 @@ function targetGeometry(entity: Entity, part: CanvasTargetPart): { center: Vec2;
       y: entity.transform.position.y + offset.y,
     },
     rotation: (entity.transform.rotation || 0) + (entity.collider?.rotation || 0),
-    width: size.x * Math.max(Math.abs(transformScale.x), 0.08),
-    height: size.y * Math.max(Math.abs(transformScale.y), 0.08),
+    width: size.x * Math.max(Math.abs(transformScale.x), MIN_SCALE_EPSILON),
+    height: size.y * Math.max(Math.abs(transformScale.y), MIN_SCALE_EPSILON),
   };
 }
 
@@ -922,8 +1050,8 @@ function drawBodyShape(graphics: Graphics, entity: Entity): void {
   const points =
     entity.collider?.shape === "polygon" && entity.collider.points?.length
       ? entity.collider.points.map((point) => ({
-          x: point.x * Math.max(Math.abs(entity.transform.scale.x), 0.08),
-          y: point.y * Math.max(Math.abs(entity.transform.scale.y), 0.08),
+          x: point.x * Math.max(Math.abs(entity.transform.scale.x), MIN_SCALE_EPSILON),
+          y: point.y * Math.max(Math.abs(entity.transform.scale.y), MIN_SCALE_EPSILON),
         }))
       : [
           { x: -hw, y: -hh },
@@ -1022,7 +1150,7 @@ function drawLocalLine(
   graphics.lineTo(end.x, end.y);
 }
 
-function fromLocal(center: Vec2, local: Vec2, rotation: number): Vec2 {
+export function fromLocal(center: Vec2, local: Vec2, rotation: number): Vec2 {
   const cos = Math.cos(rotation);
   const sin = Math.sin(rotation);
   return {
@@ -1031,7 +1159,7 @@ function fromLocal(center: Vec2, local: Vec2, rotation: number): Vec2 {
   };
 }
 
-function toLocal(center: Vec2, point: Vec2, rotation: number): Vec2 {
+export function toLocal(center: Vec2, point: Vec2, rotation: number): Vec2 {
   const dx = point.x - center.x;
   const dy = point.y - center.y;
   const cos = Math.cos(-rotation);
@@ -1046,7 +1174,7 @@ function midpoint(a: Vec2, b: Vec2): Vec2 {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
-function clamp(value: number, min: number, max: number): number {
+export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 

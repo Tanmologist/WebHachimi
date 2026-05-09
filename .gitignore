@@ -1,15 +1,9 @@
 node_modules/
 dist-v2/
-data/assets/
+resources/
+logs/
 data/local/
 data/*.local.json
-v2-screenshot-*.png
-v2-*-fixed.png
-v2-*-verified.png
-v2-*-prototype.png
-v2-workbench-*.png
-*.tgz
 .chrome-profile-v2-check*/
-*.log
 .DS_Store
 Thumbs.db

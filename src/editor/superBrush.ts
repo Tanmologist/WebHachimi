@@ -238,9 +238,7 @@ export function superBrushSelectionBox(draft: SuperBrushDraft): BrushContext["se
   ]);
 }
 
-function areaTargetBox(targets: TargetRef[]): BrushContext["selectionBox"] {
-  return targets.find((target): target is Extract<TargetRef, { kind: "area" }> => target.kind === "area")?.rect;
-}
+
 
 function compileBrushAreas(
   draft: SuperBrushDraft,

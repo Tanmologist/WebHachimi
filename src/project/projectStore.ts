@@ -28,6 +28,8 @@ export type CreateTransactionInput = {
   diffSummary?: string;
 };
 
+const MAX_HISTORY = 128;
+
 export class ProjectStore {
   private projectValue: Project;
   private readonly history: Project[] = [];
@@ -39,6 +41,13 @@ export class ProjectStore {
 
   get project(): Project {
     return normalizeProjectDefaults(cloneJson(this.projectValue));
+  }
+
+  // Hot paths such as rendering and AI planning can read through this accessor
+  // to avoid cloning the full project graph on every access. Callers must treat
+  // the returned object as immutable.
+  peekProject(): Project {
+    return this.projectValue;
   }
 
   exportProject(): Project {
@@ -87,7 +96,7 @@ export class ProjectStore {
     }
     const result = applyTransaction(this.projectValue, transaction);
     if (!result.ok) return result;
-    this.history.push(cloneJson(this.projectValue));
+    this.pushHistory(cloneJson(this.projectValue));
     this.future.length = 0;
     this.projectValue = normalizeProjectDefaults(result.value.project);
     return ok(result.value.transaction);
@@ -103,21 +112,21 @@ export class ProjectStore {
     }
     const result = rollbackTransaction(this.projectValue, transaction);
     if (!result.ok) return result;
-    this.history.push(cloneJson(this.projectValue));
+    this.pushHistory(cloneJson(this.projectValue));
     this.future.length = 0;
     this.projectValue = normalizeProjectDefaults(result.value.project);
     return ok(result.value.transaction);
   }
 
   upsertTask(task: Task): void {
-    this.history.push(cloneJson(this.projectValue));
+    this.pushHistory(cloneJson(this.projectValue));
     this.future.length = 0;
     this.projectValue.tasks[task.id] = cloneJson(task);
     this.projectValue.meta.updatedAt = new Date().toISOString();
   }
 
   recordRuntimeSnapshot(snapshot: RuntimeSnapshot): void {
-    this.history.push(cloneJson(this.projectValue));
+    this.pushHistory(cloneJson(this.projectValue));
     this.future.length = 0;
     this.projectValue.snapshots[snapshot.id] = cloneJson(snapshot);
     this.projectValue.meta.updatedAt = new Date().toISOString();
@@ -125,14 +134,14 @@ export class ProjectStore {
 
   recordRuntimeSnapshots(snapshots: RuntimeSnapshot[]): void {
     if (snapshots.length === 0) return;
-    this.history.push(cloneJson(this.projectValue));
+    this.pushHistory(cloneJson(this.projectValue));
     this.future.length = 0;
     for (const snapshot of snapshots) this.projectValue.snapshots[snapshot.id] = cloneJson(snapshot);
     this.projectValue.meta.updatedAt = new Date().toISOString();
   }
 
   recordTestResult(record: TestRecord, task?: Task, transaction?: Transaction, snapshots: RuntimeSnapshot[] = []): void {
-    this.history.push(cloneJson(this.projectValue));
+    this.pushHistory(cloneJson(this.projectValue));
     this.future.length = 0;
     for (const snapshot of snapshots) this.projectValue.snapshots[snapshot.id] = cloneJson(snapshot);
     this.projectValue.testRecords[record.id] = cloneJson(record);
@@ -158,7 +167,7 @@ export class ProjectStore {
   }
 
   recordAutonomyRun(run: AutonomyRun): void {
-    this.history.push(cloneJson(this.projectValue));
+    this.pushHistory(cloneJson(this.projectValue));
     this.future.length = 0;
     this.projectValue.autonomyRuns[run.id] = cloneJson(run);
     this.projectValue.meta.updatedAt = new Date().toISOString();
@@ -171,7 +180,7 @@ export class ProjectStore {
   runProjectMaintenance(options: ProjectMaintenanceOptions = {}): ProjectMaintenanceReport {
     const report = planProjectMaintenance(this.projectValue, options);
     if (report.deletedSnapshotIds.length === 0 && report.updatedRecordIds.length === 0) return report;
-    this.history.push(cloneJson(this.projectValue));
+    this.pushHistory(cloneJson(this.projectValue));
     this.future.length = 0;
     applyProjectMaintenance(this.projectValue, report);
     this.projectValue = normalizeProjectDefaults(this.projectValue);
@@ -189,9 +198,14 @@ export class ProjectStore {
   redo(): boolean {
     const next = this.future.pop();
     if (!next) return false;
-    this.history.push(cloneJson(this.projectValue));
+    this.pushHistory(cloneJson(this.projectValue));
     this.projectValue = normalizeProjectDefaults(next);
     return true;
+  }
+
+  private pushHistory(snapshot: Project): void {
+    this.history.push(snapshot);
+    trimHistory(this.history);
   }
 }
 
@@ -203,4 +217,9 @@ function latestAppliedTransaction(project: Project): Transaction | undefined {
   return Object.values(project.transactions)
     .filter((transaction) => transaction.status === "applied")
     .sort((left, right) => (right.appliedAt || right.createdAt).localeCompare(left.appliedAt || left.createdAt))[0];
+}
+
+function trimHistory(history: Project[]): void {
+  if (history.length <= MAX_HISTORY) return;
+  history.splice(0, history.length - MAX_HISTORY);
 }

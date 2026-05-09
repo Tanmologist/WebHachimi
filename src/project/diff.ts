@@ -13,7 +13,8 @@ export function summarizeTransaction(transaction: Transaction): string {
 
 export function projectHash(project: Project): string {
   const text = stableStringify(project);
-  let hash = 2166136261;
+  const FNV1A_OFFSET_BASIS = 2166136261;
+  let hash = FNV1A_OFFSET_BASIS;
   for (let index = 0; index < text.length; index += 1) {
     hash ^= text.charCodeAt(index);
     hash = Math.imul(hash, 16777619);

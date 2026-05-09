@@ -1,0 +1,30 @@
+{
+  "createdAt": "2026-05-07T13:40:46.895Z",
+  "base": "https://api.vokly.io",
+  "results": [
+    {
+      "model": "deepseek-v4-flash",
+      "status": null,
+      "wallMs": 5047,
+      "events": 0,
+      "modelFields": [],
+      "stop": "",
+      "error": "TypeError: fetch failed",
+      "bytes": 0,
+      "file": "ai-model-showdown\\deepseek-v4-flash_xiangqi_awakening.html",
+      "preview": ""
+    },
+    {
+      "model": "deepseek-v4-pro",
+      "status": 200,
+      "wallMs": 150012,
+      "events": 0,
+      "modelFields": [],
+      "stop": "",
+      "error": "AbortError: This operation was aborted",
+      "bytes": 0,
+      "file": "ai-model-showdown\\deepseek-v4-pro_xiangqi_awakening.html",
+      "preview": ""
+    }
+  ]
+}

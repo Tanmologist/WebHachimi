@@ -12,7 +12,7 @@ import type {
 } from "../project/schema";
 import { createTask } from "../project/tasks";
 import { err, makeId, ok, type Result } from "../shared/types";
-import type { AutonomyRunId, EntityId, SnapshotId, TaskId, TestRecordId, TransactionId } from "../shared/types";
+import type { AutonomyRunId, EntityId, SnapshotId, TaskId, TestRecordId } from "../shared/types";
 import { runAutonomousTestSuite, type AutonomousTestCaseReport, type AutonomousTestSuiteReport } from "../testing/autonomousTesting";
 import type { TraceSink } from "../testing/telemetry";
 import { AiTaskExecutor, type AiTaskExecutionResult } from "./taskExecutor";
@@ -71,7 +71,7 @@ export class AutonomyLoop {
 
   runOnce(options: AutonomyCycleOptions = {}): Result<AutonomyCycleResult> {
     const startedAt = new Date().toISOString();
-    const initialProject = this.store.project;
+    const initialProject = this.store.peekProject();
     const task = nextQueuedTaskInProject(initialProject);
     const sceneBeforeTask = activeScene(initialProject);
     if (!sceneBeforeTask) return err(`active scene not found: ${initialProject.activeSceneId}`);
@@ -90,7 +90,7 @@ export class AutonomyLoop {
           };
     }
 
-    const projectAfterTask = this.store.project;
+    const projectAfterTask = this.store.peekProject();
     const scene = activeScene(projectAfterTask);
     if (!scene) return err(`active scene not found: ${projectAfterTask.activeSceneId}`);
     const transaction = currentTransaction(projectAfterTask, executorResult?.transaction);
@@ -113,7 +113,7 @@ export class AutonomyLoop {
     });
 
     const suiteRecordIds = this.recordSuiteResults(suite, readyTask, transaction);
-    const taskRecords = readyTask ? recordsForTask(this.store.project, readyTask.id) : [];
+    const taskRecords = readyTask ? recordsForTask(this.store.peekProject(), readyTask.id) : [];
     const createdFailureTasks = this.createFailureTasks({
       cases: suite.cases,
       scene,
@@ -151,7 +151,7 @@ export class AutonomyLoop {
     const maxRounds = Math.max(1, options.maxRounds ?? 1);
     const cycles: AutonomyCycleResult[] = [];
     for (let index = 0; index < maxRounds; index += 1) {
-      const queuedTask = nextQueuedTaskInProject(this.store.project);
+      const queuedTask = nextQueuedTaskInProject(this.store.peekProject());
       if (!queuedTask) break;
       const cycle = this.runOnce(options);
       if (!cycle.ok) return cycle;
@@ -179,8 +179,9 @@ export class AutonomyLoop {
     for (const testCase of suite.cases) {
       if (!testCase.record) continue;
       recordIds.push(testCase.record.id);
-      const currentTask = task ? this.store.project.tasks[task.id] || task : undefined;
-      const currentTransaction = transaction ? currentTransactionForStore(this.store.project, transaction) : undefined;
+      const project = this.store.peekProject();
+      const currentTask = task ? project.tasks[task.id] || task : undefined;
+      const currentTransaction = transaction ? currentTransactionForStore(project, transaction) : undefined;
       this.store.recordTestResult(testCase.record, currentTask, currentTransaction, testCase.snapshots);
     }
     return uniqueRefs(recordIds);
@@ -238,7 +239,7 @@ export class AutonomyLoop {
     snapshotRef?: SnapshotId;
     testRecord?: TestRecord;
   }): Task | undefined {
-    if (input.testRecord && existingFailureTaskForRecord(this.store.project, input.testRecord.id)) return undefined;
+    if (input.testRecord && existingFailureTaskForRecord(this.store.peekProject(), input.testRecord.id)) return undefined;
     const result = createTask({
       source: "testFailure",
       title: input.title.slice(0, 80),

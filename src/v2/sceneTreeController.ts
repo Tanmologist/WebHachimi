@@ -19,6 +19,7 @@ export function renderSceneTreeHtml(
   resources: Record<string, Resource> = {},
   collapsedNodes: ReadonlySet<string> = new Set(),
 ): string {
+  const entityById = new Map(entities.map((entity) => [entity.id, entity] as const));
   const folderedIds = new Set(scene.folders.flatMap((folder) => folder.entityIds));
   const looseEntities = entities.filter((entity) => !folderedIds.has(entity.id));
   const folderHtml = scene.folders
@@ -26,7 +27,7 @@ export function renderSceneTreeHtml(
       const nodeId = `folder:${folder.id}`;
       const collapsed = collapsedNodes.has(nodeId);
       const children = folder.entityIds
-        .map((id) => entities.find((entity) => entity.id === id))
+        .map((id) => entityById.get(id))
         .filter(Boolean)
         .map((entity) => renderTreeItemHtml(entity!, selectedId, selectedPart, resources, collapsedNodes))
         .join("");
@@ -37,7 +38,7 @@ export function renderSceneTreeHtml(
             <span>${escapeHtml(folder.displayName)}</span>
             <small>${visibleFolderCount(folder.entityIds, entities)} 项</small>
           </header>
-          ${collapsed ? "" : children || `<p class="v2-empty">拖入对象到这里，作为一个更清晰的分组。</p>`}
+          ${collapsed ? "" : children || `<p class="v2-empty v2-empty-compact">空</p>`}
         </section>
       `;
     })
@@ -51,7 +52,6 @@ export function renderSceneTreeHtml(
     <article class="v2-card v2-scene-overview">
       <small class="v2-kicker">当前场景</small>
       <b>${escapeHtml(scene.name || "未命名场景")}</b>
-      <p>点击对象可以切换本体或可视体，右键能打开更多操作；拖拽对象到分组里，则能让世界树更容易管理。</p>
       <div class="v2-metrics">
         ${renderMetric("分组", scene.folders.length)}
         ${renderMetric("对象", entities.length)}
@@ -71,7 +71,7 @@ export function renderSceneTreeHtml(
           </header>
           ${looseCollapsed ? "" : `<p class="v2-folder-hint">这些对象还没有归到任何分组，适合在结构稳定后再整理。</p>${looseHtml}`}
         </section>`
-      : `<article class="v2-card"><b>当前场景已全部归类</b><p>所有对象都已经落到具体分组，继续新增对象时可以直接拖到对应分组里。</p></article>`
+      : ""
   }`;
 }
 

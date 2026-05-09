@@ -1,3 +1,5 @@
+import { escapeHtml } from "./viewText";
+
 type PreviewDockTarget = "left" | "right" | "bottom" | "center" | "float";
 type PreviewWindowId = string;
 type PreviewSplitSide = "left" | "right" | "top" | "bottom";
@@ -152,19 +154,16 @@ export function mountEditorShell(root: HTMLElement): void {
             </details>
           </details>
         </div>
-        <div class="sidebar-section">
-          <div class="section-title">已打开视图</div>
-          <button class="view-row is-active" type="button" data-preview-open-window="editor">世界</button>
-          <button class="view-row" type="button" data-preview-open-window="inspector">资源挂靠</button>
-          <button class="view-row" type="button" data-preview-open-window="world-manager">世界管理器</button>
-          <button class="view-row" type="button" data-preview-open-window="tasks">AI 任务</button>
-        </div>
       </aside>
+
+      <section class="stage" data-role="stage" aria-label="编辑舞台">
+        <div class="stage-grid"></div>
+      </section>
 
       <main class="editor-grid" data-dock-slot="center" data-preview-window="editor" data-window-title="世界" data-window-state="open">
         <div class="editor-tabs" role="tablist">
-          <button class="tab is-active" type="button" role="tab" data-surface-target="canvas" aria-selected="true">世界.canvas</button>
-          <button class="tab" type="button" role="tab" data-preview-open-window="tasks">规则.logic</button>
+          <button class="tab is-active" type="button" role="tab" data-surface-target="canvas" aria-selected="true">世界画布</button>
+          <button class="tab" type="button" role="tab" data-preview-open-window="workspace">检查器</button>
           <button class="tab" type="button" role="tab" data-action="toggle-run">预览</button>
           <div class="tab-spacer"></div>
           <div class="inline-window-actions">
@@ -172,81 +171,117 @@ export function mountEditorShell(root: HTMLElement): void {
             <button type="button" aria-label="关闭世界" data-window-close="editor">x</button>
           </div>
         </div>
-        <section class="stage-wrap">
-          <div class="stage-toolbar">
-            <div class="tool-strip" aria-label="工具">
-              <button class="is-active" type="button" data-tool="select">选择</button>
-              <button type="button" data-tool="square">形状</button>
-              <button type="button" data-tool="superBrush">画笔</button>
-              <button type="button" data-action="toggle-run">播放</button>
-            </div>
-            <div class="zoom-control">100%</div>
-          </div>
-          <section class="stage" data-role="stage" aria-label="编辑舞台">
-            <div class="stage-grid"></div>
-          </section>
-        </section>
+        <div class="stage-toolbar">
+          <div class="zoom-control">100%</div>
+        </div>
       </main>
 
-      <aside class="inspector" data-dock-slot="right" data-preview-window="inspector" data-window-title="检查器" data-window-state="open">
+      <aside class="ai-task-panel workspace-panel" data-dock-slot="right" data-preview-window="workspace" data-window-title="检查器" data-window-state="open">
         <div class="pane-header">
           <span>检查器</span>
           <div class="pane-actions">
-            <button type="button" data-action="save-project" aria-label="保存当前项目">保存</button>
-            <button type="button" data-action="force-reload-project" aria-label="强制从磁盘刷新">从磁盘刷新</button>
-            <button type="button" aria-label="最小化检查器" data-window-minimize="inspector">-</button>
-            <button type="button" aria-label="关闭检查器" data-window-close="inspector">x</button>
+            <button type="button" aria-label="最小化检查器" data-window-minimize="workspace">-</button>
+            <button type="button" aria-label="关闭检查器" data-window-close="workspace">x</button>
           </div>
         </div>
-        <div class="inspector-body">
-          <section class="inspector-properties" data-role="inspector">
-            <label>
-              名称
-              <input type="text" value="玩家身体" />
-            </label>
-            <label>
-              位置
-              <div class="field-row">
-                <input type="text" value="120" />
-                <input type="text" value="84" />
-              </div>
-            </label>
-            <label>
-              尺寸
-              <div class="field-row">
-                <input type="text" value="64" />
-                <input type="text" value="96" />
-              </div>
-            </label>
-            <div class="property-group">
-              <div class="section-title">表现层</div>
-              <button class="property-toggle is-on" type="button">游戏中可见</button>
-              <button class="property-toggle" type="button">锁定变换</button>
+        <div class="workspace-scroll">
+          <section class="workspace-section">
+            <header class="workspace-section__header">
+              <span class="section-title">属性</span>
+              <small>当前选中对象</small>
+            </header>
+            <div class="inspector-body workspace-section__body">
+              <section class="inspector-properties" data-role="inspector">
+                <label>
+                  名称
+                  <input type="text" value="玩家身体" />
+                </label>
+                <label>
+                  位置
+                  <div class="field-row">
+                    <input type="text" value="120" />
+                    <input type="text" value="84" />
+                  </div>
+                </label>
+                <label>
+                  尺寸
+                  <div class="field-row">
+                    <input type="text" value="64" />
+                    <input type="text" value="96" />
+                  </div>
+                </label>
+                <div class="property-group">
+                  <div class="section-title">表现层</div>
+                  <button class="property-toggle is-on" type="button">游戏中可见</button>
+                  <button class="property-toggle" type="button">锁定变换</button>
+                </div>
+              </section>
             </div>
           </section>
-          <section class="property-group attached-resource-panel" data-role="resources">
-            <div class="section-title">物体挂靠资源</div>
-            <article class="attached-object">
-              <div class="attached-object__header">
-                <span>玩家身体</span>
-                <small>Object</small>
+          <section class="workspace-section">
+            <header class="workspace-section__header">
+              <span class="section-title">物体资源</span>
+              <small>挂在当前对象上</small>
+            </header>
+            <div class="object-resources-body workspace-section__body">
+              <div class="object-resources-drop-zone" data-role="resource-drop-zone">
+                <span>拖入文件、粘贴图片或点击添加资源</span>
+                <input type="file" data-role="object-resource-input" multiple hidden />
               </div>
-              <div class="attached-resource">
-                <div class="attached-resource__header">
-                  <strong>run_cycle_01.png</strong>
-                  <small>图片</small>
+              <div data-role="resources">
+                <div class="attached-resource-panel" data-role="object-resources-list">
+                  <article class="attached-object">
+                    <div class="attached-object__header">
+                      <span>玩家身体</span>
+                      <small>Object</small>
+                    </div>
+                    <div class="attached-resource">
+                      <div class="attached-resource__header">
+                        <strong>run_cycle_01.png</strong>
+                        <small>图片</small>
+                        <button type="button" class="resource-remove" aria-label="移除 run_cycle_01.png">x</button>
+                      </div>
+                      <textarea class="resource-description" rows="2" placeholder="描述这个资源的用途，例如：死亡后播放并在 1.6 秒内淡出。" aria-label="run_cycle_01.png 的资源描述">死亡后播放这张图片序列，并在 1.6 秒内慢慢消失。</textarea>
+                    </div>
+                    <div class="attached-resource">
+                      <div class="attached-resource__header">
+                        <strong>grass_tile.png</strong>
+                        <small>地形</small>
+                        <button type="button" class="resource-remove" aria-label="移除 grass_tile.png">x</button>
+                      </div>
+                      <textarea class="resource-description" rows="2" placeholder="描述这个资源的用途。" aria-label="grass_tile.png 的资源描述">作为脚下世界块的默认材质，跟随世界片段拼接。</textarea>
+                    </div>
+                  </article>
                 </div>
-                <textarea class="resource-description" rows="3" aria-label="run_cycle_01.png 的资源描述">死亡后播放这张图片序列，并在 1.6 秒内慢慢消失。</textarea>
               </div>
-              <div class="attached-resource">
-                <div class="attached-resource__header">
-                  <strong>grass_tile.png</strong>
-                  <small>地形</small>
-                </div>
-                <textarea class="resource-description" rows="3" aria-label="grass_tile.png 的资源描述">作为脚下世界块的默认材质，跟随世界片段拼接。</textarea>
-              </div>
-            </article>
+            </div>
           </section>
+          <section class="workspace-section workspace-section--tasks">
+            <header class="workspace-section__header">
+              <span class="section-title">AI 任务</span>
+              <small>当前工程队列</small>
+            </header>
+            <div class="task-stack" data-role="tasks">
+              <article class="task-card is-active">
+                <div class="task-card__title">生成碰撞检查</div>
+                <div class="task-card__meta">排队中 - 世界范围</div>
+              </article>
+              <article class="task-card">
+                <div class="task-card__title">绑定玩家奔跑序列</div>
+                <div class="task-card__meta">草稿 - 挂靠资源</div>
+              </article>
+              <article class="task-card">
+                <div class="task-card__title">检查摄像机构图</div>
+                <div class="task-card__meta">就绪 - 视口</div>
+              </article>
+            </div>
+            <div class="task-composer" data-role="ai-task-composer">
+              <textarea data-role="visible-task-input" rows="3" placeholder="描述要交给 AI 的任务，例如：让死亡后的图片慢慢淡出。" aria-label="AI 任务输入"></textarea>
+              <div class="task-composer__actions">
+                <button class="is-primary" type="button" data-action="queue-task">发送</button>
+              </div>
+            </div>
+          </div>
         </div>
       </aside>
 
@@ -270,12 +305,12 @@ export function mountEditorShell(root: HTMLElement): void {
       <section class="resource-library" data-role="resource-library" hidden></section>
       <div class="dock-overlay" data-dock-overlay aria-hidden="true">
         <div class="dock-target dock-target--left" data-dock-zone="left" data-label="世界树"></div>
-        <div class="dock-target dock-target--right" data-dock-zone="right" data-label="检查器"></div>
+        <div class="dock-target dock-target--right" data-dock-zone="right" data-label="AI 任务"></div>
         <div class="dock-target dock-target--bottom" data-dock-zone="bottom" data-label="底部面板"></div>
         <div class="dock-target dock-target--center" data-dock-zone="center" data-label="世界编辑组"></div>
       </div>
 
-      <section class="floating-tool-window preview-extra-window world-manager-window" data-floating-window data-dock="float" data-preview-window="world-manager" data-window-title="世界管理器" data-window-state="open" style="left: 342px; top: 92px; width: 326px; height: 294px;" hidden>
+      <section class="floating-tool-window preview-extra-window world-manager-window" data-floating-window data-dock="float" data-preview-window="world-manager" data-window-title="世界管理器" data-window-state="closed" style="left: 342px; top: 92px; width: 326px; height: 294px;" hidden>
         <div class="floating-tool-window__title" data-preview-drag>
           <span>世界管理器</span>
           <div class="pane-actions">
@@ -310,37 +345,6 @@ export function mountEditorShell(root: HTMLElement): void {
               <span>重生区域</span>
             </div>
           </section>
-        </div>
-      </section>
-
-      <section class="floating-tool-window ai-task-window" data-floating-preview data-floating-window data-dock="float" data-preview-window="tasks" data-window-title="AI 任务" data-window-state="open" hidden>
-        <div class="floating-tool-window__title" data-preview-drag>
-          <span>AI 任务</span>
-          <div class="pane-actions">
-            <button type="button" data-preview-reset aria-label="重置浮动位置">浮动</button>
-            <button type="button" aria-label="最小化 AI 任务" data-window-minimize="tasks">-</button>
-            <button type="button" aria-label="关闭 AI 任务" data-window-close="tasks">x</button>
-          </div>
-        </div>
-        <div class="task-stack" data-role="tasks">
-          <article class="task-card is-active">
-            <div class="task-card__title">生成碰撞检查</div>
-            <div class="task-card__meta">排队中 - 世界范围</div>
-          </article>
-          <article class="task-card">
-            <div class="task-card__title">绑定玩家奔跑序列</div>
-            <div class="task-card__meta">草稿 - 挂靠资源</div>
-          </article>
-          <article class="task-card">
-            <div class="task-card__title">检查摄像机构图</div>
-            <div class="task-card__meta">就绪 - 视口</div>
-          </article>
-        </div>
-        <div class="task-composer" data-role="ai-task-composer">
-          <textarea data-role="visible-task-input" rows="3" placeholder="描述要交给 AI 的任务，例如：让死亡后的图片慢慢淡出。" aria-label="AI 任务输入"></textarea>
-          <div class="task-composer__actions">
-            <button class="is-primary" type="button" data-action="queue-task">发送</button>
-          </div>
         </div>
       </section>
 
@@ -406,6 +410,7 @@ function bindWorkbenchPreview(root: HTMLElement): void {
     restoringLayout: false,
     defaultWindows: new Map(),
   };
+  (root as any).__previewController = controller;
 
   const hasStoredLayout = Boolean(readPreviewLayoutSnapshot());
   syncPreviewWindowStates(controller);
@@ -1191,37 +1196,7 @@ function syncPreviewWindowStates(controller: PreviewController): void {
 }
 
 function applyDefaultPreviewTabGroups(controller: PreviewController): void {
-  applyDefaultPreviewTabGroup(controller, {
-    groupId: "default-editor-pages",
-    anchorId: "editor",
-    pageId: "world-manager",
-    activeId: "editor",
-  });
-  applyDefaultPreviewTabGroup(controller, {
-    groupId: "default-bottom-pages",
-    anchorId: "output",
-    pageId: "tasks",
-    activeId: "output",
-  });
-}
-
-function applyDefaultPreviewTabGroup(
-  controller: PreviewController,
-  options: { groupId: string; anchorId: PreviewWindowId; pageId: PreviewWindowId; activeId: PreviewWindowId },
-): void {
-  const anchor = windowById(controller.root, options.anchorId);
-  const page = windowById(controller.root, options.pageId);
-  if (!anchor || !page) return;
-  [anchor, page].forEach((windowNode) => {
-    windowNode.dataset.windowState = "open";
-    windowNode.dataset.tabGroup = options.groupId;
-    windowNode.dataset.tabAnchor = options.anchorId;
-    windowNode.hidden = false;
-    controller.workbench.setAttribute(`data-window-${windowNode.dataset.previewWindow || ""}`, "open");
-  });
-  page.dataset.dock = `tab-${options.anchorId}`;
-  page.classList.add("is-tabbed-peer");
-  renderMergedTabs(controller, options.groupId, options.activeId);
+  void controller;
 }
 
 function hydrateStoredCustomWindows(controller: PreviewController): void {
@@ -1468,9 +1443,8 @@ function previewWindowLabel(windowId: PreviewWindowId): string {
   if (windowId === "tools") return "工具";
   if (windowId === "explorer") return "世界树";
   if (windowId === "editor") return "世界";
-  if (windowId === "inspector") return "检查器";
+  if (windowId === "workspace") return "检查器";
   if (windowId === "output") return "输出面板";
-  if (windowId === "tasks") return "AI 任务";
   if (windowId === "world-manager") return "世界管理器";
   if (windowId.startsWith("custom-")) return `窗口 ${windowId.slice("custom-".length)}`;
   return "窗口";
@@ -1525,12 +1499,12 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(value, max));
 }
 
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => {
-    if (character === "&") return "&amp;";
-    if (character === "<") return "&lt;";
-    if (character === ">") return "&gt;";
-    if (character === '"') return "&quot;";
-    return "&#39;";
-  });
+export function enterGameMode(root: HTMLElement): void {
+  const workbench = root.querySelector(".workbench-preview");
+  if (workbench) workbench.classList.add("is-game-mode");
+}
+
+export function leaveGameMode(root: HTMLElement): void {
+  const workbench = root.querySelector(".workbench-preview");
+  if (workbench) workbench.classList.remove("is-game-mode");
 }
