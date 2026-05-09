@@ -174,10 +174,11 @@ let superBrushTaskDialogOpen = false;
 let superBrushTaskError = "";
 let canvasDrag: CanvasDragState | undefined;
 let multiCanvasDrag: MultiCanvasDragState | undefined;
-let canvasCameraDrag: { pointerId: number; clientX: number; clientY: number; moved: boolean } | undefined;
+let canvasCameraDrag: { pointerId: number; clientX: number; clientY: number; moved: boolean; clearSelectionOnClick?: boolean } | undefined;
 let selectionBoxDrag: { pointerId: number; start: Vec2; current: Vec2; moved: boolean } | undefined;
 let shapeDrag: ShapeDragState | undefined;
 let polygonDraft: PolygonDraftState | undefined;
+let spacePanActive = false;
 let windowMenuOpen = false;
 let pendingWindowMenuClick: number | undefined;
 let activeSurface: ActiveSurface = "canvas";
@@ -869,14 +870,17 @@ function onCanvasWheel(event: WheelEvent): void {
   renderAll();
 }
 
-function startCanvasCameraDrag(event: PointerEvent): void {
+function startCanvasCameraDrag(event: PointerEvent, options: { clearSelectionOnClick?: boolean } = {}): void {
   event.preventDefault();
-  renderer.canvas().setPointerCapture(event.pointerId);
+  const canvas = renderer.canvas();
+  canvas.setPointerCapture(event.pointerId);
+  canvas.style.cursor = "grabbing";
   canvasCameraDrag = {
     pointerId: event.pointerId,
     clientX: event.clientX,
     clientY: event.clientY,
     moved: false,
+    clearSelectionOnClick: options.clearSelectionOnClick,
   };
   notice = "正在移动画布视角";
   renderAll();
@@ -906,6 +910,15 @@ function finishCanvasCameraDrag(event: PointerEvent): boolean {
   const finishedDrag = canvasCameraDrag;
   canvasCameraDrag = undefined;
   releaseCanvasPointer(event.pointerId);
+  renderer.canvas().style.cursor = spacePanActive ? "grab" : "default";
+  if (!finishedDrag.moved && finishedDrag.clearSelectionOnClick) {
+    selectedId = "";
+    selectedIds = [];
+    selectionArea = undefined;
+    notice = "已清空选择；拖拽空白区域可移动画布视角";
+    renderAll();
+    return true;
+  }
   const viewport = renderer.viewportState();
   notice = finishedDrag.moved
     ? `画布视角 ${Math.round(viewport.x)}, ${Math.round(viewport.y)} / ${Math.round(viewport.zoom * 100)}%`
@@ -917,6 +930,7 @@ function finishCanvasCameraDrag(event: PointerEvent): boolean {
 function cancelCanvasPointerInteraction(event: PointerEvent): void {
   if (canvasCameraDrag?.pointerId === event.pointerId) {
     canvasCameraDrag = undefined;
+    renderer.canvas().style.cursor = spacePanActive ? "grab" : "default";
     renderAll();
     return;
   }
@@ -963,6 +977,7 @@ function normalizedWheelDeltaY(event: WheelEvent): number {
 }
 
 function toolSwitchNotice(tool: ToolId): string {
+  if (tool === "select") return "选择工具：点击对象选中，拖动空白移动视角，按住 Shift 拖动框选。";
   if (tool === "square") return "方块工具：在画布上拖动创建一个方形本体";
   if (tool === "circle") return "圆形工具：在画布上拖动创建一个圆形本体；参数后续接到属性面板";
   if (tool === "leaf") return "柳叶笔：按住拖动画出自由轮廓，松开后自动闭环成碰撞本体";
@@ -1028,6 +1043,10 @@ function onCanvasPointerDown(event: PointerEvent): void {
   }
   if (event.button !== 0) return;
   event.preventDefault();
+  if (spacePanActive && world.mode === "editorFrozen") {
+    startCanvasCameraDrag(event);
+    return;
+  }
   const point = renderer.screenToWorld(event.clientX, event.clientY);
   const shapeTool = shapeToolFromActive(activeTool);
   if (shapeTool && world.mode === "editorFrozen") {
@@ -1082,7 +1101,7 @@ function onCanvasPointerDown(event: PointerEvent): void {
     return;
   }
 
-  const picked = renderer.pickCanvasTarget(world, point, selectedId ? { entityId: selectedId, part: selectedPart } : undefined, { excludeBody: !event.ctrlKey });
+  const picked = renderer.pickCanvasTarget(world, point, selectedId ? { entityId: selectedId, part: selectedPart } : undefined);
   if (picked) {
     const pickedStoredEntity = scene.entities[picked.entity.id];
     if (!pickedStoredEntity || !pickedStoredEntity.persistent) return;
@@ -1095,9 +1114,13 @@ function onCanvasPointerDown(event: PointerEvent): void {
     return;
   }
   if (activeTool === "select" && world.mode === "editorFrozen") {
+    if (!event.shiftKey) {
+      startCanvasCameraDrag(event, { clearSelectionOnClick: true });
+      return;
+    }
     selectionBoxDrag = { pointerId: event.pointerId, start: point, current: point, moved: false };
     renderer.canvas().setPointerCapture(event.pointerId);
-    notice = "拖动框选对象；空白框选会成为区域任务目标";
+    notice = "按住 Shift 拖动框选对象；空白拖动画布会移动视角";
     renderCanvasOnly();
   }
 }
@@ -1823,6 +1846,12 @@ function onKeyDown(event: KeyboardEvent): void {
     setRotationSnapEnabled(false);
     setMoveSnapEnabled(false);
   }
+  if (event.code === "Space" && world.mode !== "game" && !isTypingTarget(event.target)) {
+    event.preventDefault();
+    spacePanActive = true;
+    renderer.canvas().style.cursor = "grab";
+    return;
+  }
   if (event.key === "Escape" && isSuperBrushModeActive()) {
     event.preventDefault();
     if (superBrushTaskDialogOpen) closeSuperBrushTaskDialog();
@@ -1867,6 +1896,10 @@ function onKeyUp(event: KeyboardEvent): void {
   if (event.key === "Control" || event.key === "Meta") {
     resetTransformSnapState();
   }
+  if (event.code === "Space") {
+    spacePanActive = false;
+    renderer.canvas().style.cursor = "default";
+  }
   handleEditorKeyUp(event, {
     isTypingTarget,
     onToggleRun: toggleRun,
@@ -1877,6 +1910,7 @@ function onKeyUp(event: KeyboardEvent): void {
 function resetTransformSnapState(): void {
   setRotationSnapEnabled(true);
   setMoveSnapEnabled(true);
+  spacePanActive = false;
 }
 
 function toggleRun(): void {
@@ -3637,6 +3671,10 @@ function rebuildWorldFromStore(): void {
 
 function updateCanvasCursor(point: Vec2): void {
   const canvas = renderer.canvas();
+  if (spacePanActive && world.mode !== "game") {
+    canvas.style.cursor = "grab";
+    return;
+  }
   if (activeTool === "superBrush") {
     canvas.style.cursor = "crosshair";
     return;
