@@ -54,7 +54,7 @@ type PreviewWindowSnapshot = {
 };
 
 type PreviewLayoutSnapshot = {
-  version: 4;
+  version: 5;
   createdWindows: number;
   windows: PreviewWindowSnapshot[];
 };
@@ -80,11 +80,12 @@ type PreviewController = {
   defaultWindows: Map<PreviewWindowId, PreviewWindowDefault>;
 };
 
-const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v4";
+const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v5";
 const LEGACY_PREVIEW_LAYOUT_STORAGE_KEYS = [
   "webhachimi.v2.workbenchPreview.layout.v1",
   "webhachimi.v2.workbenchPreview.layout.v2",
   "webhachimi.v2.workbenchPreview.layout.v3",
+  "webhachimi.v2.workbenchPreview.layout.v4",
 ];
 const PREVIEW_MIN_WINDOW_WIDTH = 220;
 const PREVIEW_MIN_WINDOW_HEIGHT = 150;
@@ -176,6 +177,7 @@ export function mountEditorShell(root: HTMLElement): void {
           </div>
         </div>
         <div class="stage-toolbar">
+          <button class="tab-action" type="button" data-action="fit-world">适配世界</button>
           <div class="zoom-control">100%</div>
         </div>
       </main>
@@ -285,11 +287,11 @@ export function mountEditorShell(root: HTMLElement): void {
                 <button class="is-primary" type="button" data-action="queue-task">发送</button>
               </div>
             </div>
-          </div>
+          </section>
         </div>
       </aside>
 
-      <section class="bottom-panel" data-dock-slot="bottom" data-preview-window="output" data-window-title="输出面板" data-window-state="closed">
+      <section class="bottom-panel" data-dock-slot="bottom" data-preview-window="output" data-window-title="输出面板" data-window-state="open">
         <div class="panel-tabs">
           <span class="is-active" role="presentation">输出</span>
           <div class="tab-spacer"></div>
@@ -1271,7 +1273,7 @@ function restoreFloatingWindowStyle(root: HTMLElement, windowNode: HTMLElement, 
 function savePreviewLayout(controller: PreviewController): void {
   if (controller.restoringLayout) return;
   const snapshot: PreviewLayoutSnapshot = {
-    version: 4,
+    version: 5,
     createdWindows: controller.createdWindows,
     windows: allPreviewWindows(controller.root).map((windowNode) => previewWindowSnapshot(controller.root, windowNode)),
   };
@@ -1304,7 +1306,7 @@ function readPreviewLayoutSnapshot(): PreviewLayoutSnapshot | undefined {
     const raw = localStorage.getItem(PREVIEW_LAYOUT_STORAGE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Partial<PreviewLayoutSnapshot>;
-    if (parsed.version !== 4 || !Array.isArray(parsed.windows)) return undefined;
+    if (parsed.version !== 5 || !Array.isArray(parsed.windows)) return undefined;
     return parsed as PreviewLayoutSnapshot;
   } catch {
     return undefined;

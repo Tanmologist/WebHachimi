@@ -5,6 +5,7 @@ import type { Vec2 } from "../shared/types";
 import { isVisualResource, resourceFrameAtTime, type ResourceFrameRect } from "./resourceAnimation";
 import {
   centerViewportOnWorldPoint,
+  clampViewportZoom,
   defaultViewportState,
   panViewport,
   screenToWorldPoint,
@@ -213,6 +214,25 @@ export class V2Renderer {
 
   centerOnWorldPoint(point: Vec2, zoom?: number): ViewportState {
     this.viewport = centerViewportOnWorldPoint(this.viewport, point, zoom);
+    this.layoutWorld();
+    return this.viewportState();
+  }
+
+  fitWorldBounds(bounds: { x: number; y: number; w: number; h: number }, padding = 96): ViewportState {
+    const screen = this.screenSize();
+    const width = Math.max(1, bounds.w);
+    const height = Math.max(1, bounds.h);
+    const usableWidth = Math.max(1, screen.width - padding * 2);
+    const usableHeight = Math.max(1, screen.height - padding * 2);
+    const zoom = clampViewportZoom(Math.min(usableWidth / width, usableHeight / height, 1.25));
+    this.viewport = centerViewportOnWorldPoint(
+      this.viewport,
+      {
+        x: bounds.x + bounds.w / 2,
+        y: bounds.y + bounds.h / 2,
+      },
+      zoom,
+    );
     this.layoutWorld();
     return this.viewportState();
   }

@@ -31,7 +31,7 @@ import {
   type MultiCanvasDragState,
 } from "./canvasTransform";
 import { createStarterProject, repairKnownStarterLabels } from "./starterProject";
-import { targetGeometry, V2Renderer, type CanvasTargetPart, type ShapeDraftPreview, type TransformHandle } from "./renderer";
+import { geometryAabb, targetGeometry, V2Renderer, type CanvasTargetPart, type ShapeDraftPreview, type TransformHandle } from "./renderer";
 import { enterGameMode, leaveGameMode, mountEditorShell } from "./editorShell";
 import { handleEditorKeyDown, handleEditorKeyUp } from "./keyboardController";
 import { PanelLayoutController, type PanelId } from "./panelLayout";
@@ -289,6 +289,7 @@ const taskWorkflow = createTaskWorkflowController({
 await renderer.init({ host: stageHost });
 
 bindUi();
+fitWorldToCanvas("initial", { render: false });
 renderUi();
 loop(lastTime);
 const PROJECT_MAINTENANCE_INTERVAL_MS = 10 * 60 * 1000;
@@ -342,6 +343,11 @@ function bindUi(): void {
     button.addEventListener("click", () => {
       world.runFixedFrame();
       renderAll();
+    });
+  });
+  root.querySelectorAll('[data-action="fit-world"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      fitWorldToCanvas("manual");
     });
   });
   root.querySelectorAll('[data-action="capture"]').forEach((button) => {
@@ -699,6 +705,50 @@ function focusEntityOnCanvas(entityId: string, part: CanvasTargetPart): void {
   renderer.centerOnWorldPoint(geometry.center);
   notice = part === "presentation" ? `已定位到 ${entity.displayName} 的可视体` : `已定位到 ${entity.displayName}`;
   renderAll();
+}
+
+function fitWorldToCanvas(source: "initial" | "manual" = "manual", options: { render?: boolean } = {}): void {
+  const bounds = editableWorldBounds();
+  const entities = editableEntities();
+  if (!bounds) {
+    notice = "世界树里没有可适配的本体；画布为空。";
+    if (options.render !== false) renderAll();
+    return;
+  }
+  const viewport = renderer.fitWorldBounds(bounds);
+  notice =
+    source === "initial"
+      ? `已载入 ${entities.length} 个本体，并适配到画布中心。`
+      : `已适配 ${entities.length} 个本体到画布中心：${Math.round(viewport.x)}, ${Math.round(viewport.y)} / ${Math.round(viewport.zoom * 100)}%。`;
+  if (options.render !== false) renderAll();
+}
+
+function editableWorldBounds(): Rect | undefined {
+  const bounds: Rect[] = [];
+  for (const entity of editableEntities()) {
+    bounds.push(geometryAabb(targetGeometry(entity, "body")));
+    if (entity.render && entity.render.visible !== false) {
+      bounds.push(geometryAabb(targetGeometry(entity, "presentation")));
+    }
+  }
+  return mergeBounds(bounds);
+}
+
+function mergeBounds(bounds: Rect[]): Rect | undefined {
+  const first = bounds[0];
+  if (!first) return undefined;
+  let minX = first.x;
+  let minY = first.y;
+  let maxX = first.x + first.w;
+  let maxY = first.y + first.h;
+  for (let index = 1; index < bounds.length; index += 1) {
+    const bound = bounds[index];
+    minX = Math.min(minX, bound.x);
+    minY = Math.min(minY, bound.y);
+    maxX = Math.max(maxX, bound.x + bound.w);
+    maxY = Math.max(maxY, bound.y + bound.h);
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
 }
 
 function startCanvasTransform(event: PointerEvent, entityId: string, part: CanvasTargetPart, handle: TransformHandle, point: Vec2): void {
