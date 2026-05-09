@@ -54,7 +54,7 @@ type PreviewWindowSnapshot = {
 };
 
 type PreviewLayoutSnapshot = {
-  version: 3;
+  version: 4;
   createdWindows: number;
   windows: PreviewWindowSnapshot[];
 };
@@ -80,8 +80,12 @@ type PreviewController = {
   defaultWindows: Map<PreviewWindowId, PreviewWindowDefault>;
 };
 
-const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v3";
-const LEGACY_PREVIEW_LAYOUT_STORAGE_KEYS = ["webhachimi.v2.workbenchPreview.layout.v1", "webhachimi.v2.workbenchPreview.layout.v2"];
+const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v4";
+const LEGACY_PREVIEW_LAYOUT_STORAGE_KEYS = [
+  "webhachimi.v2.workbenchPreview.layout.v1",
+  "webhachimi.v2.workbenchPreview.layout.v2",
+  "webhachimi.v2.workbenchPreview.layout.v3",
+];
 const PREVIEW_MIN_WINDOW_WIDTH = 220;
 const PREVIEW_MIN_WINDOW_HEIGHT = 150;
 
@@ -163,7 +167,7 @@ export function mountEditorShell(root: HTMLElement): void {
       <main class="editor-grid" data-dock-slot="center" data-preview-window="editor" data-window-title="世界" data-window-state="open">
         <div class="editor-tabs" role="tablist">
           <button class="tab is-active" type="button" role="tab" data-surface-target="canvas" aria-selected="true">世界画布</button>
-          <button class="tab" type="button" role="tab" data-preview-open-window="workspace">检查器</button>
+          <button class="tab" type="button" role="tab" data-preview-open-window="workspace">AI 任务</button>
           <button class="tab" type="button" role="tab" data-action="toggle-run">预览</button>
           <div class="tab-spacer"></div>
           <div class="inline-window-actions">
@@ -176,12 +180,12 @@ export function mountEditorShell(root: HTMLElement): void {
         </div>
       </main>
 
-      <aside class="ai-task-panel workspace-panel" data-dock-slot="right" data-preview-window="workspace" data-window-title="检查器" data-window-state="open">
+      <aside class="ai-task-panel workspace-panel" data-dock-slot="right" data-preview-window="workspace" data-window-title="AI 任务" data-window-state="open">
         <div class="pane-header">
-          <span>检查器</span>
+          <span>AI 任务</span>
           <div class="pane-actions">
-            <button type="button" aria-label="最小化检查器" data-window-minimize="workspace">-</button>
-            <button type="button" aria-label="关闭检查器" data-window-close="workspace">x</button>
+            <button type="button" aria-label="最小化 AI 任务" data-window-minimize="workspace">-</button>
+            <button type="button" aria-label="关闭 AI 任务" data-window-close="workspace">x</button>
           </div>
         </div>
         <div class="workspace-scroll">
@@ -285,7 +289,7 @@ export function mountEditorShell(root: HTMLElement): void {
         </div>
       </aside>
 
-      <section class="bottom-panel" data-dock-slot="bottom" data-preview-window="output" data-window-title="输出面板" data-window-state="open">
+      <section class="bottom-panel" data-dock-slot="bottom" data-preview-window="output" data-window-title="输出面板" data-window-state="closed">
         <div class="panel-tabs">
           <span class="is-active" role="presentation">输出</span>
           <div class="tab-spacer"></div>
@@ -768,7 +772,7 @@ function updatePreviewDrag(controller: PreviewController, event: PointerEvent): 
   const top = dragState.panelTop + event.clientY - dragState.startY;
   dragState.panel.style.left = `${Math.max(8, Math.min(left, rootRect.width - 220))}px`;
   dragState.panel.style.top = `${Math.max(38, Math.min(top, rootRect.height - 160))}px`;
-  dragState.drop = resolveDropTarget(controller.root, controller.workbench, dragState.panel, event.clientX, event.clientY);
+  dragState.drop = resolveDropTarget(controller.root, controller.workbench, dragState.panel, event.clientX, event.clientY, event.altKey);
   applyDropPreview(controller, dragState.drop);
   updatePointerStatus(controller.pointerStatus, dropTargetLabel(controller.root, dragState.drop));
 }
@@ -840,7 +844,7 @@ function floatingWindowMarkup(windowId: PreviewWindowId, title: string, index: n
       <div class="task-stack">
         <article class="task-card is-active">
           <div class="task-card__title">临时工作区</div>
-          <div class="task-card__meta">拖到边缘吸附，拖到窗口上分屏</div>
+          <div class="task-card__meta">拖到边缘吸附，按 Alt 拖到标题区合并</div>
         </article>
         <article class="task-card">
           <div class="task-card__title">布局占位</div>
@@ -851,7 +855,7 @@ function floatingWindowMarkup(windowId: PreviewWindowId, title: string, index: n
   `;
 }
 
-function resolveDropTarget(root: HTMLElement, workbench: HTMLElement, activePanel: HTMLElement, x: number, y: number): PreviewDropTarget {
+function resolveDropTarget(root: HTMLElement, workbench: HTMLElement, activePanel: HTMLElement, x: number, y: number, allowTabMerge = false): PreviewDropTarget {
   const rect = workbench.getBoundingClientRect();
   if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) return { kind: "float", target: "float" };
 
@@ -864,7 +868,7 @@ function resolveDropTarget(root: HTMLElement, workbench: HTMLElement, activePane
   const splitTarget = splitTargetAtPoint(root, activePanel, x, y);
   if (splitTarget) {
     const splitSide = resolveSplitSide(splitTarget.getBoundingClientRect(), x, y);
-    if ((splitSide === "center" || splitSide === "top") && isTabMergeZone(splitTarget, x, y)) {
+    if (allowTabMerge && (splitSide === "center" || splitSide === "top") && isTabMergeZone(splitTarget, x, y)) {
       return {
         kind: "tab",
         target: "center",
@@ -1267,7 +1271,7 @@ function restoreFloatingWindowStyle(root: HTMLElement, windowNode: HTMLElement, 
 function savePreviewLayout(controller: PreviewController): void {
   if (controller.restoringLayout) return;
   const snapshot: PreviewLayoutSnapshot = {
-    version: 3,
+    version: 4,
     createdWindows: controller.createdWindows,
     windows: allPreviewWindows(controller.root).map((windowNode) => previewWindowSnapshot(controller.root, windowNode)),
   };
@@ -1300,7 +1304,7 @@ function readPreviewLayoutSnapshot(): PreviewLayoutSnapshot | undefined {
     const raw = localStorage.getItem(PREVIEW_LAYOUT_STORAGE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Partial<PreviewLayoutSnapshot>;
-    if (parsed.version !== 3 || !Array.isArray(parsed.windows)) return undefined;
+    if (parsed.version !== 4 || !Array.isArray(parsed.windows)) return undefined;
     return parsed as PreviewLayoutSnapshot;
   } catch {
     return undefined;

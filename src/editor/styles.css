@@ -68,8 +68,8 @@ input {
   overflow: hidden;
   background: var(--wb-bg);
   --tools-track: 46px;
-  --sidebar-track: 248px;
-  --inspector-track: 296px;
+  --sidebar-track: 284px;
+  --inspector-track: clamp(340px, 28vw, 440px);
   --bottom-track: 148px;
   --taskbar-track: 32px;
   grid-template:
@@ -77,7 +77,7 @@ input {
     "tools sidebar editor inspector" minmax(0, 1fr)
     "tools sidebar bottom inspector" var(--bottom-track)
     "taskbar taskbar taskbar taskbar" var(--taskbar-track)
-    / var(--tools-track) var(--sidebar-track) minmax(360px, 1fr) var(--inspector-track);
+    / var(--tools-track) var(--sidebar-track) minmax(420px, 1fr) var(--inspector-track);
 }
 
 .workbench-preview > :not(.stage):not(.dock-overlay):not([data-floating-window]) {
@@ -305,7 +305,20 @@ input {
 }
 
 .workspace-section--tasks {
-  flex: 1;
+  order: -1;
+  flex: 1 1 auto;
+  min-height: min(460px, 58vh);
+  border-top: 0;
+  border-bottom: 1px solid var(--wb-line-soft);
+}
+
+.ai-task-panel .workspace-section:not(.workspace-section--tasks) {
+  flex: 0 0 auto;
+}
+
+.ai-task-panel .workspace-section:not(.workspace-section--tasks) .workspace-section__body {
+  max-height: clamp(132px, 18vh, 220px);
+  overflow: auto;
 }
 
 .pane-header {
@@ -1316,6 +1329,7 @@ input {
 .task-stack {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   gap: 7px;
   min-height: 0;
   overflow: auto;
@@ -1349,6 +1363,7 @@ input {
 
 .task-composer {
   display: grid;
+  flex: 0 0 auto;
   gap: 7px;
   padding: 9px;
   border-top: 1px solid var(--wb-line-soft);
@@ -1481,21 +1496,14 @@ input {
 
 @media (max-width: 980px) {
   .workbench-preview {
-    --sidebar-track: 228px;
+    --sidebar-track: 200px;
+    --inspector-track: 270px;
     grid-template:
-      "title title title" 35px
-      "tools sidebar editor" minmax(0, 1fr)
-      "tools sidebar bottom" var(--bottom-track)
-      "taskbar taskbar taskbar" var(--taskbar-track)
-      / var(--tools-track) var(--sidebar-track) minmax(280px, 1fr);
-  }
-
-  .ai-task-panel {
-    display: none;
-  }
-
-  .dock-target--right {
-    display: none;
+      "title title title title" 35px
+      "tools sidebar editor inspector" minmax(0, 1fr)
+      "tools sidebar bottom inspector" var(--bottom-track)
+      "taskbar taskbar taskbar taskbar" var(--taskbar-track)
+      / var(--tools-track) var(--sidebar-track) minmax(240px, 1fr) var(--inspector-track);
   }
 
   .dock-target--center,
@@ -1516,6 +1524,14 @@ input {
   }
 
   .sidebar {
+    display: none;
+  }
+
+  .ai-task-panel {
+    display: none;
+  }
+
+  .dock-target--right {
     display: none;
   }
 
