@@ -4,6 +4,7 @@ import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
 import { isVisualResource, resourceFrameAtTime, type ResourceFrameRect } from "./resourceAnimation";
 import {
+  centerViewportOnWorldPoint,
   defaultViewportState,
   panViewport,
   screenToWorldPoint,
@@ -206,6 +207,12 @@ export class V2Renderer {
 
   panBy(deltaX: number, deltaY: number): ViewportState {
     this.viewport = panViewport(this.viewport, { x: deltaX, y: deltaY });
+    this.layoutWorld();
+    return this.viewportState();
+  }
+
+  centerOnWorldPoint(point: Vec2, zoom?: number): ViewportState {
+    this.viewport = centerViewportOnWorldPoint(this.viewport, point, zoom);
     this.layoutWorld();
     return this.viewportState();
   }

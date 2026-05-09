@@ -1,4 +1,5 @@
 import {
+  centerViewportOnWorldPoint,
   defaultViewportState,
   panViewport,
   screenToWorldPoint,
@@ -27,6 +28,10 @@ assert(panned.y > zoomed.y, "dragging screen up should move camera down");
 const sameWorldAfterPan = screenToWorldPoint(panned, screen, worldToScreenPoint(panned, screen, worldBeforeZoom));
 assertPoint(sameWorldAfterPan, worldBeforeZoom, "pan keeps transforms reversible");
 
+const focused = centerViewportOnWorldPoint(panned, { x: 320, y: -180 });
+assertPoint(worldToScreenPoint(focused, screen, { x: 320, y: -180 }), center, "centered world target maps to screen center");
+assert(nearlyEqual(focused.zoom, panned.zoom), "centering should preserve current zoom by default");
+
 const minClamped = zoomViewportAt(viewport, screen, center, 100000);
 const maxClamped = zoomViewportAt(viewport, screen, center, -100000);
 assert(minClamped.zoom === 0.2, `expected min zoom clamp, got ${minClamped.zoom}`);
@@ -44,6 +49,11 @@ console.log(
       pan: {
         x: panned.x,
         y: panned.y,
+      },
+      focused: {
+        x: focused.x,
+        y: focused.y,
+        zoom: focused.zoom,
       },
       clamps: {
         min: minClamped.zoom,

@@ -31,7 +31,7 @@ import {
   type MultiCanvasDragState,
 } from "./canvasTransform";
 import { createStarterProject, repairKnownStarterLabels } from "./starterProject";
-import { V2Renderer, type CanvasTargetPart, type ShapeDraftPreview, type TransformHandle } from "./renderer";
+import { targetGeometry, V2Renderer, type CanvasTargetPart, type ShapeDraftPreview, type TransformHandle } from "./renderer";
 import { enterGameMode, leaveGameMode, mountEditorShell } from "./editorShell";
 import { handleEditorKeyDown, handleEditorKeyUp } from "./keyboardController";
 import { PanelLayoutController, type PanelId } from "./panelLayout";
@@ -678,6 +678,25 @@ function centerWindowPanel(panel: PanelId): void {
   panelLayout.centerPanel(panel);
   if (panel === "scene") activeSurface = "world";
   notice = `${panelLabel(panel)}已归中��`;
+  renderAll();
+}
+
+function focusEntityOnCanvas(entityId: string, part: CanvasTargetPart): void {
+  const entity = editableEntity(entityId);
+  if (!entity) {
+    syncWorldFromStore();
+    notice = "定位目标已经不存在，世界树已刷新";
+    renderAll();
+    return;
+  }
+  const geometry = targetGeometry(entity, part);
+  selectedId = entity.id;
+  selectedPart = part;
+  selectedIds = [entity.id];
+  selectionArea = undefined;
+  activeSurface = "canvas";
+  renderer.centerOnWorldPoint(geometry.center);
+  notice = part === "presentation" ? `已定位到 ${entity.displayName} 的可视体` : `已定位到 ${entity.displayName}`;
   renderAll();
 }
 
@@ -2300,6 +2319,9 @@ function renderTree(projectSnapshot: Project): void {
     },
     onMoveEntityToFolder: (entityId, folderId) => {
       moveEntityToFolder(entityId, folderId);
+    },
+    onFocusEntity: (entityId, part) => {
+      focusEntityOnCanvas(entityId, part);
     },
     onOpenContextMenu: (target) => {
       const entity = editableEntity(target.entityId);

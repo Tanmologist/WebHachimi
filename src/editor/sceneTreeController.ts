@@ -8,6 +8,7 @@ export type SceneTreeCallbacks = {
   onSelectEntity: (entityId: string, part: CanvasTargetPart) => void;
   onMoveEntityToFolder: (entityId: EntityId, folderId: string) => void;
   onToggleNode?: (nodeId: string) => void;
+  onFocusEntity?: (entityId: string, part: CanvasTargetPart) => void;
   onOpenContextMenu?: (target: { entityId: string; part: CanvasTargetPart; clientX: number; clientY: number }) => void;
 };
 
@@ -98,8 +99,23 @@ export function bindSceneTreeInteractions(tree: HTMLElement, callbacks: SceneTre
     });
   });
   tree.querySelectorAll<HTMLButtonElement>("[data-entity-id]").forEach((button) => {
-    button.addEventListener("click", () => {
-      callbacks.onSelectEntity(button.dataset.entityId || "", (button.dataset.part as CanvasTargetPart | undefined) || "body");
+    button.addEventListener("click", (event) => {
+      const entityId = button.dataset.entityId || "";
+      const part = (button.dataset.part as CanvasTargetPart | undefined) || "body";
+      const clickKey = `${entityId}:${part}`;
+      const now = Date.now();
+      const lastClickAt = Number(tree.dataset.lastEntityClickAt || 0);
+      const isDoubleClick = tree.dataset.lastEntityClickKey === clickKey && now - lastClickAt <= 420;
+      tree.dataset.lastEntityClickKey = clickKey;
+      tree.dataset.lastEntityClickAt = String(now);
+      if (isDoubleClick) {
+        event.preventDefault();
+        delete tree.dataset.lastEntityClickKey;
+        delete tree.dataset.lastEntityClickAt;
+        callbacks.onFocusEntity?.(entityId, part);
+        return;
+      }
+      callbacks.onSelectEntity(entityId, part);
     });
     button.addEventListener("contextmenu", (event) => {
       event.preventDefault();

@@ -32,6 +32,14 @@ export function worldToScreenPoint(viewport: ViewportState, screen: ViewportScre
   };
 }
 
+export function centerViewportOnWorldPoint(viewport: ViewportState, world: Vec2, zoom = viewport.zoom): ViewportState {
+  return {
+    x: world.x,
+    y: world.y,
+    zoom: clampViewportZoom(zoom),
+  };
+}
+
 export function panViewport(viewport: ViewportState, deltaScreen: Vec2): ViewportState {
   return {
     ...viewport,
