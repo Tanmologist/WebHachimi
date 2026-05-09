@@ -69,6 +69,7 @@ import {
 } from "./resourceImport";
 import { buildSequenceSpriteMetadata, buildSheetSpriteMetadata, imageAttachments, resourceHasAnimation } from "./resourceAnimation";
 import { AutoSaveController } from "./autoSaveController";
+import { EditorTransactionController } from "./editorTransactionController";
 import { EditorPerformanceController } from "./editorPerformanceController";
 import { OutputLogController } from "./outputLogController";
 import { TaskSummaryController } from "./taskSummaryController";
@@ -210,6 +211,11 @@ const autoSave = new AutoSaveController({
   saveProjectLocally: () => saveProjectLocallyFromEditor(buildCurrentProjectForSave()).notice,
   shouldDeferSave: () => drawingBrush || superBrushTaskDialogOpen || Boolean(canvasDrag || shapeDrag || polygonDraft),
   render: renderUi,
+});
+const editorTransactions = new EditorTransactionController({
+  store,
+  syncWorldFromStore,
+  markProjectDirty,
 });
 const panelLayout = new PanelLayoutController({
   root,
@@ -750,19 +756,16 @@ function commitCanvasTransform(drag: CanvasDragState): string | undefined {
   }
   if (!patches.length) return undefined;
 
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches,
     inversePatches,
     diffSummary: `调整 ${entity.displayName} 本体${transformActionLabel(drag.kind)}。`,
+    dirtyReason: `已调整 ${entity.displayName}`,
   });
-  const result = store.apply(transaction);
   if (!result.ok) {
-    syncWorldFromStore();
     return `变换未提交：${result.error}`;
   }
-  syncWorldFromStore();
-  markProjectDirty(`已调�?${entity.displayName}`);
   return `已提交本体变换：${transformActionLabel(drag.kind)}。`;
 }
 
@@ -785,19 +788,16 @@ function commitMultiCanvasTransform(drag: MultiCanvasDragState): string | undefi
 
   if (!patches.length) return undefined;
 
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches,
     inversePatches,
     diffSummary: `批量调整 ${changedCount} 个对象的${transformActionLabel(drag.kind)}。`,
+    dirtyReason: `已批量调整 ${changedCount} 个对象`,
   });
-  const result = store.apply(transaction);
   if (!result.ok) {
-    syncWorldFromStore();
     return `批量变换未提交：${result.error}`;
   }
-  syncWorldFromStore();
-  markProjectDirty(`已批量调�?${changedCount} 个对象`);
   return `已提交批量变换：${transformActionLabel(drag.kind)}${changedCount} 个对象）。`;
 }
 
@@ -806,19 +806,16 @@ function commitPresentationTransform(entity: Entity, drag: CanvasDragState): str
   if (!finalRender || sameRender(drag.originalRender, finalRender)) return undefined;
 
   const path = `/scenes/${scene.id}/entities/${entity.id}/render` as ProjectPatch["path"];
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches: [{ op: "set", path, value: finalRender }],
     inversePatches: drag.originalRender ? [{ op: "set", path, value: drag.originalRender }] : [{ op: "delete", path }],
     diffSummary: `调整 ${entity.displayName} 当前可视体的${transformActionLabel(drag.kind)}。`,
+    dirtyReason: `已调整 ${entity.displayName} 当前可视体`,
   });
-  const result = store.apply(transaction);
   if (!result.ok) {
-    syncWorldFromStore();
     return `可视体变换未提交${result.error}`;
   }
-  syncWorldFromStore();
-  markProjectDirty(`已调�?${entity.displayName} 当前可视体`);
   return `已提交当前可视体变换${transformActionLabel(drag.kind)}。`;
 }
 
@@ -1345,20 +1342,18 @@ function applyContextMenuTransaction(planResult: Result<ContextMenuTransactionPl
     renderAll();
     return;
   }
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches: planResult.value.patches,
     inversePatches: planResult.value.inversePatches,
     diffSummary: planResult.value.diffSummary,
+    dirtyReason: planResult.value.notice,
   });
-  const result = store.apply(transaction);
   if (!result.ok) {
-    syncWorldFromStore();
     notice = `右键操作未提交：${result.error}`;
     renderAll();
     return;
   }
-  syncWorldFromStore();
   if (planResult.value.selectedId && editableEntity(planResult.value.selectedId)) {
     selectedId = planResult.value.selectedId;
     selectedPart = planResult.value.selectedPart || "body";
@@ -1372,7 +1367,6 @@ function applyContextMenuTransaction(planResult: Result<ContextMenuTransactionPl
   } else if (planResult.value.selectedPart) {
     selectedPart = planResult.value.selectedPart;
   }
-  markProjectDirty(planResult.value.notice);
   notice = planResult.value.notice;
   renderAll();
 }
@@ -1383,20 +1377,18 @@ function applyBatchContextMenuTransaction(planResult: Result<ContextMenuTransact
     renderAll();
     return;
   }
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches: planResult.value.patches,
     inversePatches: planResult.value.inversePatches,
     diffSummary: planResult.value.diffSummary,
+    dirtyReason: planResult.value.notice,
   });
-  const result = store.apply(transaction);
   if (!result.ok) {
-    syncWorldFromStore();
     notice = `批量操作未提交：${result.error}`;
     renderAll();
     return;
   }
-  syncWorldFromStore();
   if (planResult.value.selectedId && editableEntity(planResult.value.selectedId)) {
     selectedId = planResult.value.selectedId;
     selectedPart = planResult.value.selectedPart || "body";
@@ -1406,7 +1398,6 @@ function applyBatchContextMenuTransaction(planResult: Result<ContextMenuTransact
     selectedIds = [];
   }
   selectionArea = undefined;
-  markProjectDirty(planResult.value.notice);
   notice = planResult.value.notice;
   renderAll();
 }
@@ -1766,26 +1757,23 @@ function applyCreatedEntity(entity: Entity, diffSummary: string): void {
     inversePatches.push({ op: "set", path: `/scenes/${scene.id}/folders` as ProjectPatch["path"], value: previousFolders });
   }
 
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches,
     inversePatches,
     diffSummary,
+    dirtyReason: "已创建本体",
   });
-  const result = store.apply(transaction);
   if (!result.ok) {
     notice = `创建本体失败${result.error}`;
-    syncWorldFromStore();
     renderAll();
     return;
   }
-  syncWorldFromStore();
   selectedId = entity.id;
   selectedIds = [entity.id];
   selectedPart = "body";
   selectionArea = undefined;
   activeTool = "select";
-  markProjectDirty("已创建本");
   notice = `已创建${entity.displayName}。`;
   renderAll();
 }
@@ -2414,16 +2402,15 @@ function setEntityPersistent(entityId: string, value: boolean): void {
   const entity = editableEntity(entityId);
   if (!entity) return;
   const path = `/scenes/${scene.id}/entities/${entityId}/persistent` as ProjectPatch["path"];
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches: [{ op: "set", path, value }],
     inversePatches: [{ op: "set", path, value: entity.persistent }],
     diffSummary: `${value ? "设为" : "取消"}持久对象${entity.displayName}`,
+    dirtyReason: `已更新 ${entity.displayName} 持久状态`,
+    syncOnFailure: false,
   });
-  const result = store.apply(transaction);
   if (result.ok) {
-    syncWorldFromStore();
-    markProjectDirty(`已更�?${entity.displayName} 持久状��`);
     notice = `${entity.displayName}${value ? " set persistent" : " unset persistent"}`;
     renderAll();
   } else {
@@ -2436,16 +2423,15 @@ function setEntityBodyMode(entityId: string, mode: string): void {
   if (!entity) return;
   const path = `/scenes/${scene.id}/entities/${entityId}/body/mode` as ProjectPatch["path"];
   const oldMode = entity.body?.mode || "static";
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches: [{ op: "set", path, value: mode }],
     inversePatches: [{ op: "set", path, value: oldMode }],
     diffSummary: `调整物理模式${entity.displayName} �?${mode}`,
+    dirtyReason: `已更新 ${entity.displayName} 物理模式`,
+    syncOnFailure: false,
   });
-  const result = store.apply(transaction);
   if (result.ok) {
-    syncWorldFromStore();
-    markProjectDirty(`已更�?${entity.displayName} 物理模式`);
     notice = `${entity.displayName} 物理模式已改�?${mode}。`;
     renderAll();
   } else {
@@ -2458,16 +2444,15 @@ function setEntityColliderSolid(entityId: string, value: boolean): void {
   if (!entity) return;
   const path = `/scenes/${scene.id}/entities/${entityId}/collider/solid` as ProjectPatch["path"];
   const oldValue = entity.collider?.solid !== false;
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches: [{ op: "set", path, value }],
     inversePatches: [{ op: "set", path, value: oldValue }],
     diffSummary: `${value ? "启用" : "禁用"}实体碰撞${entity.displayName}`,
+    dirtyReason: `已更新 ${entity.displayName} 碰撞属性`,
+    syncOnFailure: false,
   });
-  const result = store.apply(transaction);
   if (result.ok) {
-    syncWorldFromStore();
-    markProjectDirty(`已更�?${entity.displayName} 碰撞属��`);
     notice = `${entity.displayName}${value ? " collision enabled" : " collision disabled"}`;
     renderAll();
   } else {
@@ -2480,16 +2465,15 @@ function setEntityColliderTrigger(entityId: string, value: boolean): void {
   if (!entity) return;
   const path = `/scenes/${scene.id}/entities/${entityId}/collider/trigger` as ProjectPatch["path"];
   const oldValue = entity.collider?.trigger || false;
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches: [{ op: "set", path, value }],
     inversePatches: [{ op: "set", path, value: oldValue }],
     diffSummary: `${value ? "设为" : "取消"}触发器：${entity.displayName}`,
+    dirtyReason: `已更新 ${entity.displayName} 触发器属性`,
+    syncOnFailure: false,
   });
-  const result = store.apply(transaction);
   if (result.ok) {
-    syncWorldFromStore();
-    markProjectDirty(`已更�?${entity.displayName} 触发器属性`);
     notice = `${entity.displayName}${value ? " set as trigger" : " unset as trigger"}`;
     renderAll();
   } else {
@@ -2502,16 +2486,15 @@ function setEntityRenderVisible(entityId: string, value: boolean): void {
   if (!entity) return;
   const path = `/scenes/${scene.id}/entities/${entityId}/render/visible` as ProjectPatch["path"];
   const oldValue = entity.render?.visible !== false;
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches: [{ op: "set", path, value }],
     inversePatches: [{ op: "set", path, value: oldValue }],
     diffSummary: `${value ? "显示" : "隐藏"}可视体：${entity.displayName}`,
+    dirtyReason: `已更新 ${entity.displayName} 可视体可见性`,
+    syncOnFailure: false,
   });
-  const result = store.apply(transaction);
   if (result.ok) {
-    syncWorldFromStore();
-    markProjectDirty(`已更�?${entity.displayName} 可视体可见��`);
     notice = `${entity.displayName} visual${value ? " visible" : " hidden"}`;
     renderAll();
   } else {
@@ -2843,15 +2826,16 @@ function addImportedResource(input: ResourceImportMetadata): void {
     inversePatches.push(...bound.inversePatches);
   }
 
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches,
     inversePatches,
     diffSummary: entity && isVisualResourceType(input.type)
       ? `添加资源并替�?${entity.displayName} 的当前可视体`
       : `添加资源 ${resource.displayName}`,
+    dirtyReason: "资源已添加",
+    syncOnFailure: false,
   });
-  const result = store.apply(transaction);
   if (!result.ok) {
     notice = `资源添加失败${result.error}`;
     renderAll();
@@ -2863,8 +2847,6 @@ function addImportedResource(input: ResourceImportMetadata): void {
     selectedIds = [entity.id as EntityId];
     selectionArea = undefined;
   }
-  syncWorldFromStore();
-  markProjectDirty("资源已添");
   notice = entity && isVisualResourceType(input.type)
     ? `已添�?${resource.displayName}，并替换当前可视体��`
     : `已添加资�?${resource.displayName}。`;
@@ -2954,13 +2936,14 @@ function saveResourceDescription(resourceId: ResourceId, rawDescription: string)
     patches.push({ op: "set", path: bindingsPath, value: nextBindings });
     inversePatches.push({ op: "set", path: bindingsPath, value: previousBindings });
   }
-  const transaction = store.createTransaction({
+  const applyResult = editorTransactions.apply({
     actor: "user",
     patches,
     inversePatches,
     diffSummary: `保存资源描述${resource.displayName}`,
+    syncOnSuccess: false,
+    syncOnFailure: false,
   });
-  const applyResult = store.apply(transaction);
   if (!applyResult.ok) {
     notice = `资源描述保存失败${applyResult.error}`;
     renderAll();
@@ -3054,20 +3037,19 @@ function clearResourceAnimation(resourceId: ResourceId): void {
 
 function applyResourceUpdate(previousResource: Resource, nextResource: Resource, diffSummary: string, successNotice: string): void {
   const resourcePath = `/resources/${previousResource.id}` as ProjectPatch["path"];
-  const transaction = store.createTransaction({
+  const applyResult = editorTransactions.apply({
     actor: "user",
     patches: [{ op: "set", path: resourcePath, value: nextResource }],
     inversePatches: [{ op: "set", path: resourcePath, value: cloneJson(previousResource) }],
     diffSummary,
+    dirtyReason: successNotice,
+    syncOnFailure: false,
   });
-  const applyResult = store.apply(transaction);
   if (!applyResult.ok) {
     notice = `资源更新失败${applyResult.error}`;
     renderAll();
     return;
   }
-  syncWorldFromStore();
-  markProjectDirty(successNotice);
   notice = successNotice;
   renderAll();
 }
@@ -3112,20 +3094,19 @@ function renameResource(resourceId: ResourceId, rawDisplayName: string): void {
     renderAll();
     return;
   }
-  const transaction = store.createTransaction({
+  const applyResult = editorTransactions.apply({
     actor: "user",
     patches: planResult.value.patches,
     inversePatches: planResult.value.inversePatches,
     diffSummary: planResult.value.diffSummary,
+    dirtyReason: planResult.value.notice,
+    syncOnFailure: false,
   });
-  const applyResult = store.apply(transaction);
   if (!applyResult.ok) {
     notice = `资源重命名失败：${applyResult.error}`;
     renderAll();
     return;
   }
-  syncWorldFromStore();
-  markProjectDirty(planResult.value.notice);
   notice = planResult.value.notice;
   renderAll();
 }
@@ -3562,15 +3543,14 @@ function moveEntityToFolder(entityId: EntityId, folderId: string): void {
     renderAll();
     return;
   }
-  const transaction = store.createTransaction({
+  const result = editorTransactions.apply({
     actor: "user",
     patches: plan.value.patches,
     inversePatches: plan.value.inversePatches,
     diffSummary: plan.value.diffSummary,
+    dirtyReason: "文件夹移动已更新",
   });
-  const result = store.apply(transaction);
   if (!result.ok) {
-    syncWorldFromStore();
     notice = `文件夹移动未提交${result.error}`;
     renderAll();
     return;
@@ -3580,8 +3560,6 @@ function moveEntityToFolder(entityId: EntityId, folderId: string): void {
   selectedPart = "body";
   selectedIds = [entityId];
   selectionArea = undefined;
-  syncWorldFromStore();
-  markProjectDirty("文件夹移动已更新");
   notice = "已提交文件夹移动事务";
   renderAll();
 }
