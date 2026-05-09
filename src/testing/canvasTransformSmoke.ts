@@ -1,6 +1,12 @@
 import type { Entity } from "../project/schema";
 import type { EntityId } from "../shared/types";
-import { applyCanvasDragState, createCanvasDragState, snapRotation } from "../editor/canvasTransform";
+import {
+  applyCanvasDragState,
+  applyMultiCanvasDragState,
+  createCanvasDragState,
+  createMultiCanvasDragState,
+  snapRotation,
+} from "../editor/canvasTransform";
 
 run("body east handle scales body from one side without resizing presentation", () => {
   const entity = createEntity();
@@ -57,6 +63,65 @@ run("body move uses collider offset as the body center", () => {
   assert(entity.transform.position.y === 140, `expected transform y 140, got ${entity.transform.position.y}`);
 });
 
+run("body move snaps right edge to a nearby entity left edge", () => {
+  const entity = createUnrotatedEntity("entity-source", 100, 100);
+  const target = createUnrotatedEntity("entity-target", 210, 100);
+  const drag = createCanvasDragState(7, entity, "body", "core", { x: 100, y: 100 });
+  applyCanvasDragState(entity, drag, { x: 111, y: 100 }, {
+    allEntities: [entity, target],
+    movingEntityIds: [entity.id],
+    gridSize: 0,
+  });
+
+  assert(entity.transform.position.x === 110, `expected source right edge to snap to target left edge, got x ${entity.transform.position.x}`);
+  assert(entity.transform.position.y === 100, `expected y unchanged, got ${entity.transform.position.y}`);
+  assert(rightEdge(entity) === leftEdge(target), `expected touching edges, got ${rightEdge(entity)} and ${leftEdge(target)}`);
+});
+
+run("body move snaps center line to a nearby entity center line", () => {
+  const entity = createUnrotatedEntity("entity-source", 100, 100);
+  const target = createUnrotatedEntity("entity-target", 210, 100);
+  const drag = createCanvasDragState(8, entity, "body", "core", { x: 100, y: 100 });
+  applyCanvasDragState(entity, drag, { x: 202, y: 100 }, {
+    allEntities: [entity, target],
+    movingEntityIds: [entity.id],
+    gridSize: 0,
+  });
+
+  assert(entity.transform.position.x === 210, `expected center x to snap to target center, got ${entity.transform.position.x}`);
+  assert(entity.transform.position.y === 100, `expected y unchanged, got ${entity.transform.position.y}`);
+});
+
+run("body move snaps body anchors to the editor grid", () => {
+  const entity = createUnrotatedEntity("entity-grid", 100, 100);
+  const drag = createCanvasDragState(9, entity, "body", "core", { x: 100, y: 100 });
+  applyCanvasDragState(entity, drag, { x: 143, y: 120 }, {
+    allEntities: [entity],
+    movingEntityIds: [entity.id],
+    gridSize: 48,
+    gridSnapThreshold: 2,
+  });
+
+  assert(entity.transform.position.x === 144, `expected x to snap to 48px grid, got ${entity.transform.position.x}`);
+  assert(entity.transform.position.y === 120, `expected y unchanged, got ${entity.transform.position.y}`);
+});
+
+run("multi-body move snaps group edge to a nearby entity edge", () => {
+  const left = createUnrotatedEntity("entity-left", 100, 100);
+  const right = createUnrotatedEntity("entity-right", 170, 100);
+  const target = createUnrotatedEntity("entity-target", 281, 100);
+  const drag = createMultiCanvasDragState(10, [left, right], "core", { x: 135, y: 100 });
+  applyMultiCanvasDragState([left, right], drag, { x: 140, y: 100 }, {
+    allEntities: [left, right, target],
+    movingEntityIds: [left.id, right.id],
+    gridSize: 0,
+  });
+
+  assert(left.transform.position.x === 111, `expected left entity x 111, got ${left.transform.position.x}`);
+  assert(right.transform.position.x === 181, `expected right entity x 181, got ${right.transform.position.x}`);
+  assert(rightEdge(right) === leftEdge(target), `expected group right edge to snap to target left edge, got ${rightEdge(right)} and ${leftEdge(target)}`);
+});
+
 run("body rotation preserves collider local rotation", () => {
   const entity = createEntity();
   entity.transform.rotation = 0.25;
@@ -82,15 +147,15 @@ run("presentation scale accounts for parent scale", () => {
 
 console.log(JSON.stringify({ status: "passed" }, null, 2));
 
-function createEntity(): Entity {
+function createEntity(id = "entity-test", x = 100, y = 100): Entity {
   return {
-    id: "entity-test" as EntityId,
+    id: id as EntityId,
     internalName: "test",
     displayName: "Test",
     kind: "entity",
     persistent: true,
     transform: {
-      position: { x: 100, y: 100 },
+      position: { x, y },
       rotation: 0.25,
       scale: { x: 1, y: 1 },
     },
@@ -120,8 +185,19 @@ function createEntity(): Entity {
   };
 }
 
+function createUnrotatedEntity(id: string, x: number, y: number): Entity {
+  const entity = createEntity(id, x, y);
+  entity.transform.rotation = 0;
+  entity.collider!.rotation = 0;
+  return entity;
+}
+
 function leftEdge(entity: Entity): number {
   return entity.transform.position.x - ((entity.collider?.size.x || 0) * Math.abs(entity.transform.scale.x)) / 2;
+}
+
+function rightEdge(entity: Entity): number {
+  return entity.transform.position.x + ((entity.collider?.size.x || 0) * Math.abs(entity.transform.scale.x)) / 2;
 }
 
 function run(name: string, fn: () => void): void {

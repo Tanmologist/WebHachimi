@@ -54,7 +54,9 @@ const MAX_SIZE = 4096;
 const EPSILON = 0.001;
 const rotationSnapStep = Math.PI / 12;
 const rotationSnapThreshold = Math.PI / 72;
-const DEFAULT_MOVE_SNAP_THRESHOLD = 8;
+const DEFAULT_MOVE_SNAP_THRESHOLD = 12;
+const DEFAULT_GRID_SNAP_THRESHOLD = 6;
+const DEFAULT_MOVE_GRID_SIZE = 48;
 
 let rotationSnapEnabled = true;
 let moveSnapEnabled = true;
@@ -134,6 +136,8 @@ type MoveSnapContext = {
   movingEntityIds: ReadonlySet<string> | readonly string[];
   enabled?: boolean;
   snapThreshold?: number;
+  gridSize?: number;
+  gridSnapThreshold?: number;
 };
 
 export function applyCanvasDragState(
@@ -166,6 +170,8 @@ export function applyCanvasDragState(
       movingEntityIds: moveSnapContext?.movingEntityIds || [entity.id],
       enabled: moveSnapContext?.enabled ?? moveSnapEnabled,
       snapThreshold: moveSnapContext?.snapThreshold ?? DEFAULT_MOVE_SNAP_THRESHOLD,
+      gridSize: moveSnapContext ? moveSnapContext.gridSize ?? DEFAULT_MOVE_GRID_SIZE : undefined,
+      gridSnapThreshold: moveSnapContext?.gridSnapThreshold ?? DEFAULT_GRID_SNAP_THRESHOLD,
     });
     const bodyOffset = entity.collider?.offset || { x: 0, y: 0 };
     entity.transform.position = {
@@ -195,6 +201,8 @@ function snapMoveCenter(params: {
   movingEntityIds: ReadonlySet<string> | readonly string[];
   enabled?: boolean;
   snapThreshold?: number;
+  gridSize?: number;
+  gridSnapThreshold?: number;
 }): Vec2 {
   if (params.enabled === false) return params.targetCenter;
   if (!params.sourceEntity.collider) return params.targetCenter;
@@ -217,6 +225,8 @@ function snapMoveCenter(params: {
     candidateEntities: params.candidateEntities,
     movingEntityIds: params.movingEntityIds,
     snapThreshold: params.snapThreshold ?? DEFAULT_MOVE_SNAP_THRESHOLD,
+    gridSize: params.gridSize,
+    gridSnapThreshold: params.gridSnapThreshold,
     enabled: params.enabled,
   });
   return {
@@ -230,17 +240,22 @@ function computeMoveSnap(params: {
   candidateEntities: Entity[];
   movingEntityIds: ReadonlySet<string> | readonly string[];
   snapThreshold?: number;
+  gridSize?: number;
+  gridSnapThreshold?: number;
   enabled?: boolean;
 }): Vec2 {
   if (params.enabled === false) return { x: 0, y: 0 };
   const snapThreshold = params.snapThreshold ?? DEFAULT_MOVE_SNAP_THRESHOLD;
+  const gridSize = params.gridSize && params.gridSize > 0 ? params.gridSize : undefined;
+  const gridSnapThreshold = params.gridSnapThreshold ?? DEFAULT_GRID_SNAP_THRESHOLD;
   const movingIds = toIdSet(params.movingEntityIds);
-  if (params.candidateEntities.length === 0) return { x: 0, y: 0 };
 
   const sourceLeft = params.sourceBounds.x;
   const sourceRight = params.sourceBounds.x + params.sourceBounds.w;
+  const sourceCenterX = params.sourceBounds.x + params.sourceBounds.w / 2;
   const sourceTop = params.sourceBounds.y;
   const sourceBottom = params.sourceBounds.y + params.sourceBounds.h;
+  const sourceCenterY = params.sourceBounds.y + params.sourceBounds.h / 2;
 
   let bestDeltaX = 0;
   let bestDeltaY = 0;
@@ -252,37 +267,61 @@ function computeMoveSnap(params: {
     const bounds = boundsFor(candidate);
     const left = bounds.x;
     const right = bounds.x + bounds.w;
+    const centerX = bounds.x + bounds.w / 2;
     const top = bounds.y;
     const bottom = bounds.y + bounds.h;
+    const centerY = bounds.y + bounds.h / 2;
 
-    const xCandidates = [
-      { delta: left - sourceLeft, distance: Math.abs(left - sourceLeft) },
-      { delta: right - sourceRight, distance: Math.abs(right - sourceRight) },
-      { delta: left - sourceRight, distance: Math.abs(left - sourceRight) },
-      { delta: right - sourceLeft, distance: Math.abs(right - sourceLeft) },
-    ];
-    for (const candidate of xCandidates) {
-      if (candidate.distance <= snapThreshold && candidate.distance < bestDistanceX) {
-        bestDistanceX = candidate.distance;
-        bestDeltaX = candidate.delta;
-      }
+    const xSnap = closestAnchorSnap([sourceLeft, sourceCenterX, sourceRight], [left, centerX, right], snapThreshold);
+    if (xSnap && xSnap.distance < bestDistanceX) {
+      bestDistanceX = xSnap.distance;
+      bestDeltaX = xSnap.delta;
     }
 
-    const yCandidates = [
-      { delta: top - sourceTop, distance: Math.abs(top - sourceTop) },
-      { delta: bottom - sourceBottom, distance: Math.abs(bottom - sourceBottom) },
-      { delta: top - sourceBottom, distance: Math.abs(top - sourceBottom) },
-      { delta: bottom - sourceTop, distance: Math.abs(bottom - sourceTop) },
-    ];
-    for (const candidate of yCandidates) {
-      if (candidate.distance <= snapThreshold && candidate.distance < bestDistanceY) {
-        bestDistanceY = candidate.distance;
-        bestDeltaY = candidate.delta;
-      }
+    const ySnap = closestAnchorSnap([sourceTop, sourceCenterY, sourceBottom], [top, centerY, bottom], snapThreshold);
+    if (ySnap && ySnap.distance < bestDistanceY) {
+      bestDistanceY = ySnap.distance;
+      bestDeltaY = ySnap.delta;
+    }
+  }
+
+  if (gridSize) {
+    const gridX = closestGridSnap([sourceLeft, sourceCenterX, sourceRight], gridSize, gridSnapThreshold);
+    if (gridX && gridX.distance < bestDistanceX) {
+      bestDistanceX = gridX.distance;
+      bestDeltaX = gridX.delta;
+    }
+    const gridY = closestGridSnap([sourceTop, sourceCenterY, sourceBottom], gridSize, gridSnapThreshold);
+    if (gridY && gridY.distance < bestDistanceY) {
+      bestDistanceY = gridY.distance;
+      bestDeltaY = gridY.delta;
     }
   }
 
   return { x: bestDeltaX, y: bestDeltaY };
+}
+
+function closestAnchorSnap(sourceAnchors: number[], targetAnchors: number[], threshold: number): { delta: number; distance: number } | undefined {
+  let best: { delta: number; distance: number } | undefined;
+  for (const source of sourceAnchors) {
+    for (const target of targetAnchors) {
+      const delta = target - source;
+      const distance = Math.abs(delta);
+      if (distance <= threshold && (!best || distance < best.distance)) best = { delta, distance };
+    }
+  }
+  return best;
+}
+
+function closestGridSnap(sourceAnchors: number[], gridSize: number, threshold: number): { delta: number; distance: number } | undefined {
+  let best: { delta: number; distance: number } | undefined;
+  for (const source of sourceAnchors) {
+    const target = Math.round(source / gridSize) * gridSize;
+    const delta = target - source;
+    const distance = Math.abs(delta);
+    if (distance <= threshold && (!best || distance < best.distance)) best = { delta, distance };
+  }
+  return best;
 }
 
 function toIdSet(values: ReadonlySet<string> | readonly string[]): Set<string> {
@@ -551,6 +590,8 @@ export function applyMultiCanvasDragState(
       candidateEntities: moveSnapContext?.allEntities || entities,
       movingEntityIds: moveSnapContext?.movingEntityIds || drag.entries.map((entry) => entry.entityId),
       snapThreshold: moveSnapContext?.snapThreshold ?? DEFAULT_MOVE_SNAP_THRESHOLD,
+      gridSize: moveSnapContext ? moveSnapContext.gridSize ?? DEFAULT_MOVE_GRID_SIZE : undefined,
+      gridSnapThreshold: moveSnapContext?.gridSnapThreshold ?? DEFAULT_GRID_SNAP_THRESHOLD,
       enabled: moveSnapContext?.enabled ?? moveSnapEnabled,
     });
     const dx = newCenter.x - drag.groupBounds.center.x + snap.x;
