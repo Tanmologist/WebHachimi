@@ -2074,6 +2074,7 @@ function toggleRun(): void {
     windowMenuOpen = false;
     contextMenu = undefined;
     enterGameMode(root);
+    syncGameCameraToPlayer();
   } else {
     releaseGameplayInputs();
     leaveGameMode(root);
@@ -2083,6 +2084,16 @@ function toggleRun(): void {
       ? "游戏运行中，当前画布继续计时，按 Z 原地冻结"
       : `编辑冻结，当前运行状态已暂停${snapshot ? `，捕捉帧 ${snapshot.frame}` : ""}`;
   renderAll();
+}
+
+function syncGameCameraToPlayer(): void {
+  const player = gameCameraPlayer();
+  if (!player) return;
+  renderer.centerOnWorldPoint({ x: player.transform.position.x, y: player.transform.position.y - 80 }, 1);
+}
+
+function gameCameraPlayer(): Entity | undefined {
+  return world.allEntities().find((entity) => entity.internalName === "Player") || world.allEntities().find((entity) => entity.behavior?.builtin === "playerPlatformer");
 }
 
 function releaseGameplayInputs(): void {
@@ -2287,6 +2298,7 @@ function renderAll(): void {
 function renderCanvasNow(projectSnapshot?: Project): void {
   const snapshotProject = projectSnapshot || store.peekProject();
   const showEditorOverlays = world.mode !== "game";
+  if (world.mode === "game") syncGameCameraToPlayer();
   renderer.render(world, {
     selectedId: showEditorOverlays ? selectedId : undefined,
     selectedIds: showEditorOverlays ? currentSelectedEntityIds() : undefined,
