@@ -58,7 +58,6 @@ import {
 } from "./viewText";
 import { maintenanceSummary } from "./summaryModels";
 import { buildProjectForSave, forceLoadProjectFromDiskForEditor, loadProjectForEditor, saveProjectFromEditor, saveProjectLocallyFromEditor } from "./persistenceController";
-import type { ViewportState } from "./viewportMath";
 import {
   isImageFileLike,
   looksLikeExternalResource,
@@ -167,7 +166,6 @@ let lastTime = performance.now();
 let raf = 0;
 let canvasDirty = true;
 const editorPerformance = new EditorPerformanceController(lastTime);
-let editorViewportBeforeGame: ViewportState | undefined;
 
 let drawingBrush = false;
 let drawingBrushPointerId: number | undefined;
@@ -2072,35 +2070,19 @@ function resetTransformSnapState(): void {
 function toggleRun(): void {
   const snapshot = world.toggleEditorFreeze();
   if (world.mode === "game") {
-    editorViewportBeforeGame = renderer.viewportState();
     releaseGameplayInputs();
     windowMenuOpen = false;
     contextMenu = undefined;
     enterGameMode(root);
-    syncGameCameraToPlayer();
   } else {
     releaseGameplayInputs();
     leaveGameMode(root);
-    if (editorViewportBeforeGame) {
-      renderer.centerOnWorldPoint({ x: editorViewportBeforeGame.x, y: editorViewportBeforeGame.y }, editorViewportBeforeGame.zoom);
-      editorViewportBeforeGame = undefined;
-    }
   }
   notice =
     world.mode === "game"
       ? "游戏运行中，当前画布继续计时，按 Z 原地冻结"
       : `编辑冻结，当前运行状态已暂停${snapshot ? `，捕捉帧 ${snapshot.frame}` : ""}`;
   renderAll();
-}
-
-function syncGameCameraToPlayer(): void {
-  const player = gameCameraPlayer();
-  if (!player) return;
-  renderer.centerOnWorldPoint({ x: player.transform.position.x, y: player.transform.position.y - 80 }, 1);
-}
-
-function gameCameraPlayer(): Entity | undefined {
-  return world.allEntities().find((entity) => entity.internalName === "Player") || world.allEntities().find((entity) => entity.behavior?.builtin === "playerPlatformer");
 }
 
 function releaseGameplayInputs(): void {
@@ -2305,7 +2287,6 @@ function renderAll(): void {
 function renderCanvasNow(projectSnapshot?: Project): void {
   const snapshotProject = projectSnapshot || store.peekProject();
   const showEditorOverlays = world.mode !== "game";
-  if (world.mode === "game") syncGameCameraToPlayer();
   renderer.render(world, {
     selectedId: showEditorOverlays ? selectedId : undefined,
     selectedIds: showEditorOverlays ? currentSelectedEntityIds() : undefined,

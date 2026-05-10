@@ -168,7 +168,7 @@ export class V2Renderer {
     const entities = world.allEntities();
     const resources = options.resources || emptyResources;
     const isMultiSelect = selectedIds && selectedIds.size > 1;
-    if (showBodyMaterial && showEditorDecorations) this.drawGrid();
+    if (showBodyMaterial) this.drawGrid();
     if (!showEditorDecorations) this.drawGameplayAttackTelegraphs(world);
     for (const entity of entities) {
       const selectedPart = !isMultiSelect && selectedIds?.has(entity.id)
