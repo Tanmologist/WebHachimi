@@ -563,6 +563,11 @@ input {
   z-index: 0;
 }
 
+.workbench-preview.is-game-mode .stage-grid,
+.workbench-preview.is-game-mode .stage::after {
+  display: none;
+}
+
 .stage-grid {
   position: absolute;
   inset: 0;

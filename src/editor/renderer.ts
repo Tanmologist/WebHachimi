@@ -1,5 +1,6 @@
 import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
 import type { BrushContext, Entity, Resource, Task } from "../project/schema";
+import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
 import { isVisualResource, resourceFrameAtTime, type ResourceFrameRect } from "./resourceAnimation";
@@ -167,7 +168,8 @@ export class V2Renderer {
     const entities = world.allEntities();
     const resources = options.resources || emptyResources;
     const isMultiSelect = selectedIds && selectedIds.size > 1;
-    if (showBodyMaterial) this.drawGrid();
+    if (showBodyMaterial && showEditorDecorations) this.drawGrid();
+    if (!showEditorDecorations) this.drawGameplayAttackTelegraphs(world);
     for (const entity of entities) {
       const selectedPart = !isMultiSelect && selectedIds?.has(entity.id)
         ? entity.id === options.selectedId
@@ -184,6 +186,8 @@ export class V2Renderer {
       this.drawTaskPreview(world, options.previewTask?.brushContext);
       this.drawTaskPreview(world, options.liveBrush, true);
       this.drawShapeDraft(options.shapeDraft);
+    } else {
+      entities.forEach((entity) => this.drawGameplayHealthBar(entity, world.clock.frame));
     }
     this.stats.visibleObjects = this.worldLayer.children.length + this.overlayLayer.children.length;
     this.stats.renderedAt = performance.now();
@@ -451,6 +455,7 @@ export class V2Renderer {
     const texture = this.imageTextures.get(imagePath);
     if (!texture) {
       this.loadImageTexture(imagePath);
+      if (!showEditorDecorations) return;
       const pending = this.takeGraphics();
       drawGeometryBox(pending, geometry);
       pending.fill({ color: 0x0b1f26, alpha: selected ? 0.48 : 0.32 });
@@ -481,6 +486,47 @@ export class V2Renderer {
     });
     outline.stroke();
     this.worldLayer.addChild(outline);
+  }
+
+  private drawGameplayAttackTelegraphs(world: RuntimeWorld): void {
+    const frame = world.clock.frame;
+    for (const entity of world.allEntities()) {
+      if (entity.runtime?.defeated || !entity.collider) continue;
+      const start = entity.runtime?.attackStartFrame;
+      const activeUntil = entity.runtime?.attackActiveUntilFrame;
+      if (start === undefined || activeUntil === undefined || frame > activeUntil) continue;
+      const rect = gameplayAttackRect(entity);
+      const graphics = this.takeGraphics();
+      graphics.rect(rect.x, rect.y, rect.w, rect.h);
+      if (frame < start) {
+        graphics.fill({ color: 0xffd166, alpha: 0.18 });
+        graphics.setStrokeStyle({ width: 2, color: 0xffd166, alpha: 0.68 });
+      } else {
+        graphics.fill({ color: 0xff4d5d, alpha: 0.24 });
+        graphics.setStrokeStyle({ width: 3, color: 0xff4d5d, alpha: 0.82 });
+      }
+      graphics.stroke();
+      this.worldLayer.addChild(graphics);
+    }
+  }
+
+  private drawGameplayHealthBar(entity: Entity, frame: number): void {
+    const maxHealth = readNumberParam(entity, "health");
+    const health = entity.runtime?.health ?? maxHealth;
+    if (maxHealth === undefined || health === undefined) return;
+    if (!entity.behavior && !entity.tags.some((tag) => gameplayTag(tag))) return;
+    const bounds = boundsFor(entity);
+    const width = Math.max(38, Math.min(96, bounds.w * 1.25));
+    const height = 6;
+    const x = bounds.x + bounds.w / 2 - width / 2;
+    const y = bounds.y - 16;
+    const ratio = clamp(health / Math.max(1, maxHealth), 0, 1);
+    const bar = this.takeGraphics();
+    bar.roundRect(x, y, width, height, 3);
+    bar.fill({ color: 0x111817, alpha: 0.78 });
+    bar.roundRect(x + 1, y + 1, Math.max(0, (width - 2) * ratio), height - 2, 2);
+    bar.fill({ color: entity.runtime?.defeated ? 0x6f756c : frame <= (entity.runtime?.hitFlashUntilFrame ?? -1) ? 0xf2d16b : 0x79d6ba, alpha: 0.95 });
+    this.worldLayer.addChild(bar);
   }
 
   private loadImageTexture(imagePath: string): void {
@@ -1205,6 +1251,26 @@ function midpoint(a: Vec2, b: Vec2): Vec2 {
 
 export function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function gameplayAttackRect(entity: Entity): { x: number; y: number; w: number; h: number } {
+  const bounds = boundsFor(entity);
+  const direction = entity.runtime?.facing === -1 ? -1 : 1;
+  const range = readNumberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
+  const height = readNumberParam(entity, "attackHeight") ?? bounds.h;
+  const x = direction >= 0 ? bounds.x + bounds.w : bounds.x - range;
+  const y = bounds.y + bounds.h / 2 - height / 2;
+  return { x, y, w: range, h: height };
+}
+
+function readNumberParam(entity: Entity, key: string): number | undefined {
+  const value = entity.behavior?.params?.[key];
+  return typeof value === "number" ? value : undefined;
+}
+
+function gameplayTag(tag: string): boolean {
+  const normalized = tag.toLowerCase();
+  return normalized.includes("enemy") || normalized.includes("player") || tag.includes("敌") || tag.includes("玩家");
 }
 
 function resetDisplayObject(item: Graphics | Sprite): void {
