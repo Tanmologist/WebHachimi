@@ -230,7 +230,7 @@ export function mountEditorShell(root: HTMLElement): void {
               <small>挂在当前对象上</small>
             </header>
             <div class="object-resources-body workspace-section__body">
-              <div class="object-resources-drop-zone" data-role="resource-drop-zone">
+              <div class="object-resources-drop-zone" data-role="resource-drop-zone" role="button" tabindex="0" aria-label="导入资源">
                 <span>拖入文件、粘贴图片或点击添加资源</span>
                 <input type="file" data-role="object-resource-input" multiple hidden />
               </div>
@@ -261,6 +261,13 @@ export function mountEditorShell(root: HTMLElement): void {
                 </div>
               </div>
             </div>
+          </section>
+          <section class="workspace-section workspace-section--library">
+            <header class="workspace-section__header">
+              <span class="section-title">资源库</span>
+              <small>工程级资源</small>
+            </header>
+            <div class="workspace-section__body resource-library" data-role="resource-library"></div>
           </section>
           <section class="workspace-section workspace-section--tasks">
             <header class="workspace-section__header">
@@ -308,7 +315,6 @@ export function mountEditorShell(root: HTMLElement): void {
         </div>
       </section>
 
-      <section class="resource-library" data-role="resource-library" hidden></section>
       <div class="dock-overlay" data-dock-overlay aria-hidden="true">
         <div class="dock-target dock-target--left" data-dock-zone="left" data-label="世界树"></div>
         <div class="dock-target dock-target--right" data-dock-zone="right" data-label="AI 任务"></div>
@@ -370,7 +376,7 @@ export function mountEditorShell(root: HTMLElement): void {
         <div class="taskbar-windows" data-taskbar-buttons aria-label="活动窗口"></div>
       </footer>
 
-      <div class="runtime-status" aria-hidden="true">
+      <div class="runtime-status">
         <span data-role="mode">预览</span>
         <span data-role="save-status">静态外壳</span>
         <span data-role="pointer">吸附目标：浮动窗口</span>
@@ -522,7 +528,12 @@ function syncPreviewOpenButtons(controller: PreviewController, activeWindowId: s
   controller.root.querySelectorAll<HTMLButtonElement>("[data-preview-open-window]").forEach((button) => {
     const isActive = Boolean(activeWindowId) && button.dataset.previewOpenWindow === activeWindowId;
     button.classList.toggle("is-active", isActive);
-    button.setAttribute("aria-pressed", String(isActive));
+    if (button.closest('[role="tablist"]')) {
+      button.setAttribute("aria-selected", String(isActive));
+      button.removeAttribute("aria-pressed");
+    } else {
+      button.setAttribute("aria-pressed", String(isActive));
+    }
   });
 }
 
@@ -1195,10 +1206,19 @@ function captureDefaultPreviewWindows(root: HTMLElement): Map<PreviewWindowId, P
 function syncPreviewWindowStates(controller: PreviewController): void {
   allPreviewWindows(controller.root).forEach((windowNode) => {
     const id = windowNode.dataset.previewWindow || "";
-    const state = windowState(windowNode);
+    let state = windowState(windowNode);
+    if (state === "open" && shouldStartMinimizedOnCompact(id)) {
+      state = "minimized";
+      windowNode.dataset.windowState = state;
+    }
     windowNode.hidden = state !== "open";
     controller.workbench.setAttribute(`data-window-${id}`, state);
   });
+}
+
+function shouldStartMinimizedOnCompact(windowId: PreviewWindowId): boolean {
+  if (typeof window === "undefined" || !window.matchMedia("(max-width: 720px)").matches) return false;
+  return windowId === "explorer" || windowId === "workspace";
 }
 
 function applyDefaultPreviewTabGroups(controller: PreviewController): void {

@@ -780,6 +780,14 @@ input {
   font-size: 11px;
 }
 
+.resource-library {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  overflow: auto;
+  padding: 8px;
+}
+
 .bottom-panel {
   grid-area: bottom;
   display: grid;
@@ -1529,12 +1537,26 @@ input {
       / var(--tools-track) minmax(260px, 1fr);
   }
 
+  .sidebar,
+  .ai-task-panel {
+    position: absolute;
+    top: 35px;
+    right: 0;
+    bottom: var(--taskbar-track);
+    left: var(--tools-track);
+    z-index: 78;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+    box-shadow: var(--wb-shadow);
+  }
+
   .sidebar {
-    display: none;
+    display: flex;
   }
 
   .ai-task-panel {
-    display: none;
+    display: flex;
   }
 
   .dock-target--right {

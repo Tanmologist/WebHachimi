@@ -413,12 +413,15 @@ function bindUi(): void {
   objectResourceDropZone?.addEventListener("click", () => {
     objectResourceInput?.click();
   });
+  objectResourceDropZone?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    objectResourceInput?.click();
+  });
 
   objectResourceInput?.addEventListener("change", () => {
     const files = Array.from(objectResourceInput.files || []);
-    for (const file of files) {
-      addObjectResource(file.name, guessResourceKind(file.name));
-    }
+    if (files.length) void importResourceFiles(files);
     objectResourceInput.value = "";
   });
 
@@ -436,9 +439,7 @@ function bindUi(): void {
     event.preventDefault();
     objectResourceDropZone.classList.remove("is-dragover");
     const files = Array.from(event.dataTransfer?.files || []);
-    for (const file of files) {
-      addObjectResource(file.name, guessResourceKind(file.name));
-    }
+    if (files.length) void importResourceFiles(files);
   });
 
   objectResourcesList?.addEventListener("click", (event) => {
@@ -449,14 +450,20 @@ function bindUi(): void {
   });
 
   document.addEventListener("paste", (event) => {
-    const objectResourcesWindow = root.querySelector<HTMLElement>(".object-resources-window");
-    if (!objectResourcesWindow || objectResourcesWindow.hidden) return;
+    const target = event.target as HTMLElement | null;
+    const isObjectResourceTarget = Boolean(target?.closest('[data-role="resource-drop-zone"], .object-resources-body'));
+    if (!isObjectResourceTarget) return;
     const items = Array.from(event.clipboardData?.items || []);
+    const files: File[] = [];
     for (const item of items) {
       if (item.kind === "file") {
         const file = item.getAsFile();
-        if (file) addObjectResource(file.name, guessResourceKind(file.name));
+        if (file) files.push(file);
       }
+    }
+    if (files.length) {
+      event.preventDefault();
+      void importResourceFiles(files);
     }
   });
   const libraryPanelBody = root.querySelector<HTMLElement>('.v2-library-panel .v2-panel-body');
@@ -527,10 +534,10 @@ function bindUi(): void {
       if (!panel) return;
       if (button.dataset.panelAction === "close") {
         panelLayout.closePanel(panel);
-        notice = `${panelLabel(panel)}已关闭��`;
+        notice = `${panelLabel(panel)}已关闭`;
       } else {
         panelLayout.minimizePanel(panel);
-        notice = `${panelLabel(panel)}已最小化到底部托盘��`;
+        notice = `${panelLabel(panel)}已最小化到底部托盘`;
       }
       renderAll();
     });
@@ -541,7 +548,7 @@ function bindUi(): void {
       const panel = restoreButton.dataset.restorePanel as PanelId | undefined;
       if (!panel) return;
       panelLayout.restorePanel(panel);
-      notice = `${panelLabel(panel)}已恢复��`;
+      notice = `${panelLabel(panel)}已恢复`;
       renderAll();
       return;
     }
@@ -684,7 +691,7 @@ function centerWindowPanel(panel: PanelId): void {
   windowMenuOpen = false;
   panelLayout.centerPanel(panel);
   if (panel === "scene") activeSurface = "world";
-  notice = `${panelLabel(panel)}已归中��`;
+  notice = `${panelLabel(panel)}已归中`;
   renderAll();
 }
 
@@ -801,11 +808,11 @@ function commitCanvasTransform(drag: CanvasDragState): string | undefined {
   const entity = editableEntity(drag.entityId);
   if (!entity) {
     syncWorldFromStore();
-    return "对象状��已刷新，未提交本次变换";
+    return "对象状态已刷新，未提交本次变换";
   }
   if (!entity.persistent || !scene.entities[entity.id]) {
     syncWorldFromStore();
-    return "����ʱ����֧�ֳ�����";
+    return "运行时对象暂不支持提交变换";
   }
   if (drag.part === "presentation") return commitPresentationTransform(entity, drag);
   const finalTransform = cloneJson(entity.transform);
@@ -1057,7 +1064,7 @@ function enterSuperBrushMode(): void {
   superBrushTaskDialogOpen = false;
   superBrushTaskError = "";
   focusCanvasSurface();
-  notice = "已进入超级画笔模式��右键撤锢�上一笔，顶部确认后填写任务";
+  notice = "已进入超级画笔模式，右键撤销上一笔，顶部确认后填写任务";
   renderAll();
 }
 
@@ -1644,14 +1651,14 @@ function onCanvasPointerUp(event: PointerEvent): void {
 
 function openSuperBrushTaskDialog(): void {
   if (!pendingBrush || !hasMeaningfulSuperBrushContext(pendingBrush)) {
-    notice = "请先用超级画笔至少画丢�笔，再确认画笔";
+    notice = "请先用超级画笔至少画一笔，再确认画笔";
     renderAll();
     return;
   }
   superBrushTaskDialogOpen = true;
   superBrushTaskError = "";
   superBrushTaskInput.value = "";
-  notice = "填写这次超级画笔任务，排队后会恢复编辑界靃6�9";
+  notice = "填写这次超级画笔任务，排队后会恢复编辑界面";
   renderAll();
   superBrushTaskInput.focus();
 }
@@ -1729,7 +1736,7 @@ function undoLastSuperBrushStrokeOrCancel(): void {
     drawingBrushPointerId = undefined;
     brushStartPoint = undefined;
     currentStrokePoints = [];
-    notice = "已取消当前这丢�笔";
+    notice = "已取消当前这一笔";
     renderAll();
     return;
   }
@@ -1741,7 +1748,7 @@ function undoLastSuperBrushStrokeOrCancel(): void {
     ...pendingBrush,
     strokes: pendingBrush.strokes.slice(0, -1),
   });
-  notice = `已撤锢�上一笔：${summarizeSuperBrushDraft(pendingBrush)}。`;
+  notice = `已撤销上一笔：${summarizeSuperBrushDraft(pendingBrush)}。`;
   renderAll();
 }
 
@@ -1810,7 +1817,7 @@ function finishPolygonDraft(): void {
     return;
   }
   if (polygonDraft.points.length < 3) {
-    notice = "多边形至少需�?3 个顶点";
+    notice = "多边形至少需要 3 个顶点";
     renderAll();
     return;
   }
@@ -1886,7 +1893,7 @@ function onKeyDown(event: KeyboardEvent): void {
         return;
       }
       syncWorldFromStore();
-      markProjectDirty(isRedo ? "已重" : "已撤锢�");
+      markProjectDirty(isRedo ? "已重做" : "已撤销");
       renderAll();
       return;
     }
@@ -1974,8 +1981,8 @@ function toggleRun(): void {
   }
   notice =
     world.mode === "game"
-      ? "游戏运行中��同丢�画布继续计时，按 Z 原地冻结"
-      : `编辑冻结，同丢�运行状��已暂停${snapshot ? `捕捉�?${snapshot.frame}` : ""}`;
+      ? "游戏运行中，当前画布继续计时，按 Z 原地冻结"
+      : `编辑冻结，当前运行状态已暂停${snapshot ? `，捕捉帧 ${snapshot.frame}` : ""}`;
   renderAll();
 }
 
@@ -2215,7 +2222,7 @@ function isSuperBrushModeActive(): boolean {
 
 function superBrushPointerText(): string {
   const base = `工具${toolLabel(activeTool)}`;
-  if (drawingBrush) return `${base} · 正在记录�?${(pendingBrush?.strokes.length || 0) + 1} 笔`;
+  if (drawingBrush) return `${base} · 正在记录第 ${(pendingBrush?.strokes.length || 0) + 1} 笔`;
   if (pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush)) return `${base} · ${summarizeSuperBrushDraft(pendingBrush)}`;
   if (activeTool === "superBrush") return `${base} · 拖动画笔或单击对象`;
   return base;
@@ -2259,8 +2266,8 @@ function renderUi(projectSnapshot?: Project): void {
     const target = button.dataset.surfaceTarget;
     const isActive = target === activeSurface;
     button.classList.toggle("is-active", isActive);
-    button.setAttribute("role", "menuitemradio");
-    button.setAttribute("aria-checked", String(isActive));
+    button.setAttribute("role", "tab");
+    button.setAttribute("aria-selected", String(isActive));
   });
   modeNode.textContent = world.mode === "game" ? "游戏运行" : "编辑冻结";
   modeNode.classList.toggle("is-running", world.mode === "game");
@@ -2276,8 +2283,8 @@ function renderUi(projectSnapshot?: Project): void {
   polygonActionsNode.hidden = !(activeTool === "polygon" && Boolean(polygonDraft?.points.length));
   polygonActionsNode.setAttribute("aria-hidden", String(polygonActionsNode.hidden));
   taskInput.placeholder = pendingBrush
-    ? "描述这些画笔标记要让 AI 改什"
-    : "写给 AI 的任";
+    ? "描述这些画笔标记要让 AI 改什么"
+    : "写给 AI 的任务";
   brushSummaryNode.textContent = brushSummary;
   confirmBrushButtons.forEach((button) => {
     button.disabled = !canConfirmBrush;
@@ -2551,10 +2558,10 @@ function setEntityPersistent(entityId: string, value: boolean): void {
     syncOnFailure: false,
   });
   if (result.ok) {
-    notice = `${entity.displayName}${value ? " set persistent" : " unset persistent"}`;
+    notice = `${entity.displayName}${value ? "已设为持久对象" : "已取消持久对象"}`;
     renderAll();
   } else {
-    notice = `属��更新失败：${result.error}`;
+    notice = `属性更新失败：${result.error}`;
   }
 }
 
@@ -2567,15 +2574,15 @@ function setEntityBodyMode(entityId: string, mode: string): void {
     actor: "user",
     patches: [{ op: "set", path, value: mode }],
     inversePatches: [{ op: "set", path, value: oldMode }],
-    diffSummary: `调整物理模式${entity.displayName} �?${mode}`,
+    diffSummary: `调整物理模式${entity.displayName} 为 ${mode}`,
     dirtyReason: `已更新 ${entity.displayName} 物理模式`,
     syncOnFailure: false,
   });
   if (result.ok) {
-    notice = `${entity.displayName} 物理模式已改�?${mode}。`;
+    notice = `${entity.displayName} 物理模式已改为 ${mode}。`;
     renderAll();
   } else {
-    notice = `属��更新失败：${result.error}`;
+    notice = `属性更新失败：${result.error}`;
   }
 }
 
@@ -2593,10 +2600,10 @@ function setEntityColliderSolid(entityId: string, value: boolean): void {
     syncOnFailure: false,
   });
   if (result.ok) {
-    notice = `${entity.displayName}${value ? " collision enabled" : " collision disabled"}`;
+    notice = `${entity.displayName}${value ? "已启用实体碰撞" : "已禁用实体碰撞"}`;
     renderAll();
   } else {
-    notice = `属��更新失败：${result.error}`;
+    notice = `属性更新失败：${result.error}`;
   }
 }
 
@@ -2614,10 +2621,10 @@ function setEntityColliderTrigger(entityId: string, value: boolean): void {
     syncOnFailure: false,
   });
   if (result.ok) {
-    notice = `${entity.displayName}${value ? " set as trigger" : " unset as trigger"}`;
+    notice = `${entity.displayName}${value ? "已设为触发器" : "已取消触发器"}`;
     renderAll();
   } else {
-    notice = `属��更新失败：${result.error}`;
+    notice = `属性更新失败：${result.error}`;
   }
 }
 
@@ -2635,10 +2642,10 @@ function setEntityRenderVisible(entityId: string, value: boolean): void {
     syncOnFailure: false,
   });
   if (result.ok) {
-    notice = `${entity.displayName} visual${value ? " visible" : " hidden"}`;
+    notice = `${entity.displayName} 可视体已${value ? "显示" : "隐藏"}`;
     renderAll();
   } else {
-    notice = `属��更新失败：${result.error}`;
+    notice = `属性更新失败：${result.error}`;
   }
 }
 
@@ -2807,7 +2814,7 @@ function shouldTryLocalClipboardFiles(data: DataTransfer | null): boolean {
 async function importResourceFiles(files: File[]): Promise<void> {
   const supported = files;
   if (supported.length === 0) {
-    notice = "没有从剪贴板或文件��择中读取到可用资源";
+    notice = "没有从剪贴板或文件选择中读取到可用资源";
     renderAll();
     return;
   }
@@ -2868,37 +2875,6 @@ function addResourceFromText(rawText: string): void {
     return;
   }
   addImportedResource(metadata);
-}
-
-function guessResourceKind(fileName: string): string {
-  const ext = fileName.split(".").pop()?.toLowerCase() || "";
-  const imageExts = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico", "avif"]);
-  const audioExts = new Set(["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"]);
-  const videoExts = new Set(["mp4", "webm", "avi", "mov", "mkv", "wmv"]);
-  const fontExts = new Set(["ttf", "otf", "woff", "woff2"]);
-  if (imageExts.has(ext)) return "图片";
-  if (audioExts.has(ext)) return "音频";
-  if (videoExts.has(ext)) return "视频";
-  if (fontExts.has(ext)) return "字体";
-  if (ext === "json") return "数据";
-  if (ext === "glb" || ext === "gltf") return "3D模型";
-  return "文件";
-}
-
-function addObjectResource(fileName: string, kind: string): void {
-  const list = document.querySelector<HTMLElement>('[data-role="object-resources-list"]');
-  if (!list) return;
-  const entry = document.createElement("div");
-  entry.className = "attached-resource";
-  entry.innerHTML = `
-    <div class="attached-resource__header">
-      <strong>${escapeHtml(fileName)}</strong>
-      <small>${escapeHtml(kind)}</small>
-      <button type="button" class="resource-remove" aria-label="移除 ${escapeHtml(fileName)}">x</button>
-    </div>
-    <textarea class="resource-description" rows="2" placeholder="描述这个资源的用途，例如：死亡后播放并在 1.6 秒内淡出�? aria-label="${escapeHtml(fileName)} 的资源描�?></textarea>
-  `;
-  list.appendChild(entry);
 }
 
 function addImportedResources(inputs: ResourceImportMetadata[]): void {
@@ -2971,7 +2947,7 @@ function addImportedResource(input: ResourceImportMetadata): void {
     patches,
     inversePatches,
     diffSummary: entity && isVisualResourceType(input.type)
-      ? `添加资源并替�?${entity.displayName} 的当前可视体`
+      ? `添加资源并替换 ${entity.displayName} 的当前可视体`
       : `添加资源 ${resource.displayName}`,
     dirtyReason: "资源已添加",
     syncOnFailure: false,
@@ -2988,8 +2964,8 @@ function addImportedResource(input: ResourceImportMetadata): void {
     selectionArea = undefined;
   }
   notice = entity && isVisualResourceType(input.type)
-    ? `已添�?${resource.displayName}，并替换当前可视体��`
-    : `已添加资�?${resource.displayName}。`;
+    ? `已添加 ${resource.displayName}，并替换当前可视体。`
+    : `已添加资源 ${resource.displayName}。`;
   renderAll();
 }
 
@@ -3101,7 +3077,7 @@ function saveResourceDescription(resourceId: ResourceId, rawDescription: string)
   }
   syncWorldFromStore();
   markProjectDirty("资源描述已保存并排队");
-  notice = taskResult.ok ? "资源描述已保存，已作�?AI 待处理任务排队" : "资源描述已保存，但任务排队失败";
+  notice = taskResult.ok ? "资源描述已保存，已作为 AI 待处理任务排队" : "资源描述已保存，但任务排队失败";
   renderAll();
 }
 
@@ -3129,7 +3105,7 @@ function saveResourceAnimation(resourceId: ResourceId, row: HTMLElement): void {
   if (mode === "sequence") {
     const frameCount = imageAttachments(resource).length;
     if (frameCount < 2) {
-      notice = "PNG 序列至少霢��?2 张图片";
+      notice = "PNG 序列至少需要 2 张图片";
       renderAll();
       return;
     }
@@ -3142,7 +3118,7 @@ function saveResourceAnimation(resourceId: ResourceId, row: HTMLElement): void {
     const columns = numericInputValue(row, "columns", resource.sprite?.columns || 4);
     const rows = numericInputValue(row, "rows", resource.sprite?.rows || 4);
     if (columns < 1 || rows < 1) {
-      notice = "宫格动画霢�要有效的行数和列数";
+      notice = "宫格动画需要有效的行数和列数";
       renderAll();
       return;
     }
@@ -3158,7 +3134,7 @@ function saveResourceAnimation(resourceId: ResourceId, row: HTMLElement): void {
       spacing: numericInputValue(row, "spacing", resource.sprite?.spacing || 0),
     });
   }
-  applyResourceUpdate(resource, nextResource, `配置资源动画${resource.displayName}`, `已配�?${resource.displayName} 的动画切帧��`);
+  applyResourceUpdate(resource, nextResource, `配置资源动画${resource.displayName}`, `已配置 ${resource.displayName} 的动画切帧。`);
 }
 
 function clearResourceAnimation(resourceId: ResourceId): void {
@@ -3172,7 +3148,7 @@ function clearResourceAnimation(resourceId: ResourceId): void {
   const nextResource = cloneJson(resource);
   delete nextResource.sprite;
   if (nextResource.type === "sprite" || nextResource.type === "animation") nextResource.type = "image";
-  applyResourceUpdate(resource, nextResource, `清除资源动画${resource.displayName}`, `已把 ${resource.displayName} 改回静��资源��`);
+  applyResourceUpdate(resource, nextResource, `清除资源动画${resource.displayName}`, `已把 ${resource.displayName} 改回静态资源。`);
 }
 
 function applyResourceUpdate(previousResource: Resource, nextResource: Resource, diffSummary: string, successNotice: string): void {
