@@ -164,11 +164,10 @@ runSmoke("parry workshop lands 100ms reaction and counter-hit", () => {
         expect: { "state.health": initialPlayerHealth },
       },
       {
-        label: "enemy takes counter damage and stun",
+        label: "enemy takes super counter damage",
         target: { kind: "entity", entityId: enemy.id },
         expect: {
-          "state.health": initialEnemyHealth - 1,
-          "state.hitStunUntilFrame": { $gte: parrySuccess.frame },
+          "state.health": { $lte: initialEnemyHealth - 1 },
         },
       },
     ],
@@ -250,6 +249,128 @@ runSmoke("combat attack touch offsets move active window", () => {
     shifted,
     dx,
     dy,
+  };
+});
+
+runSmoke("combat hold attack releases charged hit", () => {
+  const project = createStarterProject();
+  const scene = activeScene(project);
+  const player = findByInternalName(scene, "Player");
+  const enemy = findByInternalName(scene, "Enemy_Patrol");
+  setupCombatSliceActors(player, enemy, { enemyHealth: 5, autoEnemy: false });
+  player.body!.gravityScale = 0;
+  player.behavior!.params.gravityScale = 0;
+  player.behavior!.params.fallGravityScale = 0;
+  player.behavior!.params.jumpReleaseGravityScale = 0;
+  const world = new RuntimeWorld({ scene });
+  const controller = new InteractiveTestRunner({ world });
+  const attackKey = actorScopedKey(player.id, "attack");
+
+  controller.press(attackKey);
+  controller.step(65);
+  assert((requireEntity(world, player.id).runtime?.chargeStage ?? 0) >= 1, "player should reach charged stage while holding attack");
+  controller.release(attackKey);
+
+  const hitResult = controller.stepUntil({
+    maxFrames: 80,
+    label: "charged attack hits enemy",
+    predicate: () => Boolean(controller.findCombatEvent({ type: "hit", attackerId: player.id, defenderId: enemy.id, "data.kind": "charged" } as Partial<CombatEvent>)),
+    freezeOnMatch: true,
+  });
+  assert(hitResult.matched, hitResult.logs[0]?.message || "charged attack did not hit enemy");
+  const started = mustCombatEvent(controller, { type: "attackStarted", attackerId: player.id, "data.kind": "charged" } as Partial<CombatEvent>);
+  const hit = mustCombatEvent(controller, { type: "hit", attackerId: player.id, defenderId: enemy.id, "data.kind": "charged" } as Partial<CombatEvent>);
+  assert(readEventNumber(hit, "data.damage") >= 2, "charged hit should deal more than normal attack damage");
+
+  return {
+    attackStartedFrame: started.frame,
+    hitFrame: hit.frame,
+    damage: readEventNumber(hit, "data.damage"),
+    enemyHealth: requireEntity(world, enemy.id).runtime?.health,
+  };
+});
+
+runSmoke("combat charged attack can be shock parried into super counter", () => {
+  const project = createStarterProject();
+  const scene = activeScene(project);
+  const player = findByInternalName(scene, "Player");
+  const enemy = findByInternalName(scene, "Enemy_Patrol");
+  setupCombatSliceActors(player, enemy, { enemyHealth: 8, autoEnemy: false });
+  player.body!.gravityScale = 0;
+  player.behavior!.params.gravityScale = 0;
+  player.behavior!.params.fallGravityScale = 0;
+  player.behavior!.params.jumpReleaseGravityScale = 0;
+  enemy.body!.gravityScale = 0;
+  const world = new RuntimeWorld({ scene });
+  const controller = new InteractiveTestRunner({ world });
+  const enemyAttack = actorScopedKey(enemy.id, "attack");
+  const playerParry = actorScopedKey(player.id, "parry");
+  const playerAttack = actorScopedKey(player.id, "attack");
+
+  controller.press(enemyAttack);
+  controller.step(65);
+  controller.release(enemyAttack);
+
+  let parryFrame: number | undefined;
+  for (let index = 0; index < 180; index += 1) {
+    const started = controller.findCombatEvent({ type: "attackStarted", attackerId: enemy.id, "data.kind": "charged" } as Partial<CombatEvent>);
+    if (started && parryFrame === undefined) parryFrame = started.frame + readEventNumber(started, "data.startup") - 1;
+    if (parryFrame !== undefined && controller.frame === parryFrame) controller.tap(playerParry, 1);
+    else controller.step(1);
+    if (controller.findCombatEvent({ type: "parrySuccess", attackerId: enemy.id, defenderId: player.id, "data.kind": "charged" } as Partial<CombatEvent>)) break;
+  }
+
+  const parrySuccess = mustCombatEvent(controller, { type: "parrySuccess", attackerId: enemy.id, defenderId: player.id, "data.kind": "charged" } as Partial<CombatEvent>);
+  const ready = mustCombatEvent(controller, { type: "superParryReady", attackerId: player.id, defenderId: enemy.id });
+  const livePlayer = requireEntity(world, player.id);
+  const liveEnemy = requireEntity(world, enemy.id);
+  assert((liveEnemy.runtime?.hitStunUntilFrame ?? 0) - parrySuccess.frame >= 100, "charged attack should suffer a long shock parry stun");
+  assert((livePlayer.runtime?.superParryUntilFrame ?? 0) > controller.frame, "player should enter super parry counter window");
+
+  controller.tap(playerAttack, 1);
+  const counterResult = controller.stepUntil({
+    maxFrames: 80,
+    label: "super parry counter hits enemy",
+    predicate: () => Boolean(controller.findCombatEvent({ type: "hit", attackerId: player.id, defenderId: enemy.id, "data.kind": "superParry" } as Partial<CombatEvent>)),
+    freezeOnMatch: true,
+  });
+  assert(counterResult.matched, counterResult.logs[0]?.message || "super parry counter did not hit enemy");
+  const counterHit = mustCombatEvent(controller, { type: "hit", attackerId: player.id, defenderId: enemy.id, "data.kind": "superParry" } as Partial<CombatEvent>);
+  assert(readEventNumber(counterHit, "data.damage") >= 5, "super parry counter should include stored shock power");
+
+  return {
+    parryFrame: parrySuccess.frame,
+    readyFrame: ready.frame,
+    stunUntil: liveEnemy.runtime?.hitStunUntilFrame,
+    counterFrame: counterHit.frame,
+    counterDamage: readEventNumber(counterHit, "data.damage"),
+  };
+});
+
+runSmoke("combat charge can branch into shock parry", () => {
+  const project = createStarterProject();
+  const scene = activeScene(project);
+  const player = findByInternalName(scene, "Player");
+  const enemy = findByInternalName(scene, "Enemy_Patrol");
+  setupCombatSliceActors(player, enemy, { enemyHealth: 2, autoEnemy: false });
+  const world = new RuntimeWorld({ scene });
+  const controller = new InteractiveTestRunner({ world });
+  const attackKey = actorScopedKey(player.id, "attack");
+  const parryKey = actorScopedKey(player.id, "parry");
+
+  controller.press(attackKey);
+  controller.step(20);
+  controller.tap(parryKey, 1);
+  controller.release(attackKey);
+  controller.step(1);
+
+  const parryStarted = mustCombatEvent(controller, { type: "parryStarted", defenderId: player.id });
+  assert(parryStarted.data?.fromCharge === true, "parry should record that it branched from charge");
+  assert((requireEntity(world, player.id).runtime?.chargeHeldFrames ?? 0) === 0, "charge should be cleared after charge-to-parry branch");
+
+  return {
+    frame: parryStarted.frame,
+    fromCharge: parryStarted.data?.fromCharge,
   };
 });
 
@@ -426,6 +547,15 @@ function rectFromCombatEvent(event: CombatEvent): Rect {
   const rect = event.data?.rect;
   if (!isRect(rect)) throw new Error(`combat event rect is missing or invalid: ${JSON.stringify(rect)}`);
   return rect;
+}
+
+function readEventNumber(event: CombatEvent, path: string): number {
+  const value = path.split(".").reduce<unknown>((current, key) => {
+    if (!current || typeof current !== "object") return undefined;
+    return (current as Record<string, unknown>)[key];
+  }, event);
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`event number not found: ${path}`);
+  return value;
 }
 
 function isRect(value: unknown): value is Rect {

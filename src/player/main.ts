@@ -22,7 +22,7 @@ root.innerHTML = `
       <button class="player-button" data-input="right" type="button" aria-label="right">→</button>
     </section>
     <section class="player-actions" aria-label="combat actions">
-      <button class="player-button player-action" data-input="attack" type="button" aria-label="attack">攻</button>
+      <button class="player-button player-action" data-input="attack" type="button" aria-label="attack">攻/蓄</button>
       <button class="player-button player-action" data-input="parry" type="button" aria-label="parry">振</button>
       <button class="player-button player-jump" data-input="jump" type="button" aria-label="jump">跳</button>
     </section>

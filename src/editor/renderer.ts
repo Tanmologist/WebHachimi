@@ -169,7 +169,10 @@ export class V2Renderer {
     const resources = options.resources || emptyResources;
     const isMultiSelect = selectedIds && selectedIds.size > 1;
     if (showBodyMaterial) this.drawGrid();
-    if (!showEditorDecorations) this.drawGameplayAttackTelegraphs(world);
+    if (!showEditorDecorations) {
+      this.drawGameplayAttackTelegraphs(world);
+      this.drawGameplayChargeStates(world);
+    }
     for (const entity of entities) {
       const selectedPart = !isMultiSelect && selectedIds?.has(entity.id)
         ? entity.id === options.selectedId
@@ -513,6 +516,28 @@ export class V2Renderer {
       graphics.stroke();
       this.worldLayer.addChild(graphics);
       this.drawCombatRectLabel(rect, frame < start ? "WINDUP" : "ACTIVE");
+    }
+  }
+
+  private drawGameplayChargeStates(world: RuntimeWorld): void {
+    const frame = world.clock.frame;
+    for (const entity of world.allEntities()) {
+      if (entity.runtime?.defeated || !entity.collider) continue;
+      const charging = (entity.runtime?.chargeHeldFrames ?? 0) > 0;
+      const superReady = frame <= (entity.runtime?.superParryUntilFrame ?? -1);
+      if (!charging && !superReady) continue;
+      const bounds = boundsFor(entity);
+      const graphics = this.takeGraphics();
+      const pulse = 0.5 + Math.sin(frame * 0.32) * 0.18;
+      graphics.roundRect(bounds.x - 8, bounds.y - 8, bounds.w + 16, bounds.h + 16, 10);
+      graphics.setStrokeStyle({ width: superReady ? 4 : 3, color: superReady ? 0xb8fff0 : 0x69b7ff, alpha: superReady ? 0.9 : pulse });
+      graphics.stroke();
+      this.worldLayer.addChild(graphics);
+      const stage = entity.runtime?.chargeStage ?? 0;
+      this.drawCombatRectLabel(
+        { x: bounds.x, y: bounds.y - 18, w: bounds.w, h: 1 },
+        superReady ? "SUPER" : stage > 0 ? `CHARGE ${stage}` : "CHARGING",
+      );
     }
   }
 
@@ -1304,14 +1329,21 @@ export function clamp(value: number, min: number, max: number): number {
 function gameplayAttackRect(entity: Entity): { x: number; y: number; w: number; h: number } {
   const bounds = boundsFor(entity);
   const direction = entity.runtime?.facing === -1 ? -1 : 1;
-  const range = readNumberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
-  const height = readNumberParam(entity, "attackHeight") ?? bounds.h;
+  const kind = entity.runtime?.attackKind || "normal";
+  const range = readAttackKindParam(entity, kind, "Range") ?? readNumberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
+  const height = readAttackKindParam(entity, kind, "Height") ?? readNumberParam(entity, "attackHeight") ?? bounds.h;
   const inset = Math.max(0, readNumberParam(entity, "attackTouchInset") ?? 8);
   const offsetX = readNumberParam(entity, "attackTouchOffsetX") ?? 0;
   const offsetY = readNumberParam(entity, "attackTouchOffsetY") ?? 0;
   const x = (direction >= 0 ? bounds.x + bounds.w - inset : bounds.x - range) + direction * offsetX;
   const y = bounds.y + bounds.h / 2 - height / 2 + offsetY;
   return { x, y, w: range + inset, h: height };
+}
+
+function readAttackKindParam(entity: Entity, kind: string, suffix: string): number | undefined {
+  if (kind === "charged") return readNumberParam(entity, `chargedAttack${suffix}`);
+  if (kind === "superParry") return readNumberParam(entity, `superParryAttack${suffix}`);
+  return undefined;
 }
 
 function isAttackTouchEntity(entity: Entity): boolean {

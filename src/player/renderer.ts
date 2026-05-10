@@ -70,6 +70,7 @@ export class PlayerRenderer {
     this.layoutWorld();
     this.drawBackdrop();
     this.drawAttackTelegraphs(world);
+    this.drawChargeStates(world);
     world.allEntities().forEach((entity) => this.drawEntity(entity, world.clock.frame));
     world.allEntities().forEach((entity) => this.drawHealthBar(entity, world.clock.frame));
     this.drawHud(world, player);
@@ -168,7 +169,7 @@ export class PlayerRenderer {
     const latest = world.combatEvents[world.combatEvents.length - 1]?.message;
     this.hudText.text = [
       player ? `Frame ${world.clock.frame}  X ${Math.round(player.transform.position.x)}  Y ${Math.round(player.transform.position.y)}${hp}` : `Frame ${world.clock.frame}`,
-      "A/D move  W/Space jump  J attack  K parry",
+      "A/D move  W/Space jump  tap J attack  hold J charge  K parry",
       latest ? `Latest: ${latest}` : "",
     ]
       .filter(Boolean)
@@ -198,6 +199,26 @@ export class PlayerRenderer {
       }
       this.worldLayer.addChild(graphics);
       this.drawWorldLabel(frame < start ? "WINDUP" : "ACTIVE", rect.x + rect.w / 2, rect.y - 4, frame < start ? "#ffe9a9" : "#ffd9de");
+    }
+  }
+
+  private drawChargeStates(world: RuntimeWorld): void {
+    const frame = world.clock.frame;
+    for (const entity of world.allEntities()) {
+      if (entity.runtime?.defeated || !entity.collider) continue;
+      const charging = (entity.runtime?.chargeHeldFrames ?? 0) > 0;
+      const superReady = frame <= (entity.runtime?.superParryUntilFrame ?? -1);
+      if (!charging && !superReady) continue;
+      const bounds = boundsFor(entity);
+      const graphics = this.takeGraphics();
+      const pulse = 0.5 + Math.sin(frame * 0.32) * 0.18;
+      graphics.roundRect(bounds.x - 8, bounds.y - 8, bounds.w + 16, bounds.h + 16, 10);
+      graphics.setStrokeStyle({ width: superReady ? 4 : 3, color: superReady ? 0xb8fff0 : 0x69b7ff, alpha: superReady ? 0.9 : pulse });
+      graphics.stroke();
+      this.worldLayer.addChild(graphics);
+      const stage = entity.runtime?.chargeStage ?? 0;
+      const label = superReady ? "SUPER" : stage > 0 ? `CHARGE ${stage}` : "CHARGING";
+      this.drawWorldLabel(label, bounds.x + bounds.w / 2, bounds.y - 22, superReady ? "#b8fff0" : "#a9d8ff");
     }
   }
 
@@ -271,8 +292,9 @@ function findPlayer(entities: Entity[]): Entity | undefined {
 function attackRect(entity: Entity): { x: number; y: number; w: number; h: number } {
   const bounds = boundsFor(entity);
   const direction = entity.runtime?.facing === -1 ? -1 : 1;
-  const range = readNumberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
-  const height = readNumberParam(entity, "attackHeight") ?? bounds.h;
+  const kind = entity.runtime?.attackKind || "normal";
+  const range = readAttackKindParam(entity, kind, "Range") ?? readNumberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
+  const height = readAttackKindParam(entity, kind, "Height") ?? readNumberParam(entity, "attackHeight") ?? bounds.h;
   const inset = Math.max(0, readNumberParam(entity, "attackTouchInset") ?? 8);
   const offsetX = readNumberParam(entity, "attackTouchOffsetX") ?? 0;
   const offsetY = readNumberParam(entity, "attackTouchOffsetY") ?? 0;
@@ -282,6 +304,12 @@ function attackRect(entity: Entity): { x: number; y: number; w: number; h: numbe
     w: range + inset,
     h: height,
   };
+}
+
+function readAttackKindParam(entity: Entity, kind: string, suffix: string): number | undefined {
+  if (kind === "charged") return readNumberParam(entity, `chargedAttack${suffix}`);
+  if (kind === "superParry") return readNumberParam(entity, `superParryAttack${suffix}`);
+  return undefined;
 }
 
 function isAttackTouchEntity(entity: Entity): boolean {

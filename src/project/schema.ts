@@ -148,8 +148,23 @@ export type RuntimeComponent = {
   attackCooldownUntilFrame?: number;
   attackHitIds?: EntityId[];
   attackTouchEntityId?: EntityId;
+  attackKind?: "normal" | "charged" | "superParry";
+  attackDamage?: number;
+  attackControlLevel?: number;
+  attackArmorLevel?: number;
+  attackChargeStage?: number;
+  attackInputDown?: boolean;
+  attackConsumedUntilRelease?: boolean;
+  parryInputDown?: boolean;
+  chargeStartedFrame?: number;
+  chargeHeldFrames?: number;
+  chargeStage?: number;
+  chargeStoredDamage?: number;
   parryUntilFrame?: number;
   parryCooldownUntilFrame?: number;
+  superParryUntilFrame?: number;
+  superParryLockUntilFrame?: number;
+  superParryBonusDamage?: number;
   hitStunUntilFrame?: number;
 };
 
@@ -435,7 +450,16 @@ export type RuntimeEntityState = {
 export type CombatEvent = {
   id: string;
   frame: number;
-  type: "attackStarted" | "attackTouch" | "parryStarted" | "parrySuccess" | "hit" | "defeated";
+  type:
+    | "chargeStarted"
+    | "chargeReleased"
+    | "attackStarted"
+    | "attackTouch"
+    | "parryStarted"
+    | "parrySuccess"
+    | "superParryReady"
+    | "hit"
+    | "defeated";
   attackerId?: EntityId;
   defenderId?: EntityId;
   sourceId?: EntityId;

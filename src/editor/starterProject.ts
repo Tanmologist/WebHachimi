@@ -61,6 +61,35 @@ export function createStarterProject(): Project {
       attackTouchOffsetX: 0,
       attackTouchOffsetY: 0,
       attackTouchVisibleMs: 220,
+      attackControlLevel: 1,
+      attackArmorLevel: 1,
+      chargeThresholdFrames: 60,
+      chargeStageFrames: 60,
+      chargeNoArmorFrames: 30,
+      chargedAttackStartupFrames: 20,
+      chargedAttackActiveFrames: 24,
+      chargedAttackCooldownFrames: 36,
+      chargedAttackRange: 140,
+      chargedAttackHeight: 96,
+      chargedAttackDamage: 2,
+      chargedAttackDamageGrowth: 1.2,
+      chargedAttackControlLevel: 3,
+      chargedAttackArmorLevel: 3,
+      chargedParryStunFrames: 120,
+      parryControlLevel: 3,
+      parryArmorLevel: 3,
+      parryShockStunFrames: 16,
+      superParryFrames: 200,
+      superParryLockFrames: 50,
+      superParryDamageMultiplier: 2,
+      superParryAttackStartupFrames: 4,
+      superParryAttackActiveFrames: 12,
+      superParryAttackCooldownFrames: 22,
+      superParryAttackRange: 168,
+      superParryAttackHeight: 110,
+      superParryAttackBaseDamageMultiplier: 3,
+      superParryAttackControlLevel: 4,
+      superParryAttackArmorLevel: 4,
     },
     tags: ["combat", "player"],
     renderSlot: "current",
@@ -124,6 +153,24 @@ export function createStarterProject(): Project {
       attackTouchOffsetX: 0,
       attackTouchOffsetY: 0,
       attackTouchVisibleMs: 220,
+      attackControlLevel: 1,
+      attackArmorLevel: 1,
+      chargeThresholdFrames: 60,
+      chargeStageFrames: 60,
+      chargeNoArmorFrames: 30,
+      chargedAttackStartupFrames: 22,
+      chargedAttackActiveFrames: 22,
+      chargedAttackCooldownFrames: 38,
+      chargedAttackRange: 150,
+      chargedAttackHeight: 92,
+      chargedAttackDamage: 2,
+      chargedAttackDamageGrowth: 1.2,
+      chargedAttackControlLevel: 3,
+      chargedAttackArmorLevel: 3,
+      chargedParryStunFrames: 120,
+      parryControlLevel: 3,
+      parryArmorLevel: 3,
+      parryShockStunFrames: 16,
       parryStunFrames: 16,
     },
     bodyVelocity: { x: -1, y: 0 },
@@ -156,6 +203,18 @@ export function createStarterProject(): Project {
       attackTouchOffsetX: 0,
       attackTouchOffsetY: 0,
       attackTouchVisibleMs: 180,
+      attackControlLevel: 1,
+      attackArmorLevel: 1,
+      chargeThresholdFrames: 60,
+      chargeStageFrames: 60,
+      chargedAttackStartupFrames: 20,
+      chargedAttackActiveFrames: 20,
+      chargedAttackCooldownFrames: 36,
+      chargedAttackRange: 132,
+      chargedAttackHeight: 92,
+      chargedAttackDamage: 2,
+      chargedAttackControlLevel: 3,
+      chargedAttackArmorLevel: 3,
     },
     tags: ["runner", "player"],
   });
@@ -354,6 +413,35 @@ function repairKnownCombatTouchTuning(entity: Entity): void {
     setNumberDefault(params, "attackTouchOffsetX", 0);
     setNumberDefault(params, "attackTouchOffsetY", 0);
     setNumberDefault(params, "attackTouchVisibleMs", 220);
+    setNumberDefault(params, "attackControlLevel", 1);
+    setNumberDefault(params, "attackArmorLevel", 1);
+    setNumberDefault(params, "chargeThresholdFrames", 60);
+    setNumberDefault(params, "chargeStageFrames", 60);
+    setNumberDefault(params, "chargeNoArmorFrames", 30);
+    setNumberDefault(params, "chargedAttackStartupFrames", 20);
+    setNumberDefault(params, "chargedAttackActiveFrames", 24);
+    setNumberDefault(params, "chargedAttackCooldownFrames", 36);
+    setNumberDefault(params, "chargedAttackRange", entity.internalName === "Enemy_Patrol" ? 150 : 140);
+    setNumberDefault(params, "chargedAttackHeight", entity.internalName === "Enemy_Patrol" ? 92 : 96);
+    setNumberDefault(params, "chargedAttackDamage", 2);
+    setNumberDefault(params, "chargedAttackDamageGrowth", 1.2);
+    setNumberDefault(params, "chargedAttackControlLevel", 3);
+    setNumberDefault(params, "chargedAttackArmorLevel", 3);
+    setNumberDefault(params, "chargedParryStunFrames", 120);
+    setNumberDefault(params, "parryControlLevel", 3);
+    setNumberDefault(params, "parryArmorLevel", 3);
+    setNumberDefault(params, "parryShockStunFrames", 16);
+    setNumberDefault(params, "superParryFrames", 200);
+    setNumberDefault(params, "superParryLockFrames", 50);
+    setNumberDefault(params, "superParryDamageMultiplier", 2);
+    setNumberDefault(params, "superParryAttackStartupFrames", 4);
+    setNumberDefault(params, "superParryAttackActiveFrames", 12);
+    setNumberDefault(params, "superParryAttackCooldownFrames", 22);
+    setNumberDefault(params, "superParryAttackRange", 168);
+    setNumberDefault(params, "superParryAttackHeight", 110);
+    setNumberDefault(params, "superParryAttackBaseDamageMultiplier", 3);
+    setNumberDefault(params, "superParryAttackControlLevel", 4);
+    setNumberDefault(params, "superParryAttackArmorLevel", 4);
     return;
   }
   if (typeof params.attackRange === "number" || typeof params.attackRange === "string") {
@@ -361,6 +449,18 @@ function repairKnownCombatTouchTuning(entity: Entity): void {
     setNumberDefault(params, "attackTouchOffsetX", 0);
     setNumberDefault(params, "attackTouchOffsetY", 0);
     setNumberDefault(params, "attackTouchVisibleMs", 180);
+    setNumberDefault(params, "attackControlLevel", 1);
+    setNumberDefault(params, "attackArmorLevel", 1);
+    setNumberDefault(params, "chargeThresholdFrames", 60);
+    setNumberDefault(params, "chargeStageFrames", 60);
+    setNumberDefault(params, "chargedAttackStartupFrames", 20);
+    setNumberDefault(params, "chargedAttackActiveFrames", 20);
+    setNumberDefault(params, "chargedAttackCooldownFrames", 36);
+    setNumberDefault(params, "chargedAttackRange", 132);
+    setNumberDefault(params, "chargedAttackHeight", 92);
+    setNumberDefault(params, "chargedAttackDamage", 2);
+    setNumberDefault(params, "chargedAttackControlLevel", 3);
+    setNumberDefault(params, "chargedAttackArmorLevel", 3);
   }
 }
 
@@ -482,6 +582,18 @@ function makeBox(input: BoxInput): Entity {
                   attackTouchOffsetX: 0,
                   attackTouchOffsetY: 0,
                   attackTouchVisibleMs: 180,
+                  attackControlLevel: 1,
+                  attackArmorLevel: 1,
+                  chargeThresholdFrames: 60,
+                  chargeStageFrames: 60,
+                  chargedAttackStartupFrames: 20,
+                  chargedAttackActiveFrames: 20,
+                  chargedAttackCooldownFrames: 36,
+                  chargedAttackRange: Math.max(132, input.w + 80),
+                  chargedAttackHeight: input.h + 24,
+                  chargedAttackDamage: 2,
+                  chargedAttackControlLevel: 3,
+                  chargedAttackArmorLevel: 3,
                 }
               : {
                   speed: 70,
@@ -497,6 +609,18 @@ function makeBox(input: BoxInput): Entity {
                   attackTouchOffsetX: 0,
                   attackTouchOffsetY: 0,
                   attackTouchVisibleMs: 180,
+                  attackControlLevel: 1,
+                  attackArmorLevel: 1,
+                  chargeThresholdFrames: 60,
+                  chargeStageFrames: 60,
+                  chargedAttackStartupFrames: 22,
+                  chargedAttackActiveFrames: 20,
+                  chargedAttackCooldownFrames: 38,
+                  chargedAttackRange: 240,
+                  chargedAttackHeight: input.h + 34,
+                  chargedAttackDamage: 2,
+                  chargedAttackControlLevel: 3,
+                  chargedAttackArmorLevel: 3,
                   parryStunFrames: 23,
                 }),
             ...input.behaviorParams,
