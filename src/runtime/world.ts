@@ -105,6 +105,7 @@ export class RuntimeWorld {
     }
     this.resolveSimpleCollisions();
     this.resolveCombatEvents();
+    this.updateCombatPresentationStates();
     this.cleanupExpiredTransients();
   }
 
@@ -195,6 +196,8 @@ export class RuntimeWorld {
           chargeHeldFrames: entity.runtime?.chargeHeldFrames,
           chargeStage: entity.runtime?.chargeStage,
           chargeStoredDamage: entity.runtime?.chargeStoredDamage,
+          parryStartedFrame: entity.runtime?.parryStartedFrame,
+          parryAnimationUntilFrame: entity.runtime?.parryAnimationUntilFrame,
           parryUntilFrame: entity.runtime?.parryUntilFrame,
           parryRecoveryUntilFrame: entity.runtime?.parryRecoveryUntilFrame,
           parryCooldownUntilFrame: entity.runtime?.parryCooldownUntilFrame,
@@ -269,6 +272,9 @@ export class RuntimeWorld {
         chargeHeldFrames: typeof state.state.chargeHeldFrames === "number" ? state.state.chargeHeldFrames : undefined,
         chargeStage: typeof state.state.chargeStage === "number" ? state.state.chargeStage : undefined,
         chargeStoredDamage: typeof state.state.chargeStoredDamage === "number" ? state.state.chargeStoredDamage : undefined,
+        parryStartedFrame: typeof state.state.parryStartedFrame === "number" ? state.state.parryStartedFrame : undefined,
+        parryAnimationUntilFrame:
+          typeof state.state.parryAnimationUntilFrame === "number" ? state.state.parryAnimationUntilFrame : undefined,
         parryUntilFrame: typeof state.state.parryUntilFrame === "number" ? state.state.parryUntilFrame : undefined,
         parryRecoveryUntilFrame:
           typeof state.state.parryRecoveryUntilFrame === "number" ? state.state.parryRecoveryUntilFrame : undefined,
@@ -736,8 +742,11 @@ export class RuntimeWorld {
     const windowFrames = Math.max(1, Math.floor(numberParam(entity, "parryWindowFrames") ?? 20));
     const recoveryFrames = Math.max(0, Math.floor(numberParam(entity, "parryRecoveryFrames") ?? numberParam(entity, "parryCooldownFrames") ?? 30));
     const cooldown = windowFrames + recoveryFrames;
+    const animationFrames = Math.max(1, Math.floor(numberParam(entity, "parryAnimationFrames") ?? cooldown));
     entity.runtime = {
       ...entity.runtime,
+      parryStartedFrame: frame,
+      parryAnimationUntilFrame: frame + animationFrames - 1,
       parryUntilFrame: frame + windowFrames - 1,
       parryRecoveryUntilFrame: frame + cooldown,
       parryCooldownUntilFrame: frame + cooldown,
@@ -747,7 +756,7 @@ export class RuntimeWorld {
       defenderId: entity.id,
       sourceId: entity.id,
       message: `${entity.displayName} opened shock parry window.`,
-      data: { windowFrames, recoveryFrames, cooldown, fromCharge: options.fromCharge === true, armorLevel: numberParam(entity, "parryArmorLevel") ?? 3 },
+      data: { windowFrames, recoveryFrames, cooldown, animationFrames, fromCharge: options.fromCharge === true, armorLevel: numberParam(entity, "parryArmorLevel") ?? 3 },
     });
     return true;
   }
@@ -990,6 +999,30 @@ export class RuntimeWorld {
     attacker.runtime = { ...attacker.runtime, attackTouchEntityId: touchId };
   }
 
+  private updateCombatPresentationStates(): void {
+    const frame = this.clock.frame;
+    for (const entity of this.allEntities()) {
+      if (!entity.render) continue;
+      const slot = frame <= (entity.runtime?.parryAnimationUntilFrame ?? -1) ? "parry" : "current";
+      this.applyPresentationSlot(entity, slot);
+    }
+  }
+
+  private applyPresentationSlot(entity: Entity, slot: string): void {
+    if (!entity.render) return;
+    const binding = entity.resources.find((item) => item.slot === slot);
+    if (!binding) {
+      if (slot === "current") entity.render = { ...entity.render, slot: "current", state: "current" };
+      return;
+    }
+    entity.render = {
+      ...entity.render,
+      slot,
+      state: slot,
+      resourceId: binding.resourceId,
+    };
+  }
+
   private emitCombatEvent(event: Omit<CombatEvent, "id" | "frame">): CombatEvent {
     const next: CombatEvent = {
       ...event,
@@ -1099,6 +1132,8 @@ export class RuntimeWorld {
       attackInputDown: entity.runtime?.attackInputDown ?? false,
       attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease ?? false,
       parryInputDown: entity.runtime?.parryInputDown ?? false,
+      parryStartedFrame: entity.runtime?.parryStartedFrame,
+      parryAnimationUntilFrame: entity.runtime?.parryAnimationUntilFrame,
       parryRecoveryUntilFrame: entity.runtime?.parryRecoveryUntilFrame,
     };
   }

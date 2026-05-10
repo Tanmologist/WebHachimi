@@ -1,4 +1,4 @@
-import type { Entity, Project } from "../project/schema";
+import type { Entity, Project, Resource } from "../project/schema";
 import { createEmptyProject } from "../project/schema";
 import { makeId, type EntityId, type ResourceId } from "../shared/types";
 
@@ -29,6 +29,7 @@ export function createStarterProject(): Project {
   const dividerId = makeId<"EntityId">("ent") as EntityId;
   const playerCurrentResourceId = makeId<"ResourceId">("res") as ResourceId;
   const playerDeathResourceId = makeId<"ResourceId">("res") as ResourceId;
+  const playerParryResourceId = "res-player-parry-counter-sequence" as ResourceId;
 
   scene.entities[playerId] = makeBox({
     id: playerId,
@@ -80,6 +81,7 @@ export function createStarterProject(): Project {
       chargedParryStunFrames: 120,
       parryControlLevel: 3,
       parryArmorLevel: 3,
+      parryAnimationFrames: 50,
       parryShockStunFrames: 16,
       superParryFrames: 200,
       superParryLockFrames: 50,
@@ -309,9 +311,12 @@ export function createStarterProject(): Project {
     attachments: [],
   };
 
+  project.resources[playerParryResourceId] = createParryCounterResource(playerParryResourceId);
+
   scene.entities[playerId].resources.push(
     makeResourceBinding(playerDeathResourceId, "death", "死亡淡出可视体"),
     makeResourceBinding(playerCurrentResourceId, "current", "当前战斗可视体"),
+    makeResourceBinding(playerParryResourceId, "parry", "振刀弹反动作"),
   );
 
   scene.folders = [
@@ -404,8 +409,27 @@ export function repairKnownStarterLabels(project: Project): Project {
       }
     });
   });
+  ensureParryCounterResource(project);
 
   return project;
+}
+
+function ensureParryCounterResource(project: Project): void {
+  const resourceId = "res-player-parry-counter-sequence" as ResourceId;
+  const existing = project.resources[resourceId];
+  if (!existing || existing.type !== "animation" || (existing.attachments?.length ?? 0) < 22) {
+    project.resources[resourceId] = createParryCounterResource(resourceId);
+  }
+  for (const scene of Object.values(project.scenes)) {
+    const player = Object.values(scene.entities).find((entity) => entity.internalName === "Player");
+    if (!player) continue;
+    if (!player.resources.some((binding) => binding.resourceId === resourceId || binding.slot === "parry")) {
+      player.resources.push(makeResourceBinding(resourceId, "parry", "振刀弹反动作"));
+    }
+    if (player.behavior?.builtin === "playerPlatformer") {
+      setNumberDefault(player.behavior.params, "parryAnimationFrames", 50);
+    }
+  }
 }
 
 function repairKnownCombatTouchTuning(entity: Entity): void {
@@ -443,6 +467,7 @@ function repairKnownCombatTouchTuning(entity: Entity): void {
     setNumberDefault(params, "chargedParryStunFrames", 120);
     setNumberDefault(params, "parryControlLevel", 3);
     setNumberDefault(params, "parryArmorLevel", 3);
+    setNumberDefault(params, "parryAnimationFrames", 50);
     setNumberDefault(params, "parryShockStunFrames", 16);
     setNumberDefault(params, "superParryFrames", 200);
     setNumberDefault(params, "superParryLockFrames", 50);
@@ -676,6 +701,34 @@ function makeResourceBinding(resourceId: ResourceId, slot: string, description: 
     localOffset: { x: 0, y: 0 },
     localRotation: 0,
     localScale: { x: 1, y: 1 },
+  };
+}
+
+function createParryCounterResource(resourceId: ResourceId): Resource {
+  return {
+    id: resourceId,
+    internalName: "Player_Parry_Counter_Sequence",
+    displayName: "振刀弹反动作",
+    type: "animation",
+    description: "振刀或蓄力转振刀时播放的弹反序列帧动作。",
+    aiDescription: "玩家振刀动作序列帧，来自弹反0001.zip。",
+    tags: ["player", "combat", "parry", "animation"],
+    attachments: Array.from({ length: 22 }, (_, index) => {
+      const frame = index + 1;
+      const padded = String(frame).padStart(4, "0");
+      return {
+        id: `att-parry-counter-${padded}`,
+        fileName: `parry-counter-${padded}.jpg`,
+        mime: "image/jpeg",
+        path: `/games/hachimi-nanbei-lvdong/resources/parry-counter-${padded}.jpg`,
+      };
+    }),
+    sprite: {
+      mode: "sequence",
+      frameCount: 22,
+      fps: 44,
+      loop: false,
+    },
   };
 }
 

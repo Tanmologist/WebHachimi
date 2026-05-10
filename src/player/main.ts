@@ -39,7 +39,7 @@ const renderer = new PlayerRenderer();
 let raf = 0;
 let lastTime = performance.now();
 
-await renderer.init({ host: stage, scene });
+await renderer.init({ host: stage, scene, resources: project.resources });
 const input = bindPlayerInput(root, world);
 const removeEditorHandoffKey = bindEditorHandoffKey();
 if (resumeHandoff) restoreWorldFromHandoff(world, resumeHandoff);

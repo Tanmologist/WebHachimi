@@ -143,7 +143,8 @@
               "superParryAttackBaseDamageMultiplier": 3,
               "superParryAttackControlLevel": 4,
               "superParryAttackArmorLevel": 4,
-              "hitFlashFrames": 8
+              "hitFlashFrames": 8,
+              "parryAnimationFrames": 50
             }
           },
           "resources": [
@@ -166,6 +167,21 @@
               "resourceId": "res-mklai897-moiihfje",
               "slot": "current",
               "description": "",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            {
+              "resourceId": "res-player-parry-counter-sequence",
+              "slot": "parry",
+              "description": "??????",
+              "aiDescription": "??????",
               "localOffset": {
                 "x": 0,
                 "y": 0
@@ -1704,6 +1720,160 @@
         "loop": true,
         "margin": 0,
         "spacing": 5
+      }
+    },
+    "res-player-parry-counter-sequence": {
+      "id": "res-player-parry-counter-sequence",
+      "internalName": "Player_Parry_Counter_Sequence",
+      "displayName": "??????",
+      "type": "animation",
+      "description": "????????????????????",
+      "aiDescription": "??????????????0001.zip?",
+      "tags": [
+        "player",
+        "combat",
+        "parry",
+        "animation"
+      ],
+      "attachments": [
+        {
+          "id": "att-parry-counter-0001",
+          "fileName": "parry-counter-0001.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0001.jpg"
+        },
+        {
+          "id": "att-parry-counter-0002",
+          "fileName": "parry-counter-0002.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0002.jpg"
+        },
+        {
+          "id": "att-parry-counter-0003",
+          "fileName": "parry-counter-0003.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0003.jpg"
+        },
+        {
+          "id": "att-parry-counter-0004",
+          "fileName": "parry-counter-0004.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0004.jpg"
+        },
+        {
+          "id": "att-parry-counter-0005",
+          "fileName": "parry-counter-0005.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0005.jpg"
+        },
+        {
+          "id": "att-parry-counter-0006",
+          "fileName": "parry-counter-0006.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0006.jpg"
+        },
+        {
+          "id": "att-parry-counter-0007",
+          "fileName": "parry-counter-0007.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0007.jpg"
+        },
+        {
+          "id": "att-parry-counter-0008",
+          "fileName": "parry-counter-0008.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0008.jpg"
+        },
+        {
+          "id": "att-parry-counter-0009",
+          "fileName": "parry-counter-0009.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0009.jpg"
+        },
+        {
+          "id": "att-parry-counter-0010",
+          "fileName": "parry-counter-0010.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0010.jpg"
+        },
+        {
+          "id": "att-parry-counter-0011",
+          "fileName": "parry-counter-0011.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0011.jpg"
+        },
+        {
+          "id": "att-parry-counter-0012",
+          "fileName": "parry-counter-0012.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0012.jpg"
+        },
+        {
+          "id": "att-parry-counter-0013",
+          "fileName": "parry-counter-0013.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0013.jpg"
+        },
+        {
+          "id": "att-parry-counter-0014",
+          "fileName": "parry-counter-0014.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0014.jpg"
+        },
+        {
+          "id": "att-parry-counter-0015",
+          "fileName": "parry-counter-0015.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0015.jpg"
+        },
+        {
+          "id": "att-parry-counter-0016",
+          "fileName": "parry-counter-0016.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0016.jpg"
+        },
+        {
+          "id": "att-parry-counter-0017",
+          "fileName": "parry-counter-0017.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0017.jpg"
+        },
+        {
+          "id": "att-parry-counter-0018",
+          "fileName": "parry-counter-0018.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0018.jpg"
+        },
+        {
+          "id": "att-parry-counter-0019",
+          "fileName": "parry-counter-0019.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0019.jpg"
+        },
+        {
+          "id": "att-parry-counter-0020",
+          "fileName": "parry-counter-0020.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0020.jpg"
+        },
+        {
+          "id": "att-parry-counter-0021",
+          "fileName": "parry-counter-0021.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0021.jpg"
+        },
+        {
+          "id": "att-parry-counter-0022",
+          "fileName": "parry-counter-0022.jpg",
+          "mime": "image/jpeg",
+          "path": "/games/hachimi-nanbei-lvdong/resources/parry-counter-0022.jpg"
+        }
+      ],
+      "sprite": {
+        "mode": "sequence",
+        "frameCount": 22,
+        "fps": 44,
+        "loop": false
       }
     }
   },

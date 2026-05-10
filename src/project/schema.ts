@@ -160,6 +160,8 @@ export type RuntimeComponent = {
   chargeHeldFrames?: number;
   chargeStage?: number;
   chargeStoredDamage?: number;
+  parryStartedFrame?: number;
+  parryAnimationUntilFrame?: number;
   parryUntilFrame?: number;
   parryRecoveryUntilFrame?: number;
   parryCooldownUntilFrame?: number;

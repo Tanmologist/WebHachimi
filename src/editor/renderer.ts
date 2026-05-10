@@ -403,7 +403,13 @@ export class V2Renderer {
   ): void {
     const hasVisiblePresentation = Boolean(entity.render && entity.render.visible !== false);
     if (showBodyMaterial || !hasVisiblePresentation) this.drawBody(entity, selectedPart === "body", showBodyMaterial);
-    this.drawPresentation(entity, selectedPart === "presentation", showEditorDecorations, resources, animationTimeMs);
+    this.drawPresentation(
+      entity,
+      selectedPart === "presentation",
+      showEditorDecorations,
+      resources,
+      presentationAnimationTimeMs(entity, world, animationTimeMs),
+    );
     if (showEditorDecorations && entity.parentId) this.drawCoreLink(world, entity);
     if (showEditorDecorations && selectedPart) this.drawSelection(entity, selectedPart);
   }
@@ -1237,6 +1243,15 @@ function presentationResource(entity: Entity, resources: Record<string, Resource
   const resourceId = entity.render?.resourceId;
   const resource = resourceId ? resources[resourceId] : undefined;
   return isVisualResource(resource) ? resource : undefined;
+}
+
+function presentationAnimationTimeMs(entity: Entity, world: RuntimeWorld, fallbackTimeMs: number): number {
+  const isParrySlot = entity.render?.slot === "parry" || entity.render?.state === "parry";
+  const startedFrame = entity.runtime?.parryStartedFrame;
+  if (isParrySlot && typeof startedFrame === "number") {
+    return Math.max(0, (world.clock.frame - startedFrame) * world.clock.fixedStepMs);
+  }
+  return fallbackTimeMs;
 }
 
 function containedImageSize(texture: Texture, box: { width: number; height: number }): { width: number; height: number } {

@@ -1,5 +1,6 @@
-import { Application, Container, Graphics, Text } from "pixi.js";
-import type { Entity, Scene } from "../project/schema";
+import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
+import type { Entity, Resource, Scene } from "../project/schema";
+import { isVisualResource, resourceFrameAtTime, type ResourceFrameRect } from "../editor/resourceAnimation";
 import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
@@ -8,6 +9,7 @@ import { playerCameraLayout } from "./cameraLayout";
 export type PlayerRendererOptions = {
   host: HTMLElement;
   scene: Scene;
+  resources?: Record<string, Resource>;
 };
 
 export class PlayerRenderer {
@@ -15,6 +17,10 @@ export class PlayerRenderer {
   private readonly worldLayer = new Container();
   private readonly hudLayer = new Container();
   private readonly graphicsPool: Graphics[] = [];
+  private readonly spritePool: Sprite[] = [];
+  private readonly imageTextures = new Map<string, Texture>();
+  private readonly frameTextures = new Map<string, Texture>();
+  private readonly imageTextureLoads = new Map<string, Promise<void>>();
   private readonly hudText = new Text({
     text: "",
     style: {
@@ -31,9 +37,12 @@ export class PlayerRenderer {
   private backdrop?: Graphics;
   private horizon?: Graphics;
   private destroyed = false;
+  private resources: Record<string, Resource> = {};
+  private lastWorld?: RuntimeWorld;
 
   async init(options: PlayerRendererOptions): Promise<void> {
     this.scene = options.scene;
+    this.resources = options.resources || {};
     await this.app.init({
       backgroundColor: parseColor(options.scene.settings.background),
       antialias: true,
@@ -62,12 +71,16 @@ export class PlayerRenderer {
     this.destroyed = true;
     this.resizeObserver?.disconnect();
     this.removeResizeFallback?.();
+    this.frameTextures.forEach((texture) => texture.destroy(false));
+    this.frameTextures.clear();
     this.drainGraphicsPool();
+    this.drainSpritePool();
     if (this.hasLiveRenderer()) this.app.destroy(true);
   }
 
   render(world: RuntimeWorld): void {
     if (!this.hasLiveRenderer()) return;
+    this.lastWorld = world;
     this.recycleWorldLayer();
     const player = findPlayer(world.allEntities());
     if (player) this.follow(player.transform.position);
@@ -75,7 +88,7 @@ export class PlayerRenderer {
     this.drawBackdrop();
     this.drawAttackTelegraphs(world);
     this.drawChargeStates(world);
-    world.allEntities().forEach((entity) => this.drawEntity(entity, world.clock.frame));
+    world.allEntities().forEach((entity) => this.drawEntity(entity, world));
     world.allEntities().forEach((entity) => this.drawHealthBar(entity, world.clock.frame));
     this.drawHud(world, player);
   }
@@ -116,13 +129,20 @@ export class PlayerRenderer {
     }
   }
 
-  private drawEntity(entity: Entity, frame: number): void {
+  private drawEntity(entity: Entity, world: RuntimeWorld): void {
     if (entity.render && !entity.render.visible) return;
+    const frame = world.clock.frame;
+    const attackTouch = isAttackTouchEntity(entity);
+    const useActionResource = entity.render?.slot === "parry" || entity.render?.state === "parry";
+    const resource = !attackTouch && useActionResource ? presentationResource(entity, this.resources) : undefined;
+    if (resource && this.drawEntityImage(entity, resource, presentationAnimationTimeMs(entity, world))) {
+      if (entity.runtime?.defeated === true) this.drawDefeatedMark(entity);
+      return;
+    }
     const graphics = this.takeGraphics();
     const size = entity.collider?.size || { x: 56, y: 56 };
     const flashed = frame <= (entity.runtime?.hitFlashUntilFrame ?? -1);
     const defeated = entity.runtime?.defeated === true;
-    const attackTouch = isAttackTouchEntity(entity);
     const color = attackTouch ? 0xff4d5d : flashed ? 0xf4fff7 : parseColor(entity.render?.color || "#74a8bd");
     const baseAlpha = entity.persistent ? entity.render?.opacity ?? 1 : Math.min(entity.render?.opacity ?? 1, 0.45);
     const alpha = attackTouch ? Math.max(baseAlpha, 0.5) : defeated ? Math.min(baseAlpha, 0.28) : baseAlpha;
@@ -158,6 +178,46 @@ export class PlayerRenderer {
 
     if (attackTouch) this.drawWorldLabel("TOUCH BOX", entity.transform.position.x, entity.transform.position.y - size.y / 2 - 4, "#fff1a8");
     if (entity.behavior?.builtin === "playerPlatformer") this.drawPlayerFace(entity, size);
+  }
+
+  private drawEntityImage(entity: Entity, resource: Resource, animationTimeMs: number): boolean {
+    const pendingFrame = resourceFrameAtTime(resource, animationTimeMs);
+    const imagePath = pendingFrame?.attachment.path;
+    if (!imagePath) return false;
+    const texture = this.imageTextures.get(imagePath);
+    if (!texture) {
+      this.loadImageTexture(imagePath);
+      return false;
+    }
+    const frame = resourceFrameAtTime(resource, animationTimeMs, { width: texture.width, height: texture.height }) || pendingFrame;
+    const drawTexture = this.textureForFrame(texture, imagePath, frame?.rect);
+    const size = entity.render?.size || entity.collider?.size || { x: 56, y: 56 };
+    const drawSize = containedImageSize(drawTexture, { width: size.x, height: size.y });
+    const sprite = this.takeSprite(drawTexture);
+    const direction = entity.runtime?.facing === -1 ? -1 : 1;
+    const offset = entity.render?.offset || { x: 0, y: 0 };
+    sprite.anchor.set(0.5, 0.5);
+    sprite.position.set(entity.transform.position.x + offset.x, entity.transform.position.y + offset.y);
+    sprite.rotation = entity.transform.rotation + (entity.render?.rotation || 0);
+    sprite.scale.set(direction * (drawSize.width / Math.max(1, drawTexture.width)), drawSize.height / Math.max(1, drawTexture.height));
+    sprite.alpha = entity.runtime?.defeated ? Math.min(entity.render?.opacity ?? 1, 0.28) : entity.render?.opacity ?? 1;
+    this.worldLayer.addChild(sprite);
+    return true;
+  }
+
+  private drawDefeatedMark(entity: Entity): void {
+    const graphics = this.takeGraphics();
+    const size = entity.collider?.size || { x: 56, y: 56 };
+    graphics.setStrokeStyle({ width: 4, color: 0xf2d16b, alpha: 0.82 });
+    graphics.moveTo(-size.x * 0.35, -size.y * 0.35);
+    graphics.lineTo(size.x * 0.35, size.y * 0.35);
+    graphics.moveTo(size.x * 0.35, -size.y * 0.35);
+    graphics.lineTo(-size.x * 0.35, size.y * 0.35);
+    graphics.stroke();
+    graphics.position.set(entity.transform.position.x, entity.transform.position.y);
+    graphics.rotation = entity.transform.rotation;
+    graphics.scale.set(entity.transform.scale.x || 1, entity.transform.scale.y || 1);
+    this.worldLayer.addChild(graphics);
   }
 
   private drawPlayerFace(entity: Entity, size: Vec2): void {
@@ -284,6 +344,9 @@ export class PlayerRenderer {
       if (child instanceof Graphics) {
         resetGraphics(child);
         this.graphicsPool.push(child);
+      } else if (child instanceof Sprite) {
+        resetSprite(child);
+        this.spritePool.push(child);
       } else {
         child.destroy({ children: true });
       }
@@ -299,8 +362,49 @@ export class PlayerRenderer {
     return new Graphics();
   }
 
+  private takeSprite(texture: Texture): Sprite {
+    const item = this.spritePool.pop();
+    if (item) {
+      resetSprite(item);
+      item.texture = texture;
+      return item;
+    }
+    return new Sprite(texture);
+  }
+
   private drainGraphicsPool(): void {
     for (const item of this.graphicsPool.splice(0)) item.destroy();
+  }
+
+  private drainSpritePool(): void {
+    for (const item of this.spritePool.splice(0)) item.destroy();
+  }
+
+  private loadImageTexture(imagePath: string): void {
+    if (this.imageTextureLoads.has(imagePath)) return;
+    const load = Assets.load<Texture>(imagePath)
+      .then((texture) => {
+        this.imageTextures.set(imagePath, texture);
+        if (this.lastWorld && this.hasLiveRenderer()) this.render(this.lastWorld);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        this.imageTextureLoads.delete(imagePath);
+      });
+    this.imageTextureLoads.set(imagePath, load);
+  }
+
+  private textureForFrame(texture: Texture, imagePath: string, rect: ResourceFrameRect | undefined): Texture {
+    if (!rect) return texture;
+    const key = `${imagePath}|${rect.x},${rect.y},${rect.width},${rect.height}`;
+    const cached = this.frameTextures.get(key);
+    if (cached) return cached;
+    const frameTexture = new Texture({
+      source: texture.source,
+      frame: new Rectangle(rect.x, rect.y, rect.width, rect.height),
+    });
+    this.frameTextures.set(key, frameTexture);
+    return frameTexture;
   }
 }
 
@@ -335,6 +439,32 @@ function isAttackTouchEntity(entity: Entity): boolean {
   return entity.tags.includes("attack") && entity.tags.includes("touch");
 }
 
+function presentationResource(entity: Entity, resources: Record<string, Resource>): Resource | undefined {
+  const resourceId = entity.render?.resourceId;
+  const resource = resourceId ? resources[resourceId] : undefined;
+  return isVisualResource(resource) ? resource : undefined;
+}
+
+function presentationAnimationTimeMs(entity: Entity, world: RuntimeWorld): number {
+  const isParrySlot = entity.render?.slot === "parry" || entity.render?.state === "parry";
+  const startedFrame = entity.runtime?.parryStartedFrame;
+  if (isParrySlot && typeof startedFrame === "number") {
+    return Math.max(0, (world.clock.frame - startedFrame) * world.clock.fixedStepMs);
+  }
+  return world.clock.timeMs;
+}
+
+function containedImageSize(texture: Texture, box: { width: number; height: number }): { width: number; height: number } {
+  const sourceWidth = texture.width || box.width;
+  const sourceHeight = texture.height || box.height;
+  if (sourceWidth <= 0 || sourceHeight <= 0 || box.width <= 0 || box.height <= 0) return { width: box.width, height: box.height };
+  const scale = Math.min(box.width / sourceWidth, box.height / sourceHeight);
+  return {
+    width: sourceWidth * scale,
+    height: sourceHeight * scale,
+  };
+}
+
 function readNumberParam(entity: Entity, key: string): number | undefined {
   const value = entity.behavior?.params[key];
   if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
@@ -362,4 +492,13 @@ function resetGraphics(item: Graphics): void {
   item.rotation = 0;
   item.alpha = 1;
   item.visible = true;
+}
+
+function resetSprite(item: Sprite): void {
+  item.position.set(0, 0);
+  item.scale.set(1, 1);
+  item.rotation = 0;
+  item.alpha = 1;
+  item.visible = true;
+  item.tint = 0xffffff;
 }

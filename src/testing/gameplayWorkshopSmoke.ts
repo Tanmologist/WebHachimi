@@ -349,8 +349,11 @@ runSmoke("combat failed parry uses table recovery lock", () => {
   const recoveryUntil = started.frame + 50;
   assert(readEventNumber(started, "data.windowFrames") === 20, "parry active window should be 0.2s / 20 frames");
   assert(readEventNumber(started, "data.recoveryFrames") === 30, "failed parry recovery should be 0.3s / 30 frames");
+  assert(readEventNumber(started, "data.animationFrames") === 50, "parry animation should cover the full 0.5s action");
   assert(liveAtStart.runtime?.parryUntilFrame === parryUntil, "runtime parry window should last exactly 20 frames");
   assert(liveAtStart.runtime?.parryRecoveryUntilFrame === recoveryUntil, "failed parry should lock movement through recovery");
+  assert(liveAtStart.render?.slot === "parry", "parry should switch the player presentation slot to the parry animation");
+  assert(liveAtStart.render?.resourceId === "res-player-parry-counter-sequence", "parry should use the imported parry animation resource");
 
   if (controller.frame <= parryUntil) controller.step(parryUntil + 1 - controller.frame);
   const xBeforeRecoveryMove = requireEntity(world, player.id).transform.position.x;
@@ -362,6 +365,7 @@ runSmoke("combat failed parry uses table recovery lock", () => {
 
   controller.tap(attackKey, 1);
   if (controller.frame < recoveryUntil) controller.step(recoveryUntil - controller.frame);
+  assert(requireEntity(world, player.id).render?.slot === "current", "player presentation should return to current after parry animation");
   const earlyAttack = world.combatEvents.find((event) => event.type === "attackStarted" && event.attackerId === player.id && event.frame < recoveryUntil);
   assert(!earlyAttack, "failed parry recovery should block attack startup");
 
