@@ -3,6 +3,7 @@ import type { BrushContext, Entity, Resource, Task } from "../project/schema";
 import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
+import { entityHasVisiblePresentation, isAttackTouchEntity, isGameplayDebugEntity } from "../project/entityVisibility";
 import { isVisualResource, resourceFrameAtTime, type ResourceFrameRect } from "./resourceAnimation";
 import {
   centerViewportOnWorldPoint,
@@ -405,8 +406,9 @@ export class V2Renderer {
     resources: Record<string, Resource> = {},
     animationTimeMs = 0,
   ): void {
-    const hasVisiblePresentation = Boolean(entity.render && entity.render.visible !== false);
-    if (showBodyMaterial || !hasVisiblePresentation) this.drawBody(entity, selectedPart === "body", showBodyMaterial);
+    if (!showEditorDecorations && isGameplayDebugEntity(entity)) return;
+    const hasVisiblePresentation = entityHasVisiblePresentation(entity);
+    if (showBodyMaterial || (showEditorDecorations && !hasVisiblePresentation)) this.drawBody(entity, selectedPart === "body", showBodyMaterial);
     this.drawPresentation(
       entity,
       selectedPart === "presentation",
@@ -1377,10 +1379,6 @@ function readAttackKindParam(entity: Entity, kind: string, suffix: string): numb
   if (kind === "charged") return readNumberParam(entity, `chargedAttack${suffix}`);
   if (kind === "superParry") return readNumberParam(entity, `superParryAttack${suffix}`);
   return undefined;
-}
-
-function isAttackTouchEntity(entity: Entity): boolean {
-  return entity.tags.includes("attack") && entity.tags.includes("touch");
 }
 
 function readNumberParam(entity: Entity, key: string): number | undefined {

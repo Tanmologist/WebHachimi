@@ -2,6 +2,7 @@ import type { CombatEvent, Entity, Project, Scene } from "../project/schema";
 import type { EntityId, Rect } from "../shared/types";
 import { RuntimeWorld } from "../runtime/world";
 import { createStarterProject } from "../editor/starterProject";
+import { isGameplayDebugEntity } from "../project/entityVisibility";
 import { InteractiveTestRunner } from "./interactiveTestRunner";
 import { actorScopedKey } from "./timingSweep";
 
@@ -213,6 +214,7 @@ runSmoke("combat slice lets player attack damage enemy", () => {
   assert(touch.frame <= hit.frame, "attack touch should be recorded before damage resolves");
   const touchBoxes = world.allEntities().filter((entity) => !entity.persistent && entity.tags.includes("touch"));
   assert(touchBoxes.length > 0, "player attack should spawn a runtime touch box");
+  assert(touchBoxes.every(isGameplayDebugEntity), "runtime touch boxes should be hidden by gameplay renderers");
   assert(touch.data?.phase === "active" && touch.data?.window === "hitbox", "attack touch event should describe the active hitbox window");
   assert(
     !world.combatEvents.some((event) => event.type === "hit" && touchBoxes.some((box) => event.defenderId === box.id)),

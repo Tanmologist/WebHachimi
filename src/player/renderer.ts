@@ -1,5 +1,6 @@
 import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
 import type { Entity, Resource, Scene } from "../project/schema";
+import { isAttackTouchEntity, isGameplayDebugEntity } from "../project/entityVisibility";
 import { isVisualResource, resourceFrameAtTime, type ResourceFrameRect } from "../editor/resourceAnimation";
 import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
@@ -134,6 +135,7 @@ export class PlayerRenderer {
   }
 
   private drawEntity(entity: Entity, world: RuntimeWorld): void {
+    if (isGameplayDebugEntity(entity)) return;
     if (entity.render && !entity.render.visible) return;
     const frame = world.clock.frame;
     const attackTouch = isAttackTouchEntity(entity);
@@ -437,10 +439,6 @@ function readAttackKindParam(entity: Entity, kind: string, suffix: string): numb
   if (kind === "charged") return readNumberParam(entity, `chargedAttack${suffix}`);
   if (kind === "superParry") return readNumberParam(entity, `superParryAttack${suffix}`);
   return undefined;
-}
-
-function isAttackTouchEntity(entity: Entity): boolean {
-  return entity.tags.includes("attack") && entity.tags.includes("touch");
 }
 
 function presentationResource(entity: Entity, resources: Record<string, Resource>): Resource | undefined {

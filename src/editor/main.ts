@@ -2495,7 +2495,7 @@ function renderCanvasNow(projectSnapshot?: Project): void {
     selectedId: showEditorOverlays ? selectedId : undefined,
     selectedIds: showEditorOverlays ? currentSelectedEntityIds() : undefined,
     selectedPart: showEditorOverlays ? selectedPart : undefined,
-    showBodyMaterial: true,
+    showBodyMaterial: showEditorOverlays,
     showEditorDecorations: showEditorOverlays,
     previewTask: showEditorOverlays ? currentPreviewTask(snapshotProject) : undefined,
     liveBrush: showEditorOverlays ? liveBrushContext() : undefined,
