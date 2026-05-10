@@ -274,9 +274,11 @@ function attackRect(entity: Entity): { x: number; y: number; w: number; h: numbe
   const range = readNumberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
   const height = readNumberParam(entity, "attackHeight") ?? bounds.h;
   const inset = Math.max(0, readNumberParam(entity, "attackTouchInset") ?? 8);
+  const offsetX = readNumberParam(entity, "attackTouchOffsetX") ?? 0;
+  const offsetY = readNumberParam(entity, "attackTouchOffsetY") ?? 0;
   return {
-    x: direction === 1 ? bounds.x + bounds.w - inset : bounds.x - range,
-    y: bounds.y + bounds.h / 2 - height / 2,
+    x: (direction === 1 ? bounds.x + bounds.w - inset : bounds.x - range) + direction * offsetX,
+    y: bounds.y + bounds.h / 2 - height / 2 + offsetY,
     w: range + inset,
     h: height,
   };

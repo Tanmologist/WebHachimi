@@ -1,5 +1,5 @@
 import type { CombatEvent, Entity, Project, Scene } from "../project/schema";
-import type { EntityId } from "../shared/types";
+import type { EntityId, Rect } from "../shared/types";
 import { RuntimeWorld } from "../runtime/world";
 import { createStarterProject } from "../editor/starterProject";
 import { InteractiveTestRunner } from "./interactiveTestRunner";
@@ -236,6 +236,23 @@ runSmoke("combat slice lets player attack damage enemy", () => {
   };
 });
 
+runSmoke("combat attack touch offsets move active window", () => {
+  const baseline = attackTouchRectForOffsets(0, 0);
+  const shifted = attackTouchRectForOffsets(24, -12);
+  const dx = round(shifted.x - baseline.x);
+  const dy = round(shifted.y - baseline.y);
+  assert(dx === 24, `expected attackTouchOffsetX to move rect by 24, got ${dx}`);
+  assert(dy === -12, `expected attackTouchOffsetY to move rect by -12, got ${dy}`);
+  assert(shifted.w === baseline.w && shifted.h === baseline.h, "offset should move the attack touch box without resizing it");
+
+  return {
+    baseline,
+    shifted,
+    dx,
+    dy,
+  };
+});
+
 runSmoke("combat slice auto enemy can be parried and defeated", () => {
   const project = createStarterProject();
   const scene = activeScene(project);
@@ -381,6 +398,40 @@ function mustCombatEvent(controller: InteractiveTestRunner, expected: Partial<Co
   const event = controller.findCombatEvent(expected);
   if (!event) throw new Error(`combat event not found: ${JSON.stringify(expected)}`);
   return event;
+}
+
+function attackTouchRectForOffsets(offsetX: number, offsetY: number): Rect {
+  const project = createStarterProject();
+  const scene = activeScene(project);
+  const player = findByInternalName(scene, "Player");
+  const enemy = findByInternalName(scene, "Enemy_Patrol");
+  setupCombatSliceActors(player, enemy, { enemyHealth: 2, autoEnemy: false });
+  player.behavior!.params.attackTouchOffsetX = offsetX;
+  player.behavior!.params.attackTouchOffsetY = offsetY;
+  const world = new RuntimeWorld({ scene });
+  const controller = new InteractiveTestRunner({ world });
+
+  controller.tap(actorScopedKey(player.id, "attack"), 1);
+  const result = controller.stepUntil({
+    maxFrames: 40,
+    label: "player attack touch emits rect",
+    predicate: () => Boolean(controller.findCombatEvent({ type: "attackTouch", attackerId: player.id, defenderId: enemy.id })),
+    freezeOnMatch: true,
+  });
+  assert(result.matched, result.logs[0]?.message || "player attack touch did not emit");
+  return rectFromCombatEvent(mustCombatEvent(controller, { type: "attackTouch", attackerId: player.id, defenderId: enemy.id }));
+}
+
+function rectFromCombatEvent(event: CombatEvent): Rect {
+  const rect = event.data?.rect;
+  if (!isRect(rect)) throw new Error(`combat event rect is missing or invalid: ${JSON.stringify(rect)}`);
+  return rect;
+}
+
+function isRect(value: unknown): value is Rect {
+  if (!value || typeof value !== "object") return false;
+  const rect = value as Record<string, unknown>;
+  return ["x", "y", "w", "h"].every((key) => typeof rect[key] === "number" && Number.isFinite(rect[key]));
 }
 
 function setupCombatSliceActors(player: Entity, enemy: Entity, options: { enemyHealth: number; autoEnemy: boolean }): void {

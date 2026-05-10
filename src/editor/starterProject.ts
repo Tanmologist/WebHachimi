@@ -58,6 +58,8 @@ export function createStarterProject(): Project {
       attackRange: 92,
       attackHeight: 78,
       attackTouchInset: 10,
+      attackTouchOffsetX: 0,
+      attackTouchOffsetY: 0,
       attackTouchVisibleMs: 220,
     },
     tags: ["combat", "player"],
@@ -119,6 +121,8 @@ export function createStarterProject(): Project {
       attackRange: 110,
       attackHeight: 76,
       attackTouchInset: 10,
+      attackTouchOffsetX: 0,
+      attackTouchOffsetY: 0,
       attackTouchVisibleMs: 220,
       parryStunFrames: 16,
     },
@@ -149,6 +153,8 @@ export function createStarterProject(): Project {
       attackRange: 84,
       attackHeight: 76,
       attackTouchInset: 8,
+      attackTouchOffsetX: 0,
+      attackTouchOffsetY: 0,
       attackTouchVisibleMs: 180,
     },
     tags: ["runner", "player"],
@@ -345,11 +351,15 @@ function repairKnownCombatTouchTuning(entity: Entity): void {
   const params = behavior.params;
   if (entity.internalName === "Player" || entity.internalName === "Enemy_Patrol") {
     setNumberDefault(params, "attackTouchInset", 10);
+    setNumberDefault(params, "attackTouchOffsetX", 0);
+    setNumberDefault(params, "attackTouchOffsetY", 0);
     setNumberDefault(params, "attackTouchVisibleMs", 220);
     return;
   }
   if (typeof params.attackRange === "number" || typeof params.attackRange === "string") {
     setNumberDefault(params, "attackTouchInset", 8);
+    setNumberDefault(params, "attackTouchOffsetX", 0);
+    setNumberDefault(params, "attackTouchOffsetY", 0);
     setNumberDefault(params, "attackTouchVisibleMs", 180);
   }
 }
@@ -469,6 +479,8 @@ function makeBox(input: BoxInput): Entity {
                   attackRange: Math.max(84, input.w + 24),
                   attackHeight: input.h + 12,
                   attackTouchInset: 8,
+                  attackTouchOffsetX: 0,
+                  attackTouchOffsetY: 0,
                   attackTouchVisibleMs: 180,
                 }
               : {
@@ -482,6 +494,8 @@ function makeBox(input: BoxInput): Entity {
                   attackRange: 210,
                   attackHeight: input.h + 26,
                   attackTouchInset: 8,
+                  attackTouchOffsetX: 0,
+                  attackTouchOffsetY: 0,
                   attackTouchVisibleMs: 180,
                   parryStunFrames: 23,
                 }),

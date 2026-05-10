@@ -777,8 +777,19 @@ function mergeBounds(bounds: Rect[]): Rect | undefined {
 }
 
 function startCanvasTransform(event: PointerEvent, entityId: string, part: CanvasTargetPart, handle: TransformHandle, point: Vec2): void {
-  const entity = editableEntity(entityId);
-  if (!entity || !entity.persistent || !scene.entities[entity.id]) return;
+  const entity = canvasTransformEntity(entityId);
+  if (!entity) return;
+  if (isAttackTouchDebugEntity(entity)) {
+    if (handle !== "core") {
+      notice = "普通攻击 TOUCH BOX 目前只支持移动；大小请改父角色的 attackRange / attackHeight。";
+      return;
+    }
+    renderer.canvas().setPointerCapture(event.pointerId);
+    canvasDrag = createCanvasDragState(event.pointerId, entity, "body", "core", point);
+    notice = "正在移动普通攻击 TOUCH BOX；松开后会写入父角色 attackTouchOffsetX/Y。";
+    return;
+  }
+  if (!entity.persistent || !scene.entities[entity.id]) return;
   renderer.canvas().setPointerCapture(event.pointerId);
   canvasDrag = createCanvasDragState(event.pointerId, entity, part, handle, point);
   notice = dragNotice(canvasDrag.kind, "start");
@@ -792,11 +803,13 @@ function startMultiCanvasTransform(event: PointerEvent, entities: Entity[], hand
 
 function updateCanvasTransform(point: Vec2): void {
   if (!canvasDrag) return;
-  const entity = editableEntity(canvasDrag.entityId);
+  const entity = canvasTransformEntity(canvasDrag.entityId);
   if (!entity) return;
+  const isTouch = isAttackTouchDebugEntity(entity);
   applyCanvasDragState(entity, canvasDrag, point, {
-    allEntities: editableEntities(),
+    allEntities: isTouch ? [] : editableEntities(),
     movingEntityIds: [canvasDrag.entityId],
+    enabled: !isTouch,
   });
 }
 
@@ -811,7 +824,7 @@ function updateMultiCanvasTransform(point: Vec2): void {
 }
 
 function selectedEntity() {
-  return editableEntity(selectedId);
+  return world.entityById(selectedId as EntityId);
 }
 
 function editableEntities(): Entity[] {
@@ -826,9 +839,28 @@ function editableEntity(entityId: string): Entity | undefined {
   return world.entities.get(entityId);
 }
 
+function canvasTransformEntity(entityId: string): Entity | undefined {
+  const entity = editableEntity(entityId);
+  if (entity) return entity;
+  const runtimeEntity = world.entityById(entityId as EntityId);
+  return runtimeEntity && isAttackTouchDebugEntity(runtimeEntity) ? runtimeEntity : undefined;
+}
+
+function isAttackTouchDebugEntity(entity: Entity | undefined): boolean {
+  return Boolean(
+    entity &&
+      !entity.persistent &&
+      entity.parentId &&
+      entity.tags.includes("attack") &&
+      entity.tags.includes("touch"),
+  );
+}
+
 function commitCanvasTransform(drag: CanvasDragState): string | undefined {
   const entity = editableEntity(drag.entityId);
   if (!entity) {
+    const runtimeEntity = world.entityById(drag.entityId as EntityId);
+    if (runtimeEntity && isAttackTouchDebugEntity(runtimeEntity)) return commitAttackTouchDebugTransform(runtimeEntity, drag);
     syncWorldFromStore();
     return "对象状态已刷新，未提交本次变换";
   }
@@ -866,6 +898,56 @@ function commitCanvasTransform(drag: CanvasDragState): string | undefined {
     return `变换未提交：${result.error}`;
   }
   return `已提交本体变换：${transformActionLabel(drag.kind)}。`;
+}
+
+function commitAttackTouchDebugTransform(touch: Entity, drag: CanvasDragState): string | undefined {
+  if (drag.kind !== "move") {
+    touch.transform = cloneJson(drag.originalTransform);
+    touch.collider = drag.originalCollider ? cloneJson(drag.originalCollider) : undefined;
+    touch.render = drag.originalRender ? cloneJson(drag.originalRender) : undefined;
+    return "普通攻击 TOUCH BOX 目前只支持移动；大小请改父角色的 attackRange / attackHeight。";
+  }
+  const ownerId = touch.parentId;
+  const owner = ownerId ? editableEntity(ownerId) : undefined;
+  const storedOwner = ownerId ? scene.entities[ownerId] : undefined;
+  const params = storedOwner?.behavior?.params;
+  if (!owner || !storedOwner || !params) {
+    syncWorldFromStore();
+    return "普通攻击 TOUCH BOX 的父角色已刷新，本次移动未提交。";
+  }
+
+  const direction = owner.runtime?.facing === -1 ? -1 : 1;
+  const previousRawX = params.attackTouchOffsetX;
+  const previousRawY = params.attackTouchOffsetY;
+  const previousX = numberParamValue(previousRawX) ?? 0;
+  const previousY = numberParamValue(previousRawY) ?? 0;
+  const dx = touch.transform.position.x - drag.originalTransform.position.x;
+  const dy = touch.transform.position.y - drag.originalTransform.position.y;
+  const nextX = roundParam(previousX + dx * direction);
+  const nextY = roundParam(previousY + dy);
+
+  if (Math.abs(nextX - previousX) < 0.001 && Math.abs(nextY - previousY) < 0.001) {
+    return "已选中普通攻击 TOUCH BOX；拖动可调整位置。";
+  }
+
+  const patches: ProjectPatch[] = [];
+  const inversePatches: ProjectPatch[] = [];
+  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, "attackTouchOffsetX", nextX, previousRawX, hasOwnParam(params, "attackTouchOffsetX"));
+  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, "attackTouchOffsetY", nextY, previousRawY, hasOwnParam(params, "attackTouchOffsetY"));
+
+  const result = editorTransactions.apply({
+    actor: "user",
+    patches,
+    inversePatches,
+    diffSummary: `调整 ${storedOwner.displayName} 普通攻击 TOUCH BOX 偏移。`,
+    dirtyReason: `已调整 ${storedOwner.displayName} 普通攻击 TOUCH BOX`,
+  });
+  if (!result.ok) return `普通攻击 TOUCH BOX 偏移未提交：${result.error}`;
+  selectedId = touch.id;
+  selectedPart = "body";
+  selectedIds = [touch.id as EntityId];
+  selectionArea = undefined;
+  return `已写入 ${storedOwner.displayName} 的普通攻击 TOUCH BOX 偏移：前向 ${nextX}，上下 ${nextY}。`;
 }
 
 function commitMultiCanvasTransform(drag: MultiCanvasDragState): string | undefined {
@@ -916,6 +998,37 @@ function commitPresentationTransform(entity: Entity, drag: CanvasDragState): str
     return `可视体变换未提交${result.error}`;
   }
   return `已提交当前可视体变换${transformActionLabel(drag.kind)}。`;
+}
+
+function pushBehaviorParamPatch(
+  patches: ProjectPatch[],
+  inversePatches: ProjectPatch[],
+  entityId: EntityId,
+  key: string,
+  nextValue: number,
+  previousValue: unknown,
+  hadPreviousValue: boolean,
+): void {
+  const path = `/scenes/${scene.id}/entities/${entityId}/behavior/params/${key}` as ProjectPatch["path"];
+  patches.push({ op: "set", path, value: nextValue });
+  inversePatches.push(hadPreviousValue ? { op: "set", path, value: previousValue } : { op: "delete", path });
+}
+
+function hasOwnParam(params: Record<string, unknown>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(params, key);
+}
+
+function numberParamValue(value: unknown): number | undefined {
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function roundParam(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function sameTransform(left: Transform2D, right: Transform2D): boolean {
@@ -1183,11 +1296,17 @@ function onCanvasPointerDown(event: PointerEvent): void {
   const picked = renderer.pickCanvasTarget(world, point, selectedId ? { entityId: selectedId, part: selectedPart } : undefined);
   if (picked) {
     const pickedStoredEntity = scene.entities[picked.entity.id];
-    if (!pickedStoredEntity || !pickedStoredEntity.persistent) return;
+    const pickedAttackTouch = isAttackTouchDebugEntity(picked.entity);
+    if ((!pickedStoredEntity || !pickedStoredEntity.persistent) && !pickedAttackTouch) return;
     selectedId = picked.entity.id;
-    selectedPart = picked.part;
+    selectedPart = pickedAttackTouch ? "body" : picked.part;
     selectedIds = [picked.entity.id as EntityId];
     selectionArea = undefined;
+    if (pickedAttackTouch && activeTool === "select" && world.mode === "editorFrozen") {
+      startCanvasTransform(event, picked.entity.id, "body", "core", point);
+      renderAll();
+      return;
+    }
     notice = `已选择${picked.entity.displayName}${picked.part === "presentation" ? "的当前可视体" : "的本体"}`;
     renderAll();
     return;
@@ -3887,9 +4006,10 @@ function updateCanvasCursor(point: Vec2): void {
     canvas.style.cursor = handle ? cursorForTransformHandle(handle) : "default";
     return;
   }
-  const handle = renderer.pickTransformHandle(selectedEntity(), selectedPart, point);
+  const selected = selectedEntity();
+  const handle = renderer.pickTransformHandle(selected, selectedPart, point);
   if (handle) {
-    canvas.style.cursor = cursorForTransformHandle(handle);
+    canvas.style.cursor = isAttackTouchDebugEntity(selected) ? (handle === "core" ? "move" : "not-allowed") : cursorForTransformHandle(handle);
     return;
   }
   canvas.style.cursor = renderer.pickCanvasTarget(world, point, selectedId ? { entityId: selectedId, part: selectedPart } : undefined)

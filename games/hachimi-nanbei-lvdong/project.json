@@ -108,6 +108,8 @@
               "attackRange": 112,
               "attackHeight": 88,
               "attackTouchInset": 10,
+              "attackTouchOffsetX": 0,
+              "attackTouchOffsetY": 0,
               "attackTouchVisibleMs": 220,
               "attackDamage": 1,
               "hitFlashFrames": 8
@@ -469,6 +471,8 @@
               "attackRange": 126,
               "attackHeight": 82,
               "attackTouchInset": 10,
+              "attackTouchOffsetX": 0,
+              "attackTouchOffsetY": 0,
               "attackTouchVisibleMs": 220,
               "attackDamage": 1,
               "parryStunFrames": 18,

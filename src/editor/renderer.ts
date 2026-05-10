@@ -1307,8 +1307,10 @@ function gameplayAttackRect(entity: Entity): { x: number; y: number; w: number; 
   const range = readNumberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
   const height = readNumberParam(entity, "attackHeight") ?? bounds.h;
   const inset = Math.max(0, readNumberParam(entity, "attackTouchInset") ?? 8);
-  const x = direction >= 0 ? bounds.x + bounds.w - inset : bounds.x - range;
-  const y = bounds.y + bounds.h / 2 - height / 2;
+  const offsetX = readNumberParam(entity, "attackTouchOffsetX") ?? 0;
+  const offsetY = readNumberParam(entity, "attackTouchOffsetY") ?? 0;
+  const x = (direction >= 0 ? bounds.x + bounds.w - inset : bounds.x - range) + direction * offsetX;
+  const y = bounds.y + bounds.h / 2 - height / 2 + offsetY;
   return { x, y, w: range + inset, h: height };
 }
 
