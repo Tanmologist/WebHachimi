@@ -75,7 +75,11 @@ export class PlayerRenderer {
     this.frameTextures.clear();
     this.drainGraphicsPool();
     this.drainSpritePool();
-    if (this.hasLiveRenderer()) this.app.destroy(true);
+    try {
+      if (this.hasLiveRenderer()) this.app.destroy(true);
+    } catch {
+      this.app.canvas?.remove();
+    }
   }
 
   render(world: RuntimeWorld): void {
@@ -237,7 +241,7 @@ export class PlayerRenderer {
     const latest = world.combatEvents[world.combatEvents.length - 1]?.message;
     this.hudText.text = [
       player ? `Frame ${world.clock.frame}  X ${Math.round(player.transform.position.x)}  Y ${Math.round(player.transform.position.y)}${hp}` : `Frame ${world.clock.frame}`,
-      "A/D move  W/Space jump  tap J attack  hold J charge  K parry",
+      "A/D move  W/Space jump  LMB/J attack  hold LMB/J charge  RMB/K parry",
       latest ? `Latest: ${latest}` : "",
     ]
       .filter(Boolean)

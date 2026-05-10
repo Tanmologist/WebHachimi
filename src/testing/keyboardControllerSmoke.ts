@@ -1,4 +1,5 @@
 import { handleEditorKeyDown, handleEditorKeyUp } from "../editor/keyboardController";
+import { playerInputKeyForMouseButton } from "../player/input";
 
 type CapturedInput = {
   key: string;
@@ -32,6 +33,9 @@ assertInput("attack", false);
 assertInput("parry", true);
 assertInput("parry", false);
 assertInput("jump", true);
+assert(playerInputKeyForMouseButton(0) === "attack", "left mouse should map to attack");
+assert(playerInputKeyForMouseButton(2) === "parry", "right mouse should map to parry");
+assert(playerInputKeyForMouseButton(1) === undefined, "middle mouse should not map to combat input");
 assert(spaceDown.defaultPrevented, "space should prevent browser scrolling");
 assert(toggles === 1, `expected one run toggle, got ${toggles}`);
 

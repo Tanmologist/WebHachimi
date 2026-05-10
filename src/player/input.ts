@@ -4,9 +4,9 @@ export type PlayerInputBinding = {
   destroy(): void;
 };
 
-type InputKey = "left" | "right" | "jump" | "attack" | "parry";
+export type PlayerInputKey = "left" | "right" | "jump" | "attack" | "parry";
 
-const keyMap: Record<string, InputKey | undefined> = {
+const keyMap: Record<string, PlayerInputKey | undefined> = {
   ArrowLeft: "left",
   a: "left",
   A: "left",
@@ -23,11 +23,18 @@ const keyMap: Record<string, InputKey | undefined> = {
   K: "parry",
 };
 
+export function playerInputKeyForMouseButton(button: number): Extract<PlayerInputKey, "attack" | "parry"> | undefined {
+  if (button === 0) return "attack";
+  if (button === 2) return "parry";
+  return undefined;
+}
+
 export function bindPlayerInput(root: HTMLElement, world: RuntimeWorld): PlayerInputBinding {
-  const pressedPointers = new Map<number, InputKey>();
+  const pressedPointers = new Map<number, PlayerInputKey>();
+  const pressedMouseButtons = new Map<number, PlayerInputKey>();
   const cleanup: Array<() => void> = [];
 
-  const setInput = (key: InputKey, pressed: boolean) => {
+  const setInput = (key: PlayerInputKey, pressed: boolean) => {
     world.setInput(key, pressed);
   };
 
@@ -52,8 +59,30 @@ export function bindPlayerInput(root: HTMLElement, world: RuntimeWorld): PlayerI
     window.removeEventListener("keyup", onKeyUp);
   });
 
+  const stage = root.querySelector<HTMLElement>('[data-role="stage"]') || root;
+  const onMouseDown = (event: MouseEvent) => {
+    const inputKey = playerInputKeyForMouseButton(event.button);
+    if (!inputKey || isTypingTarget(event.target)) return;
+    event.preventDefault();
+    pressedMouseButtons.set(event.button, inputKey);
+    setInput(inputKey, true);
+  };
+  const onMouseUp = (event: MouseEvent) => {
+    const inputKey = pressedMouseButtons.get(event.button) || playerInputKeyForMouseButton(event.button);
+    if (!inputKey) return;
+    event.preventDefault();
+    pressedMouseButtons.delete(event.button);
+    setInput(inputKey, hasPressedInput(pressedMouseButtons, inputKey));
+  };
+  stage.addEventListener("mousedown", onMouseDown, { passive: false });
+  window.addEventListener("mouseup", onMouseUp, { passive: false });
+  cleanup.push(() => {
+    stage.removeEventListener("mousedown", onMouseDown);
+    window.removeEventListener("mouseup", onMouseUp);
+  });
+
   root.querySelectorAll<HTMLElement>("[data-input]").forEach((control) => {
-    const inputKey = control.dataset.input as InputKey | undefined;
+    const inputKey = control.dataset.input as PlayerInputKey | undefined;
     if (!inputKey) return;
 
     const press = (event: PointerEvent) => {
@@ -69,7 +98,7 @@ export function bindPlayerInput(root: HTMLElement, world: RuntimeWorld): PlayerI
       event.preventDefault();
       pressedPointers.delete(event.pointerId);
       control.classList.remove("is-pressed");
-      setInput(activeKey, hasPressedPointer(pressedPointers, activeKey));
+      setInput(activeKey, hasPressedInput(pressedPointers, activeKey));
       if (control.hasPointerCapture(event.pointerId)) control.releasePointerCapture(event.pointerId);
     };
 
@@ -93,6 +122,7 @@ export function bindPlayerInput(root: HTMLElement, world: RuntimeWorld): PlayerI
     destroy() {
       cleanup.forEach((dispose) => dispose());
       pressedPointers.clear();
+      pressedMouseButtons.clear();
       setInput("left", false);
       setInput("right", false);
       setInput("jump", false);
@@ -102,8 +132,8 @@ export function bindPlayerInput(root: HTMLElement, world: RuntimeWorld): PlayerI
   };
 }
 
-function hasPressedPointer(pointers: Map<number, InputKey>, key: InputKey): boolean {
-  for (const value of pointers.values()) {
+function hasPressedInput(inputs: Map<number, PlayerInputKey>, key: PlayerInputKey): boolean {
+  for (const value of inputs.values()) {
     if (value === key) return true;
   }
   return false;

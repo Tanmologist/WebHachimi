@@ -144,7 +144,11 @@ export class V2Renderer {
     this.destroyPools();
     const appWithResizeHook = this.app as Application & { _cancelResize?: () => void };
     if (typeof appWithResizeHook._cancelResize !== "function") appWithResizeHook._cancelResize = () => {};
-    if (this.hasLiveRenderer()) this.app.destroy(true);
+    try {
+      if (this.hasLiveRenderer()) this.app.destroy(true);
+    } catch {
+      this.app.canvas?.remove();
+    }
   }
 
   canvas(): HTMLCanvasElement {

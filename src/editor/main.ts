@@ -75,11 +75,13 @@ import { EditorTransactionController } from "./editorTransactionController";
 import { EditorPerformanceController } from "./editorPerformanceController";
 import { OutputLogController } from "./outputLogController";
 import { TaskSummaryController } from "./taskSummaryController";
+import { playerInputKeyForMouseButton, type PlayerInputKey } from "../player/input";
 
 const toolIds = ["select", "square", "circle", "leaf", "polygon", "superBrush"] as const;
 type ToolId = (typeof toolIds)[number];
 type ShapeToolId = Extract<ToolId, "square" | "circle" | "leaf">;
 type ActiveSurface = "canvas" | "world";
+type GameplayMouseInputKey = Extract<PlayerInputKey, "attack" | "parry">;
 type ContextMenuAction =
   | "select-target"
   | "rename-entity"
@@ -177,6 +179,7 @@ let superBrushTaskError = "";
 let canvasDrag: CanvasDragState | undefined;
 let multiCanvasDrag: MultiCanvasDragState | undefined;
 let canvasCameraDrag: { pointerId: number; clientX: number; clientY: number; moved: boolean; clearSelectionOnClick?: boolean } | undefined;
+const gameplayMouseInputs = new Map<number, GameplayMouseInputKey>();
 let selectionBoxDrag: { pointerId: number; start: Vec2; current: Vec2; moved: boolean } | undefined;
 let shapeDrag: ShapeDragState | undefined;
 let polygonDraft: PolygonDraftState | undefined;
@@ -591,6 +594,8 @@ function bindUi(): void {
   canvas.addEventListener("pointercancel", cancelCanvasPointerInteraction);
   canvas.addEventListener("lostpointercapture", cancelCanvasPointerInteraction);
   canvas.addEventListener("contextmenu", onCanvasContextMenu);
+  canvas.addEventListener("mousedown", onCanvasMouseDown, { passive: false });
+  window.addEventListener("mouseup", onWindowMouseUp, { passive: false });
   canvas.addEventListener("dblclick", (event: MouseEvent) => {
     if (activeTool !== "select" || world.mode !== "editorFrozen") return;
     event.preventDefault();
@@ -1120,6 +1125,11 @@ function finishCanvasCameraDrag(event: PointerEvent): boolean {
 }
 
 function cancelCanvasPointerInteraction(event: PointerEvent): void {
+  if (releaseGameplayMouseInputs(event)) {
+    releaseCanvasPointer(event.pointerId);
+    renderAll();
+    return;
+  }
   if (canvasCameraDrag?.pointerId === event.pointerId) {
     canvasCameraDrag = undefined;
     renderer.canvas().style.cursor = spacePanActive ? "grab" : "default";
@@ -1160,6 +1170,42 @@ function cancelCanvasPointerInteraction(event: PointerEvent): void {
 function releaseCanvasPointer(pointerId: number): void {
   const canvas = renderer.canvas();
   if (canvas.hasPointerCapture(pointerId)) canvas.releasePointerCapture(pointerId);
+}
+
+function startGameplayMouseInput(button: number, event?: Pick<Event, "preventDefault">): boolean {
+  if (world.mode !== "game") return false;
+  const inputKey = playerInputKeyForMouseButton(button);
+  if (!inputKey) return false;
+  event?.preventDefault();
+  renderer.canvas().focus();
+  gameplayMouseInputs.set(button, inputKey);
+  world.setInput(inputKey, true);
+  return true;
+}
+
+function finishGameplayMouseInput(button: number, event?: Pick<Event, "preventDefault">): boolean {
+  const inputKey = gameplayMouseInputs.get(button);
+  if (!inputKey) return false;
+  event?.preventDefault();
+  gameplayMouseInputs.delete(button);
+  world.setInput(inputKey, hasGameplayMouseInput(inputKey));
+  return true;
+}
+
+function releaseGameplayMouseInputs(event?: Pick<Event, "preventDefault">): boolean {
+  if (gameplayMouseInputs.size === 0) return false;
+  event?.preventDefault();
+  gameplayMouseInputs.clear();
+  world.setInput("attack", false);
+  world.setInput("parry", false);
+  return true;
+}
+
+function hasGameplayMouseInput(inputKey: GameplayMouseInputKey): boolean {
+  for (const value of gameplayMouseInputs.values()) {
+    if (value === inputKey) return true;
+  }
+  return false;
 }
 
 function normalizedWheelDeltaY(event: WheelEvent): number {
@@ -1229,6 +1275,12 @@ function startSuperBrushStroke(event: PointerEvent, point: Vec2): void {
 
 function onCanvasPointerDown(event: PointerEvent): void {
   activeSurface = "canvas";
+  if (world.mode === "game") {
+    if (startGameplayMouseInput(event.button, event)) {
+      renderer.canvas().setPointerCapture(event.pointerId);
+    }
+    return;
+  }
   if (event.button === 1) {
     startCanvasCameraDrag(event);
     return;
@@ -1323,8 +1375,20 @@ function onCanvasPointerDown(event: PointerEvent): void {
   }
 }
 
+function onCanvasMouseDown(event: MouseEvent): void {
+  startGameplayMouseInput(event.button, event);
+}
+
+function onWindowMouseUp(event: MouseEvent): void {
+  finishGameplayMouseInput(event.button, event);
+}
+
 function onCanvasContextMenu(event: MouseEvent): void {
   event.preventDefault();
+  if (world.mode === "game") {
+    contextMenu = undefined;
+    return;
+  }
   if (activeTool === "superBrush" || pendingBrush || drawingBrush) {
     undoLastSuperBrushStrokeOrCancel();
     return;
@@ -1333,7 +1397,7 @@ function onCanvasContextMenu(event: MouseEvent): void {
     finishPolygonDraft();
     return;
   }
-  if (drawingBrush || canvasDrag || canvasCameraDrag || shapeDrag || world.mode === "game") {
+  if (drawingBrush || canvasDrag || canvasCameraDrag || shapeDrag) {
     contextMenu = undefined;
     renderAll();
     return;
@@ -1711,6 +1775,10 @@ function onCanvasPointerMove(event: PointerEvent): void {
 }
 
 function onCanvasPointerUp(event: PointerEvent): void {
+  if (finishGameplayMouseInput(event.button, event)) {
+    releaseCanvasPointer(event.pointerId);
+    return;
+  }
   if (finishCanvasCameraDrag(event)) return;
   if (canvasDrag && canvasDrag.pointerId === event.pointerId) {
     const finishedDrag = canvasDrag;
@@ -2220,6 +2288,7 @@ function gameCameraPlayer(): Entity | undefined {
 }
 
 function releaseGameplayInputs(): void {
+  releaseGameplayMouseInputs();
   world.setInput("left", false);
   world.setInput("right", false);
   world.setInput("jump", false);
