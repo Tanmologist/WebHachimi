@@ -718,9 +718,9 @@ function createParryCounterResource(resourceId: ResourceId): Resource {
       const padded = String(frame).padStart(4, "0");
       return {
         id: `att-parry-counter-${padded}`,
-        fileName: `parry-counter-${padded}.jpg`,
-        mime: "image/jpeg",
-        path: `/games/hachimi-nanbei-lvdong/resources/parry-counter-${padded}.jpg`,
+        fileName: `parry-counter-alpha-${padded}.png`,
+        mime: "image/png",
+        path: `/games/hachimi-nanbei-lvdong/resources/parry-counter-alpha-${padded}.png`,
       };
     }),
     sprite: {
