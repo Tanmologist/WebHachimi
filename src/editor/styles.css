@@ -550,18 +550,17 @@ input {
 }
 
 .stage {
-  grid-area: editor;
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 0;
+  grid-area: auto;
   isolation: isolate;
   overflow: hidden;
   background: #101215;
 }
 
 .workbench-preview.is-game-mode .stage {
-  position: absolute;
-  inset: 0;
-  grid-area: auto;
+  z-index: 0;
 }
 
 .stage-grid {

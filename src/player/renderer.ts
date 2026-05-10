@@ -3,6 +3,7 @@ import type { Entity, Scene } from "../project/schema";
 import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
+import { playerCameraLayout } from "./cameraLayout";
 
 export type PlayerRendererOptions = {
   host: HTMLElement;
@@ -26,7 +27,6 @@ export class PlayerRenderer {
   private resizeObserver?: ResizeObserver;
   private removeResizeFallback?: () => void;
   private camera: Vec2 = { x: 0, y: 0 };
-  private scale = 1;
   private scene?: Scene;
   private backdrop?: Graphics;
   private horizon?: Graphics;
@@ -76,18 +76,13 @@ export class PlayerRenderer {
   }
 
   private layout(): void {
-    const screen = this.app.screen;
-    const targetWidth = this.scene?.settings.width || 1600;
-    this.scale = clamp(screen.width / targetWidth, 0.55, 1.15);
     this.layoutWorld();
   }
 
   private layoutWorld(): void {
-    this.worldLayer.scale.set(this.scale);
-    this.worldLayer.position.set(
-      this.app.screen.width / 2 - this.camera.x * this.scale,
-      this.app.screen.height * 0.55 - this.camera.y * this.scale,
-    );
+    const layout = playerCameraLayout(this.app.screen, this.camera);
+    this.worldLayer.scale.set(layout.scale);
+    this.worldLayer.position.set(layout.x, layout.y);
   }
 
   private follow(target: Vec2): void {

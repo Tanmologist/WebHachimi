@@ -7,6 +7,7 @@ import {
   zoomViewportAt,
   type ViewportScreen,
 } from "../editor/viewportMath";
+import { PLAYER_WORLD_SCALE, playerCameraLayout } from "../player/cameraLayout";
 
 const screen: ViewportScreen = { width: 1000, height: 700 };
 const center = { x: screen.width / 2, y: screen.height / 2 };
@@ -37,6 +38,17 @@ const maxClamped = zoomViewportAt(viewport, screen, center, -100000);
 assert(minClamped.zoom === 0.2, `expected min zoom clamp, got ${minClamped.zoom}`);
 assert(maxClamped.zoom === 4, `expected max zoom clamp, got ${maxClamped.zoom}`);
 
+const camera = { x: 240, y: -60 };
+const narrowPlayerLayout = playerCameraLayout({ width: 900, height: 600 }, camera);
+const widePlayerLayout = playerCameraLayout({ width: 1500, height: 600 }, camera);
+assert(narrowPlayerLayout.scale === PLAYER_WORLD_SCALE, `expected fixed player scale, got ${narrowPlayerLayout.scale}`);
+assert(widePlayerLayout.scale === PLAYER_WORLD_SCALE, `expected fixed player scale after resize, got ${widePlayerLayout.scale}`);
+assertPoint(
+  { x: widePlayerLayout.x - narrowPlayerLayout.x, y: widePlayerLayout.y - narrowPlayerLayout.y },
+  { x: 300, y: 0 },
+  "player canvas resize recenters without rescaling world",
+);
+
 console.log(
   JSON.stringify(
     {
@@ -58,6 +70,10 @@ console.log(
       clamps: {
         min: minClamped.zoom,
         max: maxClamped.zoom,
+      },
+      playerCamera: {
+        scale: widePlayerLayout.scale,
+        recenterDeltaX: widePlayerLayout.x - narrowPlayerLayout.x,
       },
     },
     null,
