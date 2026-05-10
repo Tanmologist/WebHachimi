@@ -1,10 +1,12 @@
-import type { Project } from "../project/schema";
+import type { Project, TargetRef, Task } from "../project/schema";
+import type { EntityId } from "../shared/types";
 import { escapeHtml, sourceLabel, statusLabel, testStatusLabel } from "./viewText";
 
 export type TaskPanelViewModel = {
   project: Project;
   previewTaskId: string;
   aiTraceByTask: Record<string, string>;
+  selectedEntityIds?: EntityId[];
   summaries?: TaskPanelSummary[];
 };
 
@@ -14,7 +16,8 @@ export type TaskPanelSummary = {
 };
 
 export function renderTaskPanelHtml(model: TaskPanelViewModel): string {
-  const taskList = Object.values(model.project.tasks).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const selectedEntityIds = new Set(model.selectedEntityIds || []);
+  const taskList = Object.values(model.project.tasks).sort((a, b) => compareTasksForPanel(a, b, selectedEntityIds));
   const summaryHtml = (model.summaries || [])
     .filter((summary) => summary.body.trim())
     .map((summary) => renderSummaryCard(summary))
@@ -36,6 +39,7 @@ export function renderTaskPanelHtml(model: TaskPanelViewModel): string {
           .find(Boolean) ||
         "";
       const detailParts = [
+        taskMatchesSelectedEntities(task, selectedEntityIds) ? "当前选中相关" : "",
         summarizeTargetCount(task.targetRefs.length),
         summarizeTransactionCount(task.transactionRefs.length),
         summarizeTestCount(testRecords.length),
@@ -68,6 +72,35 @@ export function renderTaskPanelHtml(model: TaskPanelViewModel): string {
       `;
     })
     .join("");
+}
+
+function compareTasksForPanel(left: Task, right: Task, selectedEntityIds: ReadonlySet<EntityId>): number {
+  const rightScore = taskSelectedEntityScore(right, selectedEntityIds);
+  const leftScore = taskSelectedEntityScore(left, selectedEntityIds);
+  if (rightScore !== leftScore) return rightScore - leftScore;
+  return right.createdAt.localeCompare(left.createdAt);
+}
+
+function taskMatchesSelectedEntities(task: Task, selectedEntityIds: ReadonlySet<EntityId>): boolean {
+  return taskSelectedEntityScore(task, selectedEntityIds) > 0;
+}
+
+function taskSelectedEntityScore(task: Task, selectedEntityIds: ReadonlySet<EntityId>): number {
+  if (selectedEntityIds.size === 0) return 0;
+  let score = 0;
+  const directRefs = task.targetRefs.filter(isSelectedEntityTarget(selectedEntityIds)).length;
+  if (directRefs > 0) score += 100 + directRefs;
+  const compiledRefs = (task.brushContext?.compiled?.targetRefs || []).filter(isSelectedEntityTarget(selectedEntityIds)).length;
+  if (compiledRefs > 0) score += 50 + compiledRefs;
+  const rawRefs = (task.brushContext?.raw?.targetRefs || []).filter(isSelectedEntityTarget(selectedEntityIds)).length;
+  if (rawRefs > 0) score += 25 + rawRefs;
+  const brushEntityRefs = (task.brushContext?.targetEntityIds || []).filter((entityId) => selectedEntityIds.has(entityId)).length;
+  if (brushEntityRefs > 0) score += 25 + brushEntityRefs;
+  return score;
+}
+
+function isSelectedEntityTarget(selectedEntityIds: ReadonlySet<EntityId>): (target: TargetRef) => boolean {
+  return (target) => target.kind === "entity" && selectedEntityIds.has(target.entityId);
 }
 
 function renderSummaryCard(summary: TaskPanelSummary): string {

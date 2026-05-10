@@ -54,7 +54,7 @@ type PreviewWindowSnapshot = {
 };
 
 type PreviewLayoutSnapshot = {
-  version: 5;
+  version: 6;
   createdWindows: number;
   windows: PreviewWindowSnapshot[];
 };
@@ -80,12 +80,13 @@ type PreviewController = {
   defaultWindows: Map<PreviewWindowId, PreviewWindowDefault>;
 };
 
-const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v5";
+const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v6";
 const LEGACY_PREVIEW_LAYOUT_STORAGE_KEYS = [
   "webhachimi.v2.workbenchPreview.layout.v1",
   "webhachimi.v2.workbenchPreview.layout.v2",
   "webhachimi.v2.workbenchPreview.layout.v3",
   "webhachimi.v2.workbenchPreview.layout.v4",
+  "webhachimi.v2.workbenchPreview.layout.v5",
 ];
 const PREVIEW_MIN_WINDOW_WIDTH = 220;
 const PREVIEW_MIN_WINDOW_HEIGHT = 150;
@@ -298,7 +299,7 @@ export function mountEditorShell(root: HTMLElement): void {
         </div>
       </aside>
 
-      <section class="bottom-panel" data-dock-slot="bottom" data-preview-window="output" data-window-title="输出面板" data-window-state="open">
+      <section class="bottom-panel" data-dock-slot="bottom" data-preview-window="output" data-window-title="输出面板" data-window-state="closed">
         <div class="panel-tabs">
           <span class="is-active" role="presentation">输出</span>
           <div class="tab-spacer"></div>
@@ -1293,7 +1294,7 @@ function restoreFloatingWindowStyle(root: HTMLElement, windowNode: HTMLElement, 
 function savePreviewLayout(controller: PreviewController): void {
   if (controller.restoringLayout) return;
   const snapshot: PreviewLayoutSnapshot = {
-    version: 5,
+    version: 6,
     createdWindows: controller.createdWindows,
     windows: allPreviewWindows(controller.root).map((windowNode) => previewWindowSnapshot(controller.root, windowNode)),
   };
@@ -1326,7 +1327,7 @@ function readPreviewLayoutSnapshot(): PreviewLayoutSnapshot | undefined {
     const raw = localStorage.getItem(PREVIEW_LAYOUT_STORAGE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Partial<PreviewLayoutSnapshot>;
-    if (parsed.version !== 5 || !Array.isArray(parsed.windows)) return undefined;
+    if (parsed.version !== 6 || !Array.isArray(parsed.windows)) return undefined;
     return parsed as PreviewLayoutSnapshot;
   } catch {
     return undefined;

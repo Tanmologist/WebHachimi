@@ -1,6 +1,7 @@
 import type { ProjectPatch, Scene } from "../project/schema";
 import { ProjectStore } from "../project/projectStore";
 import type { CreateTransactionInput } from "../project/projectStore";
+import { RuntimeWorld } from "../runtime/world";
 import { type EntityId } from "../shared/types";
 import {
   planBatchDeleteEntitiesTransaction,
@@ -12,6 +13,7 @@ import {
   planRenameResourceTransaction,
   type ContextMenuTransactionPlan,
 } from "../editor/contextMenuActions";
+import { renderSceneTreeHtml } from "../editor/sceneTreeController";
 import { createStarterProject } from "../editor/starterProject";
 
 run("duplicate creates a persistent copy in the same folder and supports undo redo", () => {
@@ -79,6 +81,27 @@ run("batch delete removes selected entities from scene and folders and supports 
     assert(restored.entities[id], `expected ${id} restored after undo`);
     assert(restored.folders.some((folder) => folder.entityIds.includes(id)), `expected ${id} folder reference restored`);
   }
+});
+
+run("deleting every persistent entity leaves the runtime world and scene tree empty", () => {
+  const store = new ProjectStore(createStarterProject());
+  const scene = currentScene(store);
+  const sourceIds = Object.values(scene.entities).filter((item) => item.persistent).map((item) => item.id);
+  assert(sourceIds.length > 0, "expected starter project to have persistent entities");
+  const sourceNames = sourceIds.map((id) => scene.entities[id].displayName);
+  const world = new RuntimeWorld({ scene });
+  const plan = planBatchDeleteEntitiesTransaction(scene, sourceIds);
+  assert(plan.ok, plan.ok ? "" : plan.error);
+
+  applyPlan(store, plan.value);
+  const afterDelete = currentScene(store);
+  world.syncPersistentEntities(afterDelete);
+  const treeHtml = renderSceneTreeHtml(afterDelete, [...world.entities.values()], "", "body", store.project.resources);
+
+  assert(world.entities.size === 0, `expected runtime world to have no persistent entities, got ${world.entities.size}`);
+  assert(!treeHtml.includes("data-entity-id"), "expected scene tree to render no entity rows");
+  for (const id of sourceIds) assert(!treeHtml.includes(id), `expected scene tree not to contain deleted id ${id}`);
+  for (const name of sourceNames) assert(!treeHtml.includes(name), `expected scene tree not to contain deleted name ${name}`);
 });
 
 run("rename entity updates display name and supports undo redo", () => {

@@ -1,7 +1,7 @@
 import "./styles.css";
 import type { AiTaskExecutionResult, AiTaskExecutor } from "../ai/taskExecutor";
 import { createTask } from "../project/tasks";
-import { normalizeProjectDefaults, type BrushContext, type Entity, type Project, type ProjectPatch } from "../project/schema";
+import { normalizeProjectDefaults, type BrushContext, type Entity, type Project, type ProjectPatch, type Scene } from "../project/schema";
 import { consumeEditorHandoff } from "../project/editorHandoff";
 import { ProjectStore } from "../project/projectStore";
 import {
@@ -147,7 +147,7 @@ const renderer = new V2Renderer();
 let animatedResourcePresent = sceneHasVisibleAnimatedResource(project);
 const DISK_AUTO_LOAD_INTERVAL_MS = 4000;
 
-let selectedId = Object.keys(scene.entities)[0] || "";
+let selectedId = firstPersistentSceneEntityId(scene);
 let selectedPart: CanvasTargetPart = "body";
 let selectedIds: EntityId[] = selectedId ? [selectedId as EntityId] : [];
 let selectionArea: Rect | undefined;
@@ -1459,7 +1459,7 @@ function applyContextMenuTransaction(planResult: Result<ContextMenuTransactionPl
     selectedIds = [planResult.value.selectedId];
     selectionArea = undefined;
   } else if (!editableEntity(selectedId)) {
-    selectedId = Object.keys(scene.entities)[0] || "";
+    selectedId = firstEditableEntityId();
     selectedPart = "body";
     selectedIds = selectedId ? [selectedId as EntityId] : [];
     selectionArea = undefined;
@@ -2090,7 +2090,7 @@ function applyLoadedProjectFromDisk(projectFromDisk: Project, saveStatus: string
   store.replace(normalizedProject);
   saveProjectLocallyFromEditor(normalizedProject);
   rebuildWorldFromStore();
-  selectedId = Object.keys(scene.entities)[0] || "";
+  selectedId = firstEditableEntityId();
   selectedPart = "body";
   selectedIds = selectedId ? [selectedId as EntityId] : [];
   selectionArea = undefined;
@@ -2399,7 +2399,7 @@ function renderTree(projectSnapshot: Project): void {
       renderUi(projectSnapshot);
     },
     onSelectEntity: (entityId, part) => {
-      selectedId = entityId || selectedId;
+      selectedId = (entityId as EntityId) || selectedId;
       selectedPart = part;
       if (entityId) {
         selectedIds = [entityId as EntityId];
@@ -2462,13 +2462,15 @@ function sceneTreeRenderSignature(projectSnapshot: Project, entities: Entity[]):
 
 function renderTasks(projectSnapshot: Project): void {
   const summarySignature = taskSummaries.signature();
-  const signature = [projectSnapshot.meta.updatedAt, previewTaskId, aiTraceSignature(), summarySignature].join("||");
+  const selectedEntityIds = currentSelectedEntityIds();
+  const signature = [projectSnapshot.meta.updatedAt, previewTaskId, aiTraceSignature(), summarySignature, selectedEntityIds.join(",")].join("||");
   if (uiRenderState.tasks === signature) return;
   uiRenderState.tasks = signature;
   tasksNode.innerHTML = renderTaskPanelHtml({
     project: projectSnapshot,
     previewTaskId,
     aiTraceByTask,
+    selectedEntityIds,
     summaries: taskSummaries.summaries(),
   });
   tasksNode.querySelectorAll<HTMLButtonElement>("[data-preview-task]").forEach((button) => {
@@ -3450,6 +3452,38 @@ function currentSelectedEntityIds(): EntityId[] {
   return selectedIds.filter((id) => Boolean(editableEntity(id)));
 }
 
+function reconcileSelectionWithWorld(): void {
+  const requestedIds = [...selectedIds];
+  if (selectedId) requestedIds.unshift(selectedId as EntityId);
+  const validIds = uniqueEntityIds(requestedIds).filter((id) => Boolean(editableEntity(id)));
+  const selectedStillExists = Boolean(selectedId && editableEntity(selectedId));
+
+  if (!selectedStillExists && (selectedId || selectedIds.length > 0)) {
+    selectedId = validIds[0] || firstEditableEntityId();
+    selectedPart = "body";
+  }
+
+  if (selectedId && !editableEntity(selectedId)) {
+    selectedId = "";
+    selectedPart = "body";
+  }
+
+  if (selectedId && selectedPart === "presentation" && !editableEntity(selectedId)?.render) {
+    selectedPart = "body";
+  }
+
+  selectedIds = selectedId ? uniqueEntityIds([selectedId as EntityId, ...validIds]) : [];
+  if (selectedIds.length > 0) selectionArea = undefined;
+}
+
+function firstEditableEntityId(): EntityId | "" {
+  return (editableEntities()[0]?.id as EntityId | undefined) || "";
+}
+
+function firstPersistentSceneEntityId(targetScene: Scene): EntityId | "" {
+  return (Object.values(targetScene.entities).find((entity) => entity.persistent)?.id as EntityId | undefined) || "";
+}
+
 function rectFromPoints(start: Vec2, end: Vec2): Rect {
   const x = Math.min(start.x, end.x);
   const y = Math.min(start.y, end.y);
@@ -3686,6 +3720,7 @@ function syncWorldFromStore(): void {
   scene = latestScene;
   animatedResourcePresent = sceneHasVisibleAnimatedResource(latestProject);
   world.syncPersistentEntities(latestScene);
+  reconcileSelectionWithWorld();
 }
 
 function rebuildWorldFromStore(): void {
@@ -3693,6 +3728,7 @@ function rebuildWorldFromStore(): void {
   scene = latestProject.scenes[latestProject.activeSceneId];
   animatedResourcePresent = sceneHasVisibleAnimatedResource(latestProject);
   world = new RuntimeWorld({ scene });
+  reconcileSelectionWithWorld();
 }
 
 function updateCanvasCursor(point: Vec2): void {
@@ -3771,7 +3807,7 @@ if (typeof window !== "undefined") {
     getRenderer: () => renderer,
     setSelectedIds: (ids: string[]) => {
       selectedIds = ids as EntityId[];
-      selectedId = ids[0] || "";
+      selectedId = (ids[0] as EntityId | undefined) || "";
       selectedPart = "body";
       selectionArea = undefined;
       renderAll();
