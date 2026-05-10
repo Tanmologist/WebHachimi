@@ -78,6 +78,54 @@ assert((terrain.collider.points?.length || 0) >= 3, "expected polygon collider p
 assert(terrain.collider.solid === true, "expected generated terrain to be solid");
 assert(terrain.collider.trigger === false, "expected generated terrain not to be a trigger");
 
+const cloudStore = new ProjectStore(createStarterProject());
+const cloudScene = activeScene(cloudStore.project);
+const cloudArea: Rect = { x: -240, y: -380, w: 520, h: 220 };
+const cloudStroke = createSuperBrushStroke([
+  { x: -210, y: -290 },
+  { x: -150, y: -360 },
+  { x: -48, y: -340 },
+  { x: 20, y: -380 },
+  { x: 132, y: -332 },
+  { x: 228, y: -282 },
+  { x: 180, y: -210 },
+  { x: 44, y: -196 },
+  { x: -108, y: -204 },
+  { x: -210, y: -290 },
+]);
+assert(cloudStroke.ok, cloudStroke.ok ? "" : cloudStroke.error);
+const cloudTask = createTaskFromSuperBrush({
+  userText: "画一个这样的云 可以使用ai 生成 也可以使用算法",
+  draft: {
+    strokes: [cloudStroke.value],
+    annotations: [],
+    selectionTargets: [{ kind: "area", sceneId: cloudScene.id, rect: cloudArea }],
+    strokeTargetRefs: {
+      [cloudStroke.value.id]: [{ kind: "area", sceneId: cloudScene.id, rect: cloudArea }],
+    },
+    selectionBox: cloudArea,
+  },
+});
+assert(cloudTask.ok, cloudTask.ok ? "" : cloudTask.error);
+cloudStore.upsertTask(cloudTask.value);
+const cloudRun = new AiTaskExecutor({ store: cloudStore }).executeNextQueuedTask();
+assert(cloudRun.ok, cloudRun.ok ? "" : cloudRun.error);
+assert(cloudRun.value?.status === "passed", `expected cloud brush task to pass, got ${cloudRun.value?.status}`);
+const cloudProject = cloudStore.project;
+const cloud = Object.values(activeScene(cloudProject).entities).find((entity) => entity.tags.includes("cloud") && entity.tags.includes("ai-generated"));
+assert(cloud, "expected generated cloud entity");
+assert(cloud.kind === "effect", `expected cloud to be an effect entity, got ${cloud.kind}`);
+assert(cloud.render?.resourceId, "expected generated cloud to bind an image resource");
+assert(cloud.collider?.shape === "polygon", "expected cloud to retain the brush outline as a polygon body");
+const cloudResource = cloudProject.resources[cloud.render.resourceId];
+assert(cloudResource, "expected generated cloud resource");
+assert(cloudResource.type === "image", `expected cloud resource to be an image, got ${cloudResource.type}`);
+assert(cloudResource.attachments[0]?.path.startsWith("data:image/svg+xml"), "expected procedural cloud SVG data URL");
+assert(
+  cloudProject.tasks[cloudTask.value.id]?.verificationPlan?.projectChecks.some((check) => Object.prototype.hasOwnProperty.call(check.expect, "render.resourceId")),
+  "expected cloud verification plan to check render.resourceId",
+);
+
 console.log(JSON.stringify({ status: "passed" }, null, 2));
 
 function activeScene(project: Project) {

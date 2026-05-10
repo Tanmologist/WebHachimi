@@ -343,6 +343,19 @@ function applyBrushSpatialEdits(input: {
     input.intents.push(`super brush shape: ${shape.kind} confidence ${shape.confidence}`);
   }
 
+  if (area && wantsBrushVisualEntity(input.text)) {
+    const generated = createBrushVisualResourceEntity(input.scene, brush, area.rect, input.text, input.normalizedText);
+    const resourcePath = `/resources/${generated.resource.id}` as const;
+    const entityPath = `/scenes/${input.scene.id}/entities/${generated.entity.id}` as const;
+    input.patches.push({ op: "set", path: resourcePath, value: generated.resource });
+    input.inversePatches.push({ op: "delete", path: resourcePath });
+    input.patches.push({ op: "set", path: entityPath, value: generated.entity });
+    input.inversePatches.push({ op: "delete", path: entityPath });
+    input.touchedTargets.push({ kind: "resource", resourceId: generated.resource.id as ResourceId });
+    input.touchedTargets.push({ kind: "entity", entityId: generated.entity.id as EntityId });
+    input.intents.push(`super brush visual: generated ${generated.entity.displayName}`);
+  }
+
   if (area && wantsBrushAreaEntity(input.text)) {
     const entity = createBrushAreaEntity(input.scene, brush, area.rect, input.text, input.normalizedText);
     const entityPath = `/scenes/${input.scene.id}/entities/${entity.id}` as const;
@@ -431,6 +444,35 @@ function wantsBrushAreaEntity(text: string): boolean {
   return createIntent && Boolean(brushAreaEntityKind(text));
 }
 
+function wantsBrushVisualEntity(text: string): boolean {
+  const lower = text.toLowerCase();
+  const createIntent = hasAny(lower, [
+    "create",
+    "add",
+    "place",
+    "spawn",
+    "generate",
+    "make",
+    "draw",
+    "paint",
+    "sketch",
+    "\u521b\u5efa",
+    "\u6dfb\u52a0",
+    "\u751f\u6210",
+    "\u653e\u7f6e",
+    "\u753b",
+    "\u7ed8\u5236",
+    "\u52a0",
+  ]);
+  return createIntent && Boolean(brushVisualEntityKind(text));
+}
+
+function brushVisualEntityKind(text: string): "cloud" | undefined {
+  const lower = text.toLowerCase();
+  if (hasAny(lower, ["cloud", "mist", "\u4e91", "\u4e91\u6735", "\u4e91\u5c42", "\u96fe"])) return "cloud";
+  return undefined;
+}
+
 function brushAreaEntityKind(text: string): BrushAreaEntityKind | undefined {
   const lower = text.toLowerCase();
   if (hasAny(lower, ["hazard", "danger", "damage zone", "spike", "\u5371\u9669", "\u4f24\u5bb3", "\u523a"])) return "hazard";
@@ -462,6 +504,95 @@ function wantsPatrolPath(text: string): boolean {
 
 type BrushAreaEntityKind = "hazard" | "trigger" | "platform" | "terrain";
 
+function createBrushVisualResourceEntity(
+  scene: Scene,
+  brush: BrushCompiledContext,
+  rect: { x: number; y: number; w: number; h: number },
+  text: string,
+  normalizedText: string,
+): { resource: Resource; entity: Entity } {
+  const kind = brushVisualEntityKind(text) || "cloud";
+  const resourceId = makeId<"ResourceId">("res") as ResourceId;
+  const entityId = makeId<"EntityId">("ent") as EntityId;
+  const polygon = brushShape(brush).kind === "closed-shape" ? brushPolygonGeometry(brushClosedShapePoints(brush)) : undefined;
+  const displayName = kind === "cloud" ? "\u8d85\u7ea7\u753b\u7b14\u4e91\u6735" : "\u8d85\u7ea7\u753b\u7b14\u56fe\u50cf";
+  const visualSize = polygon?.size || { x: rect.w, y: rect.h };
+  const visualCenter = polygon?.center || { x: roundTo(rect.x + rect.w / 2, 4), y: roundTo(rect.y + rect.h / 2, 4) };
+  const resource: Resource = {
+    id: resourceId,
+    internalName: `SuperBrushCloud_${resourceId.slice(-6)}`,
+    displayName: "\u4e91\u6735\u7a0b\u5e8f\u8d34\u56fe",
+    type: "image",
+    description: "\u6839\u636e\u8d85\u7ea7\u753b\u7b14\u6807\u6ce8\u751f\u6210\u7684\u900f\u660e\u4e91\u6735\u8d34\u56fe\u3002",
+    aiDescription: normalizedText.slice(0, 240),
+    tags: ["ai", "super-brush", "cloud", "texture"],
+    attachments: [
+      {
+        id: `att-${resourceId.slice(-8)}`,
+        fileName: "super-brush-cloud.svg",
+        mime: "image/svg+xml",
+        path: proceduralCloudSvgDataUrl(resourceId),
+      },
+    ],
+  };
+  const binding: ResourceBinding = {
+    resourceId,
+    slot: "current",
+    description: "\u8d85\u7ea7\u753b\u7b14\u751f\u6210\u4e91\u6735\u8d34\u56fe",
+    aiDescription: normalizedText.slice(0, 240),
+    localOffset: { x: 0, y: 0 },
+    localRotation: 0,
+    localScale: { x: 1, y: 1 },
+  };
+  const entity: Entity = {
+    id: entityId,
+    internalName: `super_brush_cloud_${entityId.slice(-6)}`,
+    displayName,
+    kind: "effect",
+    persistent: true,
+    transform: {
+      position: visualCenter,
+      rotation: 0,
+      scale: { x: 1, y: 1 },
+    },
+    render: {
+      visible: true,
+      color: "#ffffff",
+      opacity: 0.96,
+      layerId: scene.layers[0]?.id || "world",
+      size: visualSize,
+      offset: { x: 0, y: 0 },
+      rotation: 0,
+      scale: { x: 1, y: 1 },
+      resourceId,
+      slot: "current",
+      state: "current",
+    },
+    body: {
+      mode: "none",
+      velocity: { x: 0, y: 0 },
+      gravityScale: 0,
+      friction: 0,
+      bounce: 0,
+    },
+    collider: polygon
+      ? {
+          shape: "polygon",
+          size: polygon.size,
+          points: polygon.localPoints,
+          solid: false,
+          trigger: false,
+          layerMask: ["world"],
+          offset: { x: 0, y: 0 },
+          rotation: 0,
+        }
+      : undefined,
+    resources: [binding],
+    tags: ["super-brush", "ai-generated", "cloud", "texture"],
+  };
+  return { resource, entity };
+}
+
 function createBrushAreaEntity(
   scene: Scene,
   brush: BrushCompiledContext,
@@ -475,7 +606,7 @@ function createBrushAreaEntity(
   const solid = kind === "platform" || kind === "terrain";
   const trigger = !solid;
   const shape = brushShape(brush);
-  const polygon = shape.kind === "closed-shape" ? brushPolygonGeometry(shape.approximatePolygon) : undefined;
+  const polygon = shape.kind === "closed-shape" ? brushPolygonGeometry(brushClosedShapePoints(brush)) : undefined;
   const baseEntity: Entity = {
     id,
     internalName: `${displayName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_${id.slice(-6)}`,
@@ -540,6 +671,14 @@ function createBrushAreaEntity(
   };
 }
 
+function brushClosedShapePoints(brush: BrushCompiledContext): Vec2[] | undefined {
+  const shape = brushShape(brush);
+  if (shape.kind !== "closed-shape") return undefined;
+  const path = primaryBrushPath(brush);
+  if (path?.points.length && path.points.length >= 4) return path.points;
+  return shape.approximatePolygon;
+}
+
 function brushPolygonGeometry(points: Vec2[] | undefined): { center: Vec2; size: Vec2; localPoints: Vec2[] } | undefined {
   const cleaned = simplifyBrushPolygon(points || [], 4);
   if (cleaned.length < 3) return undefined;
@@ -589,6 +728,37 @@ function brushPolygonArea(points: Vec2[]): number {
     area += current.x * next.y - next.x * current.y;
   }
   return area / 2;
+}
+
+function proceduralCloudSvgDataUrl(seed: string): string {
+  const hueShift = seed.split("").reduce((sum, char) => sum + char.charCodeAt(0), 0) % 14;
+  const blue = 236 + (hueShift % 8);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 512">
+  <defs>
+    <filter id="soft" x="-15%" y="-20%" width="130%" height="145%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+    <linearGradient id="cloudFill" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.58" stop-color="#eef7ff"/>
+      <stop offset="1" stop-color="rgb(217,233,${blue})"/>
+    </linearGradient>
+    <linearGradient id="shadowFill" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#bdd6eb" stop-opacity="0.34"/>
+      <stop offset="1" stop-color="#7c9ab5" stop-opacity="0.18"/>
+    </linearGradient>
+  </defs>
+  <g opacity="0.95">
+    <ellipse cx="512" cy="336" rx="378" ry="96" fill="#6f8faa" opacity="0.18" filter="url(#soft)"/>
+    <path d="M156 352c-42-5-74-39-74-82 0-46 37-84 83-84 12 0 24 3 35 8 30-69 98-117 177-117 61 0 117 29 153 76 30-22 67-35 107-35 88 0 162 64 176 149 59 7 104 57 104 118 0 66-53 119-119 119H172c-54 0-98-44-98-98 0-25 9-47 24-64 16 8 36 12 58 10z" fill="url(#cloudFill)"/>
+    <path d="M170 379c80 38 210 48 322 20 126-32 214-23 336 10-15 56-65 95-124 95H172c-54 0-98-44-98-98 0-14 3-27 8-39 25 4 54 8 88 12z" fill="url(#shadowFill)" opacity="0.82"/>
+    <ellipse cx="296" cy="242" rx="138" ry="113" fill="#ffffff" opacity="0.72"/>
+    <ellipse cx="494" cy="210" rx="164" ry="132" fill="#ffffff" opacity="0.66"/>
+    <ellipse cx="681" cy="274" rx="176" ry="124" fill="#ffffff" opacity="0.58"/>
+    <path d="M170 383c118 50 233 53 350 24 95-24 196-10 304 24" fill="none" stroke="#c2d8ea" stroke-width="18" stroke-linecap="round" opacity="0.32"/>
+  </g>
+</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 function brushAreaEntityDisplayName(kind: BrushAreaEntityKind): string {
