@@ -63,6 +63,13 @@ body {
   gap: 10px;
 }
 
+.player-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  align-items: end;
+  gap: 10px;
+}
+
 .player-button {
   width: 64px;
   height: 64px;
@@ -101,8 +108,28 @@ body {
 }
 
 @media (max-width: 640px) {
-  .player-pad {
+  .player-pad,
+  .player-actions {
     grid-template-columns: repeat(2, 56px);
+  }
+
+  .player-actions {
+    grid-template-areas:
+      "attack parry"
+      "jump jump";
+  }
+
+  .player-action[data-input="attack"] {
+    grid-area: attack;
+  }
+
+  .player-action[data-input="parry"] {
+    grid-area: parry;
+  }
+
+  .player-jump {
+    grid-area: jump;
+    justify-self: center;
   }
 
   .player-button {

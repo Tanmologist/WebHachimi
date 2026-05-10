@@ -1,5 +1,6 @@
 import { Application, Container, Graphics, Text } from "pixi.js";
 import type { Entity, Scene } from "../project/schema";
+import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
 
@@ -68,7 +69,9 @@ export class PlayerRenderer {
     if (player) this.follow(player.transform.position);
     this.layoutWorld();
     this.drawBackdrop();
-    world.allEntities().forEach((entity) => this.drawEntity(entity));
+    this.drawAttackTelegraphs(world);
+    world.allEntities().forEach((entity) => this.drawEntity(entity, world.clock.frame));
+    world.allEntities().forEach((entity) => this.drawHealthBar(entity, world.clock.frame));
     this.drawHud(world, player);
   }
 
@@ -109,12 +112,15 @@ export class PlayerRenderer {
     }
   }
 
-  private drawEntity(entity: Entity): void {
+  private drawEntity(entity: Entity, frame: number): void {
     if (entity.render && !entity.render.visible) return;
     const graphics = this.takeGraphics();
     const size = entity.collider?.size || { x: 56, y: 56 };
-    const color = parseColor(entity.render?.color || "#74a8bd");
-    const alpha = entity.persistent ? entity.render?.opacity ?? 1 : Math.min(entity.render?.opacity ?? 1, 0.45);
+    const flashed = frame <= (entity.runtime?.hitFlashUntilFrame ?? -1);
+    const defeated = entity.runtime?.defeated === true;
+    const color = flashed ? 0xf4fff7 : parseColor(entity.render?.color || "#74a8bd");
+    const baseAlpha = entity.persistent ? entity.render?.opacity ?? 1 : Math.min(entity.render?.opacity ?? 1, 0.45);
+    const alpha = defeated ? Math.min(baseAlpha, 0.28) : baseAlpha;
 
     if (entity.collider?.shape === "circle") {
       graphics.circle(0, 0, entity.collider.radius || Math.min(size.x, size.y) / 2);
@@ -130,6 +136,14 @@ export class PlayerRenderer {
     graphics.fill({ color, alpha });
     if (entity.collider?.solid) {
       graphics.setStrokeStyle({ width: 2, color: 0x0a0c0b, alpha: 0.62 });
+      graphics.stroke();
+    }
+    if (defeated) {
+      graphics.setStrokeStyle({ width: 4, color: 0xf2d16b, alpha: 0.82 });
+      graphics.moveTo(-size.x * 0.35, -size.y * 0.35);
+      graphics.lineTo(size.x * 0.35, size.y * 0.35);
+      graphics.moveTo(size.x * 0.35, -size.y * 0.35);
+      graphics.lineTo(-size.x * 0.35, size.y * 0.35);
       graphics.stroke();
     }
     graphics.position.set(entity.transform.position.x, entity.transform.position.y);
@@ -153,10 +167,59 @@ export class PlayerRenderer {
   }
 
   private drawHud(world: RuntimeWorld, player?: Entity): void {
-    this.hudText.text = player
-      ? `Frame ${world.clock.frame}  X ${Math.round(player.transform.position.x)}  Y ${Math.round(player.transform.position.y)}`
-      : `Frame ${world.clock.frame}`;
+    const hp = player ? ` HP ${player.runtime?.health ?? readNumberParam(player, "health") ?? "-"}` : "";
+    const latest = world.combatEvents[world.combatEvents.length - 1]?.message;
+    this.hudText.text = [
+      player ? `Frame ${world.clock.frame}  X ${Math.round(player.transform.position.x)}  Y ${Math.round(player.transform.position.y)}${hp}` : `Frame ${world.clock.frame}`,
+      "A/D move  W/Space jump  J attack  K parry",
+      latest ? `Latest: ${latest}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
     this.hudText.position.set(14, 12);
+  }
+
+  private drawAttackTelegraphs(world: RuntimeWorld): void {
+    const frame = world.clock.frame;
+    for (const entity of world.allEntities()) {
+      if (entity.runtime?.defeated || !entity.collider) continue;
+      const start = entity.runtime?.attackStartFrame;
+      const activeUntil = entity.runtime?.attackActiveUntilFrame;
+      if (start === undefined || activeUntil === undefined || frame > activeUntil) continue;
+      const rect = attackRect(entity);
+      const graphics = this.takeGraphics();
+      if (frame < start) {
+        graphics.rect(rect.x, rect.y, rect.w, rect.h);
+        graphics.fill({ color: 0xffd166, alpha: 0.18 });
+        graphics.setStrokeStyle({ width: 2, color: 0xffd166, alpha: 0.68 });
+        graphics.stroke();
+      } else {
+        graphics.rect(rect.x, rect.y, rect.w, rect.h);
+        graphics.fill({ color: 0xff4d5d, alpha: 0.24 });
+        graphics.setStrokeStyle({ width: 3, color: 0xff4d5d, alpha: 0.82 });
+        graphics.stroke();
+      }
+      this.worldLayer.addChild(graphics);
+    }
+  }
+
+  private drawHealthBar(entity: Entity, frame: number): void {
+    const maxHealth = readNumberParam(entity, "health");
+    const health = entity.runtime?.health ?? maxHealth;
+    if (maxHealth === undefined || health === undefined) return;
+    if (!entity.behavior && !entity.tags.some((tag) => tag.toLowerCase().includes("enemy") || tag.toLowerCase().includes("player"))) return;
+    const bounds = boundsFor(entity);
+    const width = Math.max(38, Math.min(96, bounds.w * 1.25));
+    const height = 6;
+    const x = bounds.x + bounds.w / 2 - width / 2;
+    const y = bounds.y - 16;
+    const ratio = clamp(health / Math.max(1, maxHealth), 0, 1);
+    const bar = this.takeGraphics();
+    bar.roundRect(x, y, width, height, 3);
+    bar.fill({ color: 0x111817, alpha: 0.78 });
+    bar.roundRect(x + 1, y + 1, Math.max(0, (width - 2) * ratio), height - 2, 2);
+    bar.fill({ color: entity.runtime?.defeated ? 0x6f756c : frame <= (entity.runtime?.hitFlashUntilFrame ?? -1) ? 0xf2d16b : 0x79d6ba, alpha: 0.95 });
+    this.worldLayer.addChild(bar);
   }
 
   private recycleWorldLayer(): void {
@@ -190,6 +253,29 @@ export class PlayerRenderer {
 
 function findPlayer(entities: Entity[]): Entity | undefined {
   return entities.find((entity) => entity.behavior?.builtin === "playerPlatformer") || entities.find((entity) => entity.internalName === "Player");
+}
+
+function attackRect(entity: Entity): { x: number; y: number; w: number; h: number } {
+  const bounds = boundsFor(entity);
+  const direction = entity.runtime?.facing === -1 ? -1 : 1;
+  const range = readNumberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
+  const height = readNumberParam(entity, "attackHeight") ?? bounds.h;
+  return {
+    x: direction === 1 ? bounds.x + bounds.w : bounds.x - range,
+    y: bounds.y + bounds.h / 2 - height / 2,
+    w: range,
+    h: height,
+  };
+}
+
+function readNumberParam(entity: Entity, key: string): number | undefined {
+  const value = entity.behavior?.params[key];
+  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
 }
 
 function parseColor(value: string): number {

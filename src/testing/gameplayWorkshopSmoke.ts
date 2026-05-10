@@ -152,6 +152,80 @@ runSmoke("parry workshop lands 100ms reaction and counter-hit", () => {
   };
 });
 
+runSmoke("combat slice lets player attack damage enemy", () => {
+  const project = createStarterProject();
+  const scene = activeScene(project);
+  const player = findByInternalName(scene, "Player");
+  const enemy = findByInternalName(scene, "Enemy_Patrol");
+  setupCombatSliceActors(player, enemy, { enemyHealth: 2, autoEnemy: false });
+  const world = new RuntimeWorld({ scene });
+  const controller = new InteractiveTestRunner({ world });
+
+  const attackKey = actorScopedKey(player.id, "attack");
+  controller.tap(attackKey, 1);
+  const hitResult = controller.stepUntil({
+    maxFrames: 40,
+    label: "player attack hits enemy",
+    predicate: () => Boolean(controller.findCombatEvent({ type: "hit", attackerId: player.id, defenderId: enemy.id })),
+    freezeOnMatch: true,
+  });
+  assert(hitResult.matched, hitResult.logs[0]?.message || "player attack did not hit enemy");
+
+  const liveEnemy = requireEntity(world, enemy.id);
+  assert(liveEnemy.runtime?.health === 1, `expected enemy health 1 after hit, got ${liveEnemy.runtime?.health}`);
+  assert(!liveEnemy.runtime?.defeated, "enemy should survive the first hit");
+
+  return {
+    hitFrame: controller.findCombatEvent({ type: "hit", attackerId: player.id, defenderId: enemy.id })?.frame,
+    enemyHealth: liveEnemy.runtime?.health,
+  };
+});
+
+runSmoke("combat slice auto enemy can be parried and defeated", () => {
+  const project = createStarterProject();
+  const scene = activeScene(project);
+  const player = findByInternalName(scene, "Player");
+  const enemy = findByInternalName(scene, "Enemy_Patrol");
+  setupCombatSliceActors(player, enemy, { enemyHealth: 1, autoEnemy: true });
+  const world = new RuntimeWorld({ scene });
+  const controller = new InteractiveTestRunner({ world });
+
+  const parryKey = actorScopedKey(player.id, "parry");
+  const attackKey = actorScopedKey(player.id, "attack");
+  const initialPlayerHealth = requireEntity(world, player.id).runtime?.health ?? healthFromBehavior(player);
+  let parryQueuedFor: number | undefined;
+  let counterQueuedFor: number | undefined;
+
+  for (let index = 0; index < 120; index += 1) {
+    const frame = controller.frame;
+    const enemyAttack = controller.findCombatEvent({ type: "attackStarted", attackerId: enemy.id });
+    if (enemyAttack && parryQueuedFor === undefined) parryQueuedFor = enemyAttack.frame + 10;
+    const parrySuccess = controller.findCombatEvent({ type: "parrySuccess", attackerId: enemy.id, defenderId: player.id });
+    if (parrySuccess && counterQueuedFor === undefined) counterQueuedFor = frame + 1;
+
+    if (parryQueuedFor !== undefined && frame === parryQueuedFor) controller.tap(parryKey, 1);
+    else if (counterQueuedFor !== undefined && frame === counterQueuedFor) controller.tap(attackKey, 1);
+    else controller.step(1);
+
+    if (controller.findCombatEvent({ type: "defeated", attackerId: player.id, defenderId: enemy.id })) break;
+  }
+
+  const parrySuccess = mustCombatEvent(controller, { type: "parrySuccess", attackerId: enemy.id, defenderId: player.id });
+  const defeated = mustCombatEvent(controller, { type: "defeated", attackerId: player.id, defenderId: enemy.id });
+  const livePlayer = requireEntity(world, player.id);
+  const liveEnemy = requireEntity(world, enemy.id);
+  assert(livePlayer.runtime?.health === initialPlayerHealth, "player should keep health after parry");
+  assert(liveEnemy.runtime?.defeated === true, "enemy should be marked defeated");
+  assert(defeated.frame > parrySuccess.frame, "defeat should happen after parry success");
+
+  return {
+    parryFrame: parrySuccess.frame,
+    defeatedFrame: defeated.frame,
+    playerHealth: livePlayer.runtime?.health,
+    enemyDefeated: liveEnemy.runtime?.defeated,
+  };
+});
+
 runSmoke("scoped inputs keep runner and combat zones isolated", () => {
   const project = createStarterProject();
   const scene = activeScene(project);
@@ -252,6 +326,68 @@ function mustCombatEvent(controller: InteractiveTestRunner, expected: Partial<Co
   const event = controller.findCombatEvent(expected);
   if (!event) throw new Error(`combat event not found: ${JSON.stringify(expected)}`);
   return event;
+}
+
+function setupCombatSliceActors(player: Entity, enemy: Entity, options: { enemyHealth: number; autoEnemy: boolean }): void {
+  player.transform.position = { x: 0, y: 240 };
+  player.body!.velocity = { x: 0, y: 0 };
+  player.runtime = {
+    ...player.runtime,
+    health: 3,
+    facing: 1,
+    defeated: false,
+    attackStartFrame: undefined,
+    attackActiveUntilFrame: undefined,
+    attackCooldownUntilFrame: undefined,
+    parryUntilFrame: undefined,
+    parryCooldownUntilFrame: undefined,
+  };
+  player.behavior!.params = {
+    ...player.behavior!.params,
+    health: 3,
+    attackStartupFrames: 4,
+    attackActiveFrames: 5,
+    attackCooldownFrames: 16,
+    attackRange: 128,
+    attackHeight: 90,
+    attackDamage: 1,
+    parryWindowFrames: 7,
+    parryCooldownFrames: 16,
+  };
+
+  enemy.transform.position = { x: 118, y: 240 };
+  enemy.body!.velocity = { x: 0, y: 0 };
+  enemy.runtime = {
+    ...enemy.runtime,
+    health: options.enemyHealth,
+    facing: -1,
+    patrolDirection: -1,
+    defeated: false,
+    attackStartFrame: undefined,
+    attackActiveUntilFrame: undefined,
+    attackCooldownUntilFrame: undefined,
+  };
+  enemy.behavior!.params = {
+    ...enemy.behavior!.params,
+    speed: options.autoEnemy ? 90 : 0,
+    left: 118,
+    right: 118,
+    health: options.enemyHealth,
+    attackStartupFrames: 12,
+    attackActiveFrames: 5,
+    attackCooldownFrames: 28,
+    attackRange: 128,
+    attackHeight: 90,
+    attackDamage: 1,
+    parryStunFrames: 18,
+    ...(options.autoEnemy
+      ? {
+          targetInternalName: "Player",
+          aggroRange: 360,
+          preferredDistance: 86,
+        }
+      : {}),
+  };
 }
 
 function round(value: number): number {

@@ -31,8 +31,8 @@
           "persistent": true,
           "transform": {
             "position": {
-              "x": -280,
-              "y": 120
+              "x": -140,
+              "y": 252
             },
             "rotation": 0,
             "scale": {
@@ -96,8 +96,15 @@
               "speed": 300,
               "jump": 620,
               "health": 3,
-              "parryWindowFrames": 5,
-              "parryCooldownFrames": 16
+              "parryWindowFrames": 7,
+              "parryCooldownFrames": 16,
+              "attackStartupFrames": 4,
+              "attackActiveFrames": 5,
+              "attackCooldownFrames": 16,
+              "attackRange": 112,
+              "attackHeight": 88,
+              "attackDamage": 1,
+              "hitFlashFrames": 8
             }
           },
           "resources": [
@@ -223,7 +230,7 @@
           "persistent": true,
           "transform": {
             "position": {
-              "x": 0,
+              "x": -40,
               "y": 310
             },
             "rotation": 0,
@@ -238,7 +245,7 @@
             "opacity": 1,
             "layerId": "world",
             "size": {
-              "x": 760,
+              "x": 980,
               "y": 48
             },
             "offset": {
@@ -266,7 +273,7 @@
           "collider": {
             "shape": "box",
             "size": {
-              "x": 760,
+              "x": 980,
               "y": 48
             },
             "solid": true,
@@ -382,13 +389,13 @@
           "persistent": true,
           "transform": {
             "position": {
-              "x": -28,
-              "y": 180
+              "x": 40,
+              "y": 264
             },
             "rotation": 0,
             "scale": {
-              "x": 1.5961538461538463,
-              "y": 2.409090909090909
+              "x": 1,
+              "y": 1
             }
           },
           "render": {
@@ -443,16 +450,21 @@
             "builtin": "enemyPatrol",
             "description": "敌人左右巡逻",
             "params": {
-              "speed": 70,
-              "left": -210,
-              "right": -30,
-              "health": 1,
-              "attackStartupFrames": 8,
-              "attackActiveFrames": 4,
-              "attackCooldownFrames": 18,
-              "attackRange": 210,
-              "attackHeight": 70,
-              "parryStunFrames": 14
+              "speed": 95,
+              "left": -180,
+              "right": 120,
+              "health": 2,
+              "targetInternalName": "Player",
+              "aggroRange": 420,
+              "preferredDistance": 86,
+              "attackStartupFrames": 12,
+              "attackActiveFrames": 5,
+              "attackCooldownFrames": 28,
+              "attackRange": 126,
+              "attackHeight": 82,
+              "attackDamage": 1,
+              "parryStunFrames": 18,
+              "hitFlashFrames": 8
             }
           },
           "resources": [],
@@ -466,7 +478,7 @@
             "wasGrounded": false,
             "patrolDirection": -1,
             "facing": -1,
-            "health": 1
+            "health": 2
           },
           "folderId": "characters"
         },

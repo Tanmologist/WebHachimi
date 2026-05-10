@@ -156,6 +156,9 @@ export class RuntimeWorld {
           wasGrounded: entity.runtime?.wasGrounded,
           facing: entity.runtime?.facing,
           health: entity.runtime?.health,
+          defeated: entity.runtime?.defeated,
+          hitFlashUntilFrame: entity.runtime?.hitFlashUntilFrame,
+          defeatFrame: entity.runtime?.defeatFrame,
           attackStartFrame: entity.runtime?.attackStartFrame,
           attackActiveUntilFrame: entity.runtime?.attackActiveUntilFrame,
           attackCooldownUntilFrame: entity.runtime?.attackCooldownUntilFrame,
@@ -208,6 +211,9 @@ export class RuntimeWorld {
         patrolDirection: state.state.patrolDirection === -1 ? -1 : 1,
         facing: state.state.facing === -1 ? -1 : 1,
         health: typeof state.state.health === "number" ? state.state.health : entity.runtime?.health,
+        defeated: state.state.defeated === true,
+        hitFlashUntilFrame: typeof state.state.hitFlashUntilFrame === "number" ? state.state.hitFlashUntilFrame : undefined,
+        defeatFrame: typeof state.state.defeatFrame === "number" ? state.state.defeatFrame : undefined,
         attackStartFrame: typeof state.state.attackStartFrame === "number" ? state.state.attackStartFrame : undefined,
         attackActiveUntilFrame:
           typeof state.state.attackActiveUntilFrame === "number" ? state.state.attackActiveUntilFrame : undefined,
@@ -291,6 +297,17 @@ export class RuntimeWorld {
 
   private applyBuiltinBehavior(entity: Entity): void {
     if (!entity.body) return;
+    const frame = this.clock.frame;
+    if (entity.runtime?.defeated) {
+      this.stopEntity(entity);
+      this.clearActiveAttack(entity);
+      return;
+    }
+    if (this.isHitStunned(entity, frame)) {
+      this.stopEntity(entity);
+      this.clearActiveAttack(entity);
+      return;
+    }
     if (entity.behavior?.builtin === "enemyPatrol") {
       this.applyEnemyPatrol(entity);
     } else if (entity.behavior?.builtin === "playerPlatformer") {
@@ -322,6 +339,27 @@ export class RuntimeWorld {
     const flags = this.runtimeFlags(entity);
     const fallbackSpeed = Math.abs(entity.body.velocity.x) || 90;
     const speed = numberParam(entity, "speed") ?? fallbackSpeed;
+    const targetName = stringParam(entity, "targetInternalName");
+    if (targetName) {
+      const target = this.findEntityByInternalName(targetName);
+      if (target && !target.runtime?.defeated) {
+        const dx = target.transform.position.x - entity.transform.position.x;
+        const dy = Math.abs(target.transform.position.y - entity.transform.position.y);
+        const aggroRange = numberParam(entity, "aggroRange") ?? 420;
+        const preferredDistance = numberParam(entity, "preferredDistance") ?? Math.max(48, (numberParam(entity, "attackRange") ?? 110) * 0.55);
+        const attackRange = numberParam(entity, "attackRange") ?? 110;
+        const attackHeight = numberParam(entity, "attackHeight") ?? 76;
+        const direction: -1 | 1 = dx < 0 ? -1 : 1;
+        if (Math.abs(dx) <= aggroRange && dy <= Math.max(attackHeight * 1.5, 120)) {
+          flags.patrolDirection = direction;
+          entity.runtime = { ...entity.runtime, patrolDirection: direction, facing: direction };
+          entity.body.velocity.x = Math.abs(dx) > preferredDistance ? speed * direction : 0;
+          entity.body.velocity.y = 0;
+          if (Math.abs(dx) <= attackRange && dy <= attackHeight) this.tryStartAttack(entity);
+          return;
+        }
+      }
+    }
     const left = numberParam(entity, "left");
     const right = numberParam(entity, "right");
     if (left !== undefined && entity.transform.position.x <= left) flags.patrolDirection = 1;
@@ -333,48 +371,59 @@ export class RuntimeWorld {
 
   private applyCombatInput(entity: Entity): void {
     if (!entity.collider) return;
-    const frame = this.clock.frame;
     const attackPressed = this.isInputDown(entity, "attack");
     const parryPressed = this.isInputDown(entity, "parry");
+
+    if (attackPressed) this.tryStartAttack(entity);
+    if (parryPressed) this.tryStartParry(entity);
+  }
+
+  private tryStartAttack(entity: Entity): boolean {
+    const frame = this.clock.frame;
+    if (entity.runtime?.defeated || this.isHitStunned(entity, frame)) return false;
     const attackCooldownUntil = entity.runtime?.attackCooldownUntilFrame ?? -1;
+    const attackActiveUntil = entity.runtime?.attackActiveUntilFrame ?? -1;
+    if (frame < attackCooldownUntil || frame <= attackActiveUntil) return false;
+    const startup = numberParam(entity, "attackStartupFrames") ?? 4;
+    const active = numberParam(entity, "attackActiveFrames") ?? 4;
+    const cooldown = numberParam(entity, "attackCooldownFrames") ?? 18;
+    entity.runtime = {
+      ...entity.runtime,
+      attackStartFrame: frame + startup,
+      attackActiveUntilFrame: frame + startup + active,
+      attackCooldownUntilFrame: frame + cooldown,
+      attackHitIds: [],
+    };
+    this.emitCombatEvent({
+      type: "attackStarted",
+      attackerId: entity.id,
+      sourceId: entity.id,
+      message: `${entity.displayName} started attack.`,
+      data: { startup, active, cooldown },
+    });
+    return true;
+  }
+
+  private tryStartParry(entity: Entity): boolean {
+    const frame = this.clock.frame;
+    if (entity.runtime?.defeated || this.isHitStunned(entity, frame)) return false;
     const parryCooldownUntil = entity.runtime?.parryCooldownUntilFrame ?? -1;
-
-    if (attackPressed && frame >= attackCooldownUntil) {
-      const startup = numberParam(entity, "attackStartupFrames") ?? 4;
-      const active = numberParam(entity, "attackActiveFrames") ?? 4;
-      const cooldown = numberParam(entity, "attackCooldownFrames") ?? 18;
-      entity.runtime = {
-        ...entity.runtime,
-        attackStartFrame: frame + startup,
-        attackActiveUntilFrame: frame + startup + active,
-        attackCooldownUntilFrame: frame + cooldown,
-        attackHitIds: [],
-      };
-      this.emitCombatEvent({
-        type: "attackStarted",
-        attackerId: entity.id,
-        sourceId: entity.id,
-        message: `${entity.displayName} started attack.`,
-        data: { startup, active, cooldown },
-      });
-    }
-
-    if (parryPressed && frame >= parryCooldownUntil) {
-      const windowFrames = numberParam(entity, "parryWindowFrames") ?? 5;
-      const cooldown = numberParam(entity, "parryCooldownFrames") ?? 16;
-      entity.runtime = {
-        ...entity.runtime,
-        parryUntilFrame: frame + windowFrames,
-        parryCooldownUntilFrame: frame + cooldown,
-      };
-      this.emitCombatEvent({
-        type: "parryStarted",
-        defenderId: entity.id,
-        sourceId: entity.id,
-        message: `${entity.displayName} opened parry window.`,
-        data: { windowFrames, cooldown },
-      });
-    }
+    if (frame < parryCooldownUntil) return false;
+    const windowFrames = numberParam(entity, "parryWindowFrames") ?? 5;
+    const cooldown = numberParam(entity, "parryCooldownFrames") ?? 16;
+    entity.runtime = {
+      ...entity.runtime,
+      parryUntilFrame: frame + windowFrames,
+      parryCooldownUntilFrame: frame + cooldown,
+    };
+    this.emitCombatEvent({
+      type: "parryStarted",
+      defenderId: entity.id,
+      sourceId: entity.id,
+      message: `${entity.displayName} opened parry window.`,
+      data: { windowFrames, cooldown },
+    });
+    return true;
   }
 
   private resolveCombatEvents(): void {
@@ -382,6 +431,7 @@ export class RuntimeWorld {
     const entities = this.allEntities();
     for (const attacker of entities) {
       if (!attacker.collider) continue;
+      if (attacker.runtime?.defeated || this.isHitStunned(attacker, frame)) continue;
       const activeFrom = attacker.runtime?.attackStartFrame ?? Number.POSITIVE_INFINITY;
       const activeUntil = attacker.runtime?.attackActiveUntilFrame ?? -1;
       if (frame < activeFrom || frame > activeUntil) continue;
@@ -390,6 +440,7 @@ export class RuntimeWorld {
       const attackArea = this.attackBounds(attacker);
       for (const defender of entities) {
         if (defender.id === attacker.id || defender.kind !== "entity" || !defender.collider) continue;
+        if (defender.runtime?.defeated) continue;
         if (defender.body?.mode === "static" || hitIds.has(defender.id)) continue;
         if (!entityIntersectsRect(defender, attackArea)) continue;
 
@@ -400,6 +451,7 @@ export class RuntimeWorld {
           attacker.runtime = {
             ...attacker.runtime,
             hitStunUntilFrame: frame + stunFrames,
+            hitFlashUntilFrame: frame + Math.max(3, Math.floor(stunFrames / 2)),
             attackActiveUntilFrame: frame,
             attackHitIds: [...hitIds],
           };
@@ -415,8 +467,14 @@ export class RuntimeWorld {
           continue;
         }
 
-        const nextHealth = (defender.runtime?.health ?? numberParam(defender, "health") ?? 1) - 1;
-        defender.runtime = { ...defender.runtime, health: nextHealth };
+        const damage = Math.max(1, numberParam(attacker, "attackDamage") ?? 1);
+        const currentHealth = defender.runtime?.health ?? numberParam(defender, "health") ?? 1;
+        const nextHealth = Math.max(0, currentHealth - damage);
+        defender.runtime = {
+          ...defender.runtime,
+          health: nextHealth,
+          hitFlashUntilFrame: frame + (numberParam(defender, "hitFlashFrames") ?? 8),
+        };
         attacker.runtime = { ...attacker.runtime, attackHitIds: [...hitIds] };
         this.emitCombatEvent({
           type: "hit",
@@ -425,8 +483,9 @@ export class RuntimeWorld {
           sourceId: attacker.id,
           targetId: defender.id,
           message: `${attacker.displayName} hit ${defender.displayName}.`,
-          data: { health: nextHealth },
+          data: { health: nextHealth, damage },
         });
+        if (nextHealth <= 0) this.defeatEntity(defender, attacker);
       }
       attacker.runtime = { ...attacker.runtime, attackHitIds: [...hitIds] };
     }
@@ -453,6 +512,52 @@ export class RuntimeWorld {
     };
     this.combatEvents.push(next);
     return next;
+  }
+
+  private defeatEntity(entity: Entity, source: Entity): void {
+    if (entity.runtime?.defeated) return;
+    const frame = this.clock.frame;
+    entity.runtime = {
+      ...entity.runtime,
+      defeated: true,
+      defeatFrame: frame,
+      health: 0,
+      hitFlashUntilFrame: frame + 12,
+    };
+    this.stopEntity(entity);
+    this.clearActiveAttack(entity);
+    this.emitCombatEvent({
+      type: "defeated",
+      attackerId: source.id,
+      defenderId: entity.id,
+      sourceId: source.id,
+      targetId: entity.id,
+      message: `${entity.displayName} was defeated by ${source.displayName}.`,
+      data: { defeated: true },
+    });
+  }
+
+  private stopEntity(entity: Entity): void {
+    if (!entity.body) return;
+    entity.body.velocity.x = 0;
+    if (entity.body.mode === "kinematic") entity.body.velocity.y = 0;
+  }
+
+  private clearActiveAttack(entity: Entity): void {
+    entity.runtime = {
+      ...entity.runtime,
+      attackStartFrame: undefined,
+      attackActiveUntilFrame: undefined,
+      attackHitIds: entity.runtime?.attackHitIds || [],
+    };
+  }
+
+  private isHitStunned(entity: Entity, frame: number): boolean {
+    return frame <= (entity.runtime?.hitStunUntilFrame ?? -1);
+  }
+
+  private findEntityByInternalName(internalName: string): Entity | undefined {
+    return this.allEntities().find((entity) => entity.internalName === internalName);
   }
 
   private isInputDown(entity: Entity, key: string, ...aliases: string[]): boolean {
@@ -485,6 +590,9 @@ export class RuntimeWorld {
       patrolDirection: initialDirection,
       facing: entity.runtime?.facing ?? initialDirection,
       health: entity.runtime?.health ?? numberParam(entity, "health"),
+      defeated: entity.runtime?.defeated ?? false,
+      hitFlashUntilFrame: entity.runtime?.hitFlashUntilFrame,
+      defeatFrame: entity.runtime?.defeatFrame,
     };
   }
 
@@ -512,6 +620,11 @@ function numberParam(entity: Entity, key: string): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
+}
+
+function stringParam(entity: Entity, key: string): string | undefined {
+  const value = entity.behavior?.params[key];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function parseActorScopedKey(key: string): { entityId: EntityId; key: string } | undefined {
