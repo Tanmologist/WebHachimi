@@ -470,8 +470,8 @@ export class RuntimeWorld {
           defenderId: defender.id,
           sourceId: attacker.id,
           targetId: defender.id,
-          message: `${attacker.displayName} attack touch reached ${defender.displayName}.`,
-          data: { rect: cloneJson(attackArea) },
+          message: `${attacker.displayName} 的普通攻击触摸到 ${defender.displayName}。`,
+          data: { actionId: "normal", phase: "active", window: "hitbox", rect: cloneJson(attackArea) },
         });
         const parryUntil = defender.runtime?.parryUntilFrame ?? -1;
         if (frame <= parryUntil) {
@@ -548,7 +548,7 @@ export class RuntimeWorld {
   private syncAttackTouchEntity(attacker: Entity, rect: Rect): void {
     const existingId = attacker.runtime?.attackTouchEntityId;
     const existing = existingId ? this.transientEntities.get(existingId) : undefined;
-    const lifetimeMs = Math.max(this.clock.fixedStepMs * 2, 24);
+    const lifetimeMs = Math.max(this.clock.fixedStepMs * 2, numberParam(attacker, "attackTouchVisibleMs") ?? 220);
     if (existing) {
       existing.transform.position = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
       if (existing.render) {
@@ -567,6 +567,7 @@ export class RuntimeWorld {
       kind: "effect",
       persistent: false,
       parentId: attacker.id,
+      folderId: "runtime",
       transform: {
         position: { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 },
         rotation: 0,

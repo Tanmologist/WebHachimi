@@ -113,9 +113,10 @@ export class PlayerRenderer {
     const size = entity.collider?.size || { x: 56, y: 56 };
     const flashed = frame <= (entity.runtime?.hitFlashUntilFrame ?? -1);
     const defeated = entity.runtime?.defeated === true;
-    const color = flashed ? 0xf4fff7 : parseColor(entity.render?.color || "#74a8bd");
+    const attackTouch = isAttackTouchEntity(entity);
+    const color = attackTouch ? 0xff4d5d : flashed ? 0xf4fff7 : parseColor(entity.render?.color || "#74a8bd");
     const baseAlpha = entity.persistent ? entity.render?.opacity ?? 1 : Math.min(entity.render?.opacity ?? 1, 0.45);
-    const alpha = defeated ? Math.min(baseAlpha, 0.28) : baseAlpha;
+    const alpha = attackTouch ? Math.max(baseAlpha, 0.5) : defeated ? Math.min(baseAlpha, 0.28) : baseAlpha;
 
     if (entity.collider?.shape === "circle") {
       graphics.circle(0, 0, entity.collider.radius || Math.min(size.x, size.y) / 2);
@@ -129,8 +130,8 @@ export class PlayerRenderer {
     }
 
     graphics.fill({ color, alpha });
-    if (entity.collider?.solid) {
-      graphics.setStrokeStyle({ width: 2, color: 0x0a0c0b, alpha: 0.62 });
+    if (entity.collider?.solid || attackTouch) {
+      graphics.setStrokeStyle({ width: attackTouch ? 3 : 2, color: attackTouch ? 0xfff1a8 : 0x0a0c0b, alpha: attackTouch ? 0.98 : 0.62 });
       graphics.stroke();
     }
     if (defeated) {
@@ -146,6 +147,7 @@ export class PlayerRenderer {
     graphics.scale.set(entity.transform.scale.x || 1, entity.transform.scale.y || 1);
     this.worldLayer.addChild(graphics);
 
+    if (attackTouch) this.drawWorldLabel("TOUCH BOX", entity.transform.position.x, entity.transform.position.y - size.y / 2 - 4, "#fff1a8");
     if (entity.behavior?.builtin === "playerPlatformer") this.drawPlayerFace(entity, size);
   }
 
@@ -195,7 +197,23 @@ export class PlayerRenderer {
         graphics.stroke();
       }
       this.worldLayer.addChild(graphics);
+      this.drawWorldLabel(frame < start ? "WINDUP" : "ACTIVE", rect.x + rect.w / 2, rect.y - 4, frame < start ? "#ffe9a9" : "#ffd9de");
     }
+  }
+
+  private drawWorldLabel(text: string, x: number, y: number, fill: string): void {
+    const label = new Text({
+      text,
+      style: {
+        fill,
+        fontFamily: "Inter, Microsoft YaHei, sans-serif",
+        fontSize: 11,
+        fontWeight: "800",
+      },
+    });
+    label.anchor.set(0.5, 1);
+    label.position.set(x, y);
+    this.worldLayer.addChild(label);
   }
 
   private drawHealthBar(entity: Entity, frame: number): void {
@@ -262,6 +280,10 @@ function attackRect(entity: Entity): { x: number; y: number; w: number; h: numbe
     w: range + inset,
     h: height,
   };
+}
+
+function isAttackTouchEntity(entity: Entity): boolean {
+  return entity.tags.includes("attack") && entity.tags.includes("touch");
 }
 
 function readNumberParam(entity: Entity, key: string): number | undefined {

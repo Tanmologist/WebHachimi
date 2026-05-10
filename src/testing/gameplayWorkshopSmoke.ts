@@ -214,10 +214,14 @@ runSmoke("combat slice lets player attack damage enemy", () => {
   assert(touch.frame <= hit.frame, "attack touch should be recorded before damage resolves");
   const touchBoxes = world.allEntities().filter((entity) => !entity.persistent && entity.tags.includes("touch"));
   assert(touchBoxes.length > 0, "player attack should spawn a runtime touch box");
+  assert(touch.data?.phase === "active" && touch.data?.window === "hitbox", "attack touch event should describe the active hitbox window");
   assert(
     !world.combatEvents.some((event) => event.type === "hit" && touchBoxes.some((box) => event.defenderId === box.id)),
     "runtime touch boxes should not be treated as damage targets",
   );
+  controller.step(10);
+  const lingeringTouchBoxes = world.allEntities().filter((entity) => !entity.persistent && entity.tags.includes("touch"));
+  assert(lingeringTouchBoxes.length > 0, "attack touch box should linger long enough for visual inspection");
 
   const liveEnemy = requireEntity(world, enemy.id);
   assert(liveEnemy.runtime?.health === 1, `expected enemy health 1 after hit, got ${liveEnemy.runtime?.health}`);
@@ -227,6 +231,7 @@ runSmoke("combat slice lets player attack damage enemy", () => {
     touchFrame: touch.frame,
     hitFrame: hit.frame,
     touchBoxCount: touchBoxes.length,
+    lingeringTouchBoxCount: lingeringTouchBoxes.length,
     enemyHealth: liveEnemy.runtime?.health,
   };
 });

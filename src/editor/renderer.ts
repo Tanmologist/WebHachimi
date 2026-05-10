@@ -426,18 +426,23 @@ export class V2Renderer {
       this.drawPresentationImage(entity, selected, showEditorDecorations, resource, animationTimeMs);
       return;
     }
+    const attackTouch = isAttackTouchEntity(entity);
     const presentation = this.takeGraphics();
     drawPresentationShape(presentation, entity);
-    presentation.fill({ color: parseColor(entity.render.color || "#74a8bd"), alpha: entity.render.opacity ?? 1 });
-    if (showEditorDecorations || selected) {
+    presentation.fill({
+      color: attackTouch ? 0xff4d5d : parseColor(entity.render.color || "#74a8bd"),
+      alpha: attackTouch ? Math.max(entity.render.opacity ?? 0, 0.48) : entity.render.opacity ?? 1,
+    });
+    if (showEditorDecorations || selected || attackTouch) {
       presentation.setStrokeStyle({
-        width: selected ? 2 : 1,
-        color: selected ? 0x77b8df : 0x101211,
-        alpha: selected ? 0.95 : 0.72,
+        width: attackTouch ? 3 : selected ? 2 : 1,
+        color: attackTouch ? 0xfff1a8 : selected ? 0x77b8df : 0x101211,
+        alpha: attackTouch ? 0.98 : selected ? 0.95 : 0.72,
       });
       presentation.stroke();
     }
     this.worldLayer.addChild(presentation);
+    if (attackTouch) this.drawCombatDebugLabel(entity, "TOUCH BOX");
     if (showEditorDecorations) this.drawPresentationLabel(entity, selected);
   }
 
@@ -507,6 +512,7 @@ export class V2Renderer {
       }
       graphics.stroke();
       this.worldLayer.addChild(graphics);
+      this.drawCombatRectLabel(rect, frame < start ? "WINDUP" : "ACTIVE");
     }
   }
 
@@ -571,6 +577,37 @@ export class V2Renderer {
     label.anchor.set(0.5, 0.5);
     label.position.set(geometry.center.x, geometry.center.y);
     label.rotation = geometry.rotation;
+    this.worldLayer.addChild(label);
+  }
+
+  private drawCombatDebugLabel(entity: Entity, text: string): void {
+    const geometry = targetGeometry(entity, "presentation");
+    const label = new Text({
+      text,
+      style: {
+        fill: "#fff1a8",
+        fontFamily: "Inter, Microsoft YaHei, sans-serif",
+        fontSize: 12,
+        fontWeight: "800",
+      },
+    });
+    label.anchor.set(0.5, 1);
+    label.position.set(geometry.center.x, geometry.center.y - geometry.height / 2 - 4);
+    this.worldLayer.addChild(label);
+  }
+
+  private drawCombatRectLabel(rect: { x: number; y: number; w: number; h: number }, text: string): void {
+    const label = new Text({
+      text,
+      style: {
+        fill: text === "ACTIVE" ? "#ffd9de" : "#ffe9a9",
+        fontFamily: "Inter, Microsoft YaHei, sans-serif",
+        fontSize: 11,
+        fontWeight: "800",
+      },
+    });
+    label.anchor.set(0.5, 1);
+    label.position.set(rect.x + rect.w / 2, rect.y - 4);
     this.worldLayer.addChild(label);
   }
 
@@ -809,6 +846,17 @@ function gridStepForZoom(zoom: number): number {
 }
 
 function bodyMaterialStyle(entity: Entity): BodyMaterialStyle {
+  if (isAttackTouchEntity(entity)) {
+    return {
+      stroke: 0xfff1a8,
+      fill: 0x4a1018,
+      texture: 0xffd9de,
+      fillAlpha: 0.52,
+      selectedFillAlpha: 0.62,
+      textureAlpha: 0.2,
+      selectedTextureAlpha: 0.32,
+    };
+  }
   if (entity.collider?.trigger) {
     return {
       stroke: 0xb98cff,
@@ -1262,6 +1310,10 @@ function gameplayAttackRect(entity: Entity): { x: number; y: number; w: number; 
   const x = direction >= 0 ? bounds.x + bounds.w - inset : bounds.x - range;
   const y = bounds.y + bounds.h / 2 - height / 2;
   return { x, y, w: range + inset, h: height };
+}
+
+function isAttackTouchEntity(entity: Entity): boolean {
+  return entity.tags.includes("attack") && entity.tags.includes("touch");
 }
 
 function readNumberParam(entity: Entity, key: string): number | undefined {

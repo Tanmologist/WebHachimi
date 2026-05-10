@@ -21,23 +21,29 @@ export function renderSceneTreeHtml(
   collapsedNodes: ReadonlySet<string> = new Set(),
 ): string {
   const entityById = new Map(entities.map((entity) => [entity.id, entity] as const));
+  const runtimeFolder = scene.folders.find((folder) => folder.id === "runtime");
+  const runtimeEntities = entities.filter((entity) => !entity.persistent);
   const folderedIds = new Set(scene.folders.flatMap((folder) => folder.entityIds));
+  if (runtimeFolder) runtimeEntities.forEach((entity) => folderedIds.add(entity.id));
   const looseEntities = entities.filter((entity) => !folderedIds.has(entity.id));
   const folderHtml = scene.folders
     .map((folder) => {
       const nodeId = `folder:${folder.id}`;
       const collapsed = collapsedNodes.has(nodeId);
-      const children = folder.entityIds
+      const baseChildren = folder.entityIds
         .map((id) => entityById.get(id))
-        .filter(Boolean)
-        .map((entity) => renderTreeItemHtml(entity!, selectedId, selectedPart, resources, collapsedNodes))
+        .filter(Boolean) as Entity[];
+      const runtimeChildren = folder.id === runtimeFolder?.id ? runtimeEntities.filter((entity) => !folder.entityIds.includes(entity.id)) : [];
+      const folderChildren = [...baseChildren, ...runtimeChildren];
+      const children = folderChildren
+        .map((entity) => renderTreeItemHtml(entity, selectedId, selectedPart, resources, collapsedNodes))
         .join("");
       return `
         <section class="v2-folder" data-folder-id="${escapeHtml(folder.id)}" data-tree-collapsed="${collapsed ? "true" : "false"}">
           <header>
             <button class="v2-tree-toggle" data-tree-toggle="${escapeHtml(nodeId)}" type="button">${collapsed ? "▸" : "▾"}</button>
             <span>${escapeHtml(folder.displayName)}</span>
-            <small>${visibleFolderCount(folder.entityIds, entities)} 项</small>
+            <small>${folderChildren.length} 项</small>
           </header>
           ${collapsed ? "" : children || `<p class="v2-empty v2-empty-compact">空</p>`}
         </section>
@@ -56,6 +62,7 @@ export function renderSceneTreeHtml(
       <div class="v2-metrics">
         ${renderMetric("分组", scene.folders.length)}
         ${renderMetric("对象", entities.length)}
+        ${renderMetric("运行时", runtimeEntities.length)}
         ${renderMetric("资源", Object.keys(resources).length)}
         ${renderMetric("未归类", looseEntities.length)}
       </div>
@@ -74,11 +81,6 @@ export function renderSceneTreeHtml(
         </section>`
       : ""
   }`;
-}
-
-function visibleFolderCount(entityIds: EntityId[], entities: Entity[]): number {
-  const visibleIds = new Set(entities.map((entity) => entity.id));
-  return entityIds.filter((id) => visibleIds.has(id)).length;
 }
 
 function renderMetric(label: string, value: number): string {

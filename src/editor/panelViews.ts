@@ -26,9 +26,9 @@ export function renderTreeItemHtml(
             ? `<button class="v2-tree-toggle" data-tree-toggle="${escapeHtml(nodeId)}" type="button">${collapsed ? "▸" : "▾"}</button>`
             : `<span class="v2-tree-toggle-spacer"></span>`
         }
-        <button class="v2-tree-item ${bodySelected ? "is-selected" : ""}" data-entity-id="${entity.id}" data-part="body" type="button" draggable="true">
+        <button class="v2-tree-item ${bodySelected ? "is-selected" : ""}" data-entity-id="${entity.id}" data-part="body" type="button" draggable="${entity.persistent ? "true" : "false"}">
           <span>${escapeHtml(entity.displayName)}</span>
-          <small class="v2-tree-badge">本体</small>
+          <small class="v2-tree-badge">${entity.persistent ? "本体" : "运行时"}</small>
         </button>
       </div>
       ${

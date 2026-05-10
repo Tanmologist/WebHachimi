@@ -818,6 +818,10 @@ function editableEntities(): Entity[] {
   return [...world.entities.values()];
 }
 
+function sceneTreeEntities(): Entity[] {
+  return world.allEntities();
+}
+
 function editableEntity(entityId: string): Entity | undefined {
   return world.entities.get(entityId);
 }
@@ -2506,7 +2510,7 @@ function renderFrame(): void {
 }
 
 function renderTree(projectSnapshot: Project): void {
-  const entities = editableEntities();
+  const entities = sceneTreeEntities();
   const signature = sceneTreeRenderSignature(projectSnapshot, entities);
   if (uiRenderState.tree === signature) return;
   uiRenderState.tree = signature;
@@ -2608,11 +2612,11 @@ function renderTasks(projectSnapshot: Project): void {
 
 
 function renderInspector(projectSnapshot: Project): void {
-  const signature = [projectSnapshot.meta.updatedAt, selectedId, selectedPart].join("||");
+  const runtimeEntity = selectedId ? world.entityById(selectedId as EntityId) : undefined;
+  const signature = [projectSnapshot.meta.updatedAt, selectedId, selectedPart, runtimeEntity?.runtime?.ageMs ?? ""].join("||");
   if (uiRenderState.inspector === signature) return;
   uiRenderState.inspector = signature;
-  const entity = editableEntity(selectedId);
-  inspectorNode.innerHTML = renderInspectorHtml(entity, selectedPart, projectSnapshot.resources);
+  inspectorNode.innerHTML = renderInspectorHtml(runtimeEntity, selectedPart, projectSnapshot.resources);
   bindInspectorInteractions(inspectorNode);
 }
 

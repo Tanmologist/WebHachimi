@@ -21,6 +21,8 @@ assert(treeHtml.includes("↳"), "world tree should expose current presentation 
 const spawnedId = world.spawnTransient(template, 100);
 assert(world.allEntities().some((entity) => entity.id === spawnedId), "spawned transient should appear in runtime world");
 assert(![...world.entities.values()].some((entity) => entity.id === spawnedId), "spawned transient should not become editable persistent entity");
+const runtimeTreeHtml = renderSceneTreeHtml(scene, world.allEntities(), "", "body", project.resources);
+assert(runtimeTreeHtml.includes(template.displayName), "spawned runtime objects should appear in world tree for inspection");
 
 const task = createTask({
   source: "user",
