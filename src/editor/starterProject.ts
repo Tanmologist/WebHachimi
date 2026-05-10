@@ -57,6 +57,7 @@ export function createStarterProject(): Project {
       attackCooldownFrames: 18,
       attackRange: 92,
       attackHeight: 78,
+      attackTouchInset: 10,
     },
     tags: ["combat", "player"],
     renderSlot: "current",
@@ -66,7 +67,7 @@ export function createStarterProject(): Project {
   scene.entities[attackTemplateId] = makeBox({
     id: attackTemplateId,
     internalName: "Player_Attack_Hitbox",
-    displayName: "攻击模板",
+    displayName: "普通攻击触摸盒模板",
     kind: "effect",
     x: 684,
     y: 240,
@@ -74,7 +75,7 @@ export function createStarterProject(): Project {
     h: 40,
     color: "#d7a84a",
     body: "none",
-    tags: ["runtime", "attack"],
+    tags: ["runtime", "attack", "touch"],
     parentId: playerId,
     opacity: 0.32,
     persistent: false,
@@ -116,6 +117,7 @@ export function createStarterProject(): Project {
       attackCooldownFrames: 24,
       attackRange: 110,
       attackHeight: 76,
+      attackTouchInset: 10,
       parryStunFrames: 16,
     },
     bodyVelocity: { x: -1, y: 0 },
@@ -144,6 +146,7 @@ export function createStarterProject(): Project {
       health: 3,
       attackRange: 84,
       attackHeight: 76,
+      attackTouchInset: 8,
     },
     tags: ["runner", "player"],
   });
@@ -268,7 +271,7 @@ export function repairKnownStarterLabels(project: Project): Project {
 
   const entityLabels: Record<string, { legacy: string; displayName: string; tags: string[]; legacyDescription?: string; description?: string }> = {
     Player: { legacy: "Parry Player", displayName: "格挡玩家", tags: ["combat", "player"], legacyDescription: "Combat player controller.", description: "战斗玩家控制器。" },
-    Player_Attack_Hitbox: { legacy: "Attack Template", displayName: "攻击模板", tags: ["runtime", "attack"] },
+    Player_Attack_Hitbox: { legacy: "Attack Template", displayName: "普通攻击触摸盒模板", tags: ["runtime", "attack", "touch"] },
     Combat_Ground: { legacy: "Combat Ground", displayName: "战斗地面", tags: ["combat", "ground"] },
     Enemy_Patrol: { legacy: "Parry Attacker", displayName: "格挡攻击者", tags: ["combat", "enemy"], legacyDescription: "Parry workshop attacker.", description: "格挡工作坊攻击者。" },
     Runner_Player: { legacy: "Runner Player", displayName: "跑酷玩家", tags: ["runner", "player"], legacyDescription: "Runner workshop controller.", description: "跑酷工作坊玩家控制器。" },
@@ -280,6 +283,7 @@ export function repairKnownStarterLabels(project: Project): Project {
 
   Object.values(scene.entities).forEach((entity) => {
     repairKnownMovementTuning(entity);
+    repairKnownCombatTouchTuning(entity);
     const labels = entityLabels[entity.internalName];
     if (!labels) return;
     if (shouldUseBuiltinLabel(entity.displayName, labels.legacy)) entity.displayName = labels.displayName;
@@ -328,6 +332,21 @@ export function repairKnownStarterLabels(project: Project): Project {
   });
 
   return project;
+}
+
+function repairKnownCombatTouchTuning(entity: Entity): void {
+  const behavior = entity.behavior;
+  if (!behavior) return;
+  const builtin = behavior.builtin;
+  if (builtin !== "playerPlatformer" && builtin !== "enemyPatrol") return;
+  const params = behavior.params;
+  if (entity.internalName === "Player" || entity.internalName === "Enemy_Patrol") {
+    setNumberDefault(params, "attackTouchInset", 10);
+    return;
+  }
+  if (typeof params.attackRange === "number" || typeof params.attackRange === "string") {
+    setNumberDefault(params, "attackTouchInset", 8);
+  }
 }
 
 function repairKnownMovementTuning(entity: Entity): void {
@@ -444,6 +463,7 @@ function makeBox(input: BoxInput): Entity {
                   attackCooldownFrames: 18,
                   attackRange: Math.max(84, input.w + 24),
                   attackHeight: input.h + 12,
+                  attackTouchInset: 8,
                 }
               : {
                   speed: 70,
@@ -455,6 +475,7 @@ function makeBox(input: BoxInput): Entity {
                   attackCooldownFrames: 30,
                   attackRange: 210,
                   attackHeight: input.h + 26,
+                  attackTouchInset: 8,
                   parryStunFrames: 23,
                 }),
             ...input.behaviorParams,

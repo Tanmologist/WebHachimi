@@ -147,6 +147,7 @@ export type RuntimeComponent = {
   attackActiveUntilFrame?: number;
   attackCooldownUntilFrame?: number;
   attackHitIds?: EntityId[];
+  attackTouchEntityId?: EntityId;
   parryUntilFrame?: number;
   parryCooldownUntilFrame?: number;
   hitStunUntilFrame?: number;
@@ -434,7 +435,7 @@ export type RuntimeEntityState = {
 export type CombatEvent = {
   id: string;
   frame: number;
-  type: "attackStarted" | "parryStarted" | "parrySuccess" | "hit" | "defeated";
+  type: "attackStarted" | "attackTouch" | "parryStarted" | "parrySuccess" | "hit" | "defeated";
   attackerId?: EntityId;
   defenderId?: EntityId;
   sourceId?: EntityId;

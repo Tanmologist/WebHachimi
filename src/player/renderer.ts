@@ -255,10 +255,11 @@ function attackRect(entity: Entity): { x: number; y: number; w: number; h: numbe
   const direction = entity.runtime?.facing === -1 ? -1 : 1;
   const range = readNumberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
   const height = readNumberParam(entity, "attackHeight") ?? bounds.h;
+  const inset = Math.max(0, readNumberParam(entity, "attackTouchInset") ?? 8);
   return {
-    x: direction === 1 ? bounds.x + bounds.w : bounds.x - range,
+    x: direction === 1 ? bounds.x + bounds.w - inset : bounds.x - range,
     y: bounds.y + bounds.h / 2 - height / 2,
-    w: range,
+    w: range + inset,
     h: height,
   };
 }

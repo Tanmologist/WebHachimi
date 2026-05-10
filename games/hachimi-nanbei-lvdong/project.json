@@ -107,6 +107,7 @@
               "attackCooldownFrames": 16,
               "attackRange": 112,
               "attackHeight": 88,
+              "attackTouchInset": 10,
               "attackDamage": 1,
               "hitFlashFrames": 8
             }
@@ -466,6 +467,7 @@
               "attackCooldownFrames": 28,
               "attackRange": 126,
               "attackHeight": 82,
+              "attackTouchInset": 10,
               "attackDamage": 1,
               "parryStunFrames": 18,
               "hitFlashFrames": 8

@@ -8,7 +8,7 @@ import type {
 import { normalizeEntityDefaults, normalizeSceneSettings } from "../project/schema";
 import { cloneJson, makeId } from "../shared/types";
 import type { EntityId, RuntimeMode, SnapshotId } from "../shared/types";
-import type { SceneId, Vec2 } from "../shared/types";
+import type { Rect, SceneId, Vec2 } from "../shared/types";
 import { boundsFor, collectDynamicPairs, entityIntersectsRect } from "./collision";
 import { FixedStepClock } from "./time";
 
@@ -168,6 +168,7 @@ export class RuntimeWorld {
           attackActiveUntilFrame: entity.runtime?.attackActiveUntilFrame,
           attackCooldownUntilFrame: entity.runtime?.attackCooldownUntilFrame,
           attackHitIds: entity.runtime?.attackHitIds,
+          attackTouchEntityId: entity.runtime?.attackTouchEntityId,
           parryUntilFrame: entity.runtime?.parryUntilFrame,
           parryCooldownUntilFrame: entity.runtime?.parryCooldownUntilFrame,
           hitStunUntilFrame: entity.runtime?.hitStunUntilFrame,
@@ -225,6 +226,7 @@ export class RuntimeWorld {
         attackCooldownUntilFrame:
           typeof state.state.attackCooldownUntilFrame === "number" ? state.state.attackCooldownUntilFrame : undefined,
         attackHitIds: Array.isArray(state.state.attackHitIds) ? cloneJson(state.state.attackHitIds) : [],
+        attackTouchEntityId: typeof state.state.attackTouchEntityId === "string" ? state.state.attackTouchEntityId as EntityId : undefined,
         parryUntilFrame: typeof state.state.parryUntilFrame === "number" ? state.state.parryUntilFrame : undefined,
         parryCooldownUntilFrame:
           typeof state.state.parryCooldownUntilFrame === "number" ? state.state.parryCooldownUntilFrame : undefined,
@@ -410,6 +412,7 @@ export class RuntimeWorld {
       attackActiveUntilFrame: frame + startup + active,
       attackCooldownUntilFrame: frame + cooldown,
       attackHitIds: [],
+      attackTouchEntityId: undefined,
     };
     this.emitCombatEvent({
       type: "attackStarted",
@@ -447,21 +450,29 @@ export class RuntimeWorld {
     const frame = this.clock.frame;
     const entities = this.allEntities();
     for (const attacker of entities) {
-      if (!attacker.collider) continue;
+      if (!this.canUseAttackTouch(attacker)) continue;
       if (attacker.runtime?.defeated || this.isHitStunned(attacker, frame)) continue;
       const activeFrom = attacker.runtime?.attackStartFrame ?? Number.POSITIVE_INFINITY;
       const activeUntil = attacker.runtime?.attackActiveUntilFrame ?? -1;
       if (frame < activeFrom || frame > activeUntil) continue;
 
       const hitIds = new Set(attacker.runtime?.attackHitIds || []);
-      const attackArea = this.attackBounds(attacker);
+      const attackArea = this.attackTouchBounds(attacker);
+      this.syncAttackTouchEntity(attacker, attackArea);
       for (const defender of entities) {
-        if (defender.id === attacker.id || defender.kind !== "entity" || !defender.collider) continue;
-        if (defender.runtime?.defeated) continue;
-        if (defender.body?.mode === "static" || hitIds.has(defender.id)) continue;
+        if (hitIds.has(defender.id) || !this.canReceiveAttackTouch(attacker, defender)) continue;
         if (!entityIntersectsRect(defender, attackArea)) continue;
 
         hitIds.add(defender.id);
+        this.emitCombatEvent({
+          type: "attackTouch",
+          attackerId: attacker.id,
+          defenderId: defender.id,
+          sourceId: attacker.id,
+          targetId: defender.id,
+          message: `${attacker.displayName} attack touch reached ${defender.displayName}.`,
+          data: { rect: cloneJson(attackArea) },
+        });
         const parryUntil = defender.runtime?.parryUntilFrame ?? -1;
         if (frame <= parryUntil) {
           const stunFrames = numberParam(attacker, "parryStunFrames") ?? 14;
@@ -508,17 +519,92 @@ export class RuntimeWorld {
     }
   }
 
-  private attackBounds(entity: Entity): { x: number; y: number; w: number; h: number } {
+  private attackTouchBounds(entity: Entity): Rect {
     const bounds = boundsFor(entity);
     const direction = entity.runtime?.facing === -1 ? -1 : 1;
     const range = numberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
     const height = numberParam(entity, "attackHeight") ?? bounds.h;
+    const inset = Math.max(0, numberParam(entity, "attackTouchInset") ?? 8);
     return {
-      x: direction === 1 ? bounds.x + bounds.w : bounds.x - range,
+      x: direction === 1 ? bounds.x + bounds.w - inset : bounds.x - range,
       y: bounds.y + bounds.h / 2 - height / 2,
-      w: range,
+      w: range + inset,
       h: height,
     };
+  }
+
+  private canUseAttackTouch(entity: Entity): boolean {
+    if (entity.kind !== "entity" || !entity.collider) return false;
+    return Boolean(entity.behavior?.builtin === "playerPlatformer" || entity.behavior?.builtin === "enemyPatrol");
+  }
+
+  private canReceiveAttackTouch(attacker: Entity, defender: Entity): boolean {
+    if (defender.id === attacker.id || defender.kind !== "entity" || !defender.collider) return false;
+    if (defender.runtime?.defeated) return false;
+    if (defender.body?.mode !== "dynamic" && defender.body?.mode !== "kinematic") return false;
+    return hasHealth(defender);
+  }
+
+  private syncAttackTouchEntity(attacker: Entity, rect: Rect): void {
+    const existingId = attacker.runtime?.attackTouchEntityId;
+    const existing = existingId ? this.transientEntities.get(existingId) : undefined;
+    const lifetimeMs = Math.max(this.clock.fixedStepMs * 2, 24);
+    if (existing) {
+      existing.transform.position = { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 };
+      if (existing.render) {
+        existing.render.size = { x: rect.w, y: rect.h };
+        existing.render.opacity = 0.32;
+      }
+      if (existing.collider) existing.collider.size = { x: rect.w, y: rect.h };
+      existing.runtime = { ...existing.runtime, ageMs: 0, lifetimeMs };
+      return;
+    }
+
+    const touchEntity: Entity = {
+      id: makeId<"EntityId">("touch") as EntityId,
+      internalName: "Attack_Touch_Box",
+      displayName: "普通攻击触摸盒",
+      kind: "effect",
+      persistent: false,
+      parentId: attacker.id,
+      transform: {
+        position: { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 },
+        rotation: 0,
+        scale: { x: 1, y: 1 },
+      },
+      render: {
+        visible: true,
+        color: "#ff4d5d",
+        opacity: 0.32,
+        layerId: attacker.render?.layerId || "world",
+        size: { x: rect.w, y: rect.h },
+        offset: { x: 0, y: 0 },
+        rotation: 0,
+        scale: { x: 1, y: 1 },
+      },
+      body: {
+        mode: "none",
+        velocity: { x: 0, y: 0 },
+        gravityScale: 0,
+        friction: 0,
+        bounce: 0,
+      },
+      collider: {
+        shape: "box",
+        size: { x: rect.w, y: rect.h },
+        solid: false,
+        trigger: true,
+        layerMask: ["combat-touch"],
+      },
+      resources: [],
+      tags: ["runtime", "attack", "touch"],
+      runtime: {
+        ageMs: 0,
+        lifetimeMs,
+      },
+    };
+    const touchId = this.spawnTransient(touchEntity, lifetimeMs);
+    attacker.runtime = { ...attacker.runtime, attackTouchEntityId: touchId };
   }
 
   private emitCombatEvent(event: Omit<CombatEvent, "id" | "frame">): CombatEvent {
@@ -566,6 +652,7 @@ export class RuntimeWorld {
       attackStartFrame: undefined,
       attackActiveUntilFrame: undefined,
       attackHitIds: entity.runtime?.attackHitIds || [],
+      attackTouchEntityId: undefined,
     };
   }
 
@@ -637,6 +724,10 @@ function numberParam(entity: Entity, key: string): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
   }
   return undefined;
+}
+
+function hasHealth(entity: Entity): boolean {
+  return typeof entity.runtime?.health === "number" || numberParam(entity, "health") !== undefined;
 }
 
 function stringParam(entity: Entity, key: string): string | undefined {
