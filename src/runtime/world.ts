@@ -79,8 +79,13 @@ export class RuntimeWorld {
     for (const entity of all) {
       if (!entity.body || entity.body.mode === "static" || entity.body.mode === "none") continue;
       this.applyBuiltinBehavior(entity);
-      entity.body.velocity.x += this.gravity.x * entity.body.gravityScale * dt;
-      entity.body.velocity.y += this.gravity.y * entity.body.gravityScale * dt;
+      const gravityScale = this.effectiveGravityScale(entity);
+      entity.body.velocity.x += this.gravity.x * gravityScale * dt;
+      entity.body.velocity.y += this.gravity.y * gravityScale * dt;
+      const maxFallSpeed = numberParam(entity, "maxFallSpeed");
+      if (maxFallSpeed !== undefined && maxFallSpeed > 0 && entity.body.velocity.y > maxFallSpeed) {
+        entity.body.velocity.y = maxFallSpeed;
+      }
       entity.transform.position.x += entity.body.velocity.x * dt;
       entity.transform.position.y += entity.body.velocity.y * dt;
     }
@@ -376,6 +381,18 @@ export class RuntimeWorld {
 
     if (attackPressed) this.tryStartAttack(entity);
     if (parryPressed) this.tryStartParry(entity);
+  }
+
+  private effectiveGravityScale(entity: Entity): number {
+    if (!entity.body) return 0;
+    const baseGravityScale = numberParam(entity, "gravityScale") ?? entity.body.gravityScale;
+    if (entity.behavior?.builtin !== "playerPlatformer") return baseGravityScale;
+    if (entity.body.velocity.y > 0) return numberParam(entity, "fallGravityScale") ?? baseGravityScale;
+    const jumpHeld = this.isInputDown(entity, "jump", "w", "space");
+    if (entity.body.velocity.y < 0 && !jumpHeld) {
+      return numberParam(entity, "jumpReleaseGravityScale") ?? numberParam(entity, "lowJumpGravityScale") ?? numberParam(entity, "fallGravityScale") ?? baseGravityScale;
+    }
+    return baseGravityScale;
   }
 
   private tryStartAttack(entity: Entity): boolean {

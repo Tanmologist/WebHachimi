@@ -44,7 +44,11 @@ export function createStarterProject(): Project {
     behavior: "playerPlatformer",
     behaviorParams: {
       speed: 300,
-      jump: 620,
+      jump: 560,
+      gravityScale: 1.15,
+      fallGravityScale: 1.75,
+      jumpReleaseGravityScale: 2.35,
+      maxFallSpeed: 1250,
       health: 3,
       parryWindowFrames: 10,
       parryCooldownFrames: 18,
@@ -133,6 +137,10 @@ export function createStarterProject(): Project {
     behaviorParams: {
       speed: 360,
       jump: 640,
+      gravityScale: 1,
+      fallGravityScale: 1,
+      jumpReleaseGravityScale: 1,
+      maxFallSpeed: 1200,
       health: 3,
       attackRange: 84,
       attackHeight: 76,
@@ -271,6 +279,7 @@ export function repairKnownStarterLabels(project: Project): Project {
   };
 
   Object.values(scene.entities).forEach((entity) => {
+    repairKnownMovementTuning(entity);
     const labels = entityLabels[entity.internalName];
     if (!labels) return;
     if (shouldUseBuiltinLabel(entity.displayName, labels.legacy)) entity.displayName = labels.displayName;
@@ -319,6 +328,36 @@ export function repairKnownStarterLabels(project: Project): Project {
   });
 
   return project;
+}
+
+function repairKnownMovementTuning(entity: Entity): void {
+  if (entity.behavior?.builtin !== "playerPlatformer") return;
+  const params = entity.behavior.params;
+  if (entity.internalName === "Player") {
+    if (isUnsetOrLegacyNumber(params.jump, 620)) params.jump = 560;
+    setNumberDefault(params, "gravityScale", 1.15);
+    setNumberDefault(params, "fallGravityScale", 1.75);
+    setNumberDefault(params, "jumpReleaseGravityScale", 2.35);
+    setNumberDefault(params, "maxFallSpeed", 1250);
+    return;
+  }
+  if (entity.internalName === "Runner_Player") {
+    setNumberDefault(params, "gravityScale", 1);
+    setNumberDefault(params, "fallGravityScale", 1);
+    setNumberDefault(params, "jumpReleaseGravityScale", 1);
+    setNumberDefault(params, "maxFallSpeed", 1200);
+  }
+}
+
+function setNumberDefault(params: Record<string, number | string | boolean>, key: string, value: number): void {
+  if (typeof params[key] !== "number") params[key] = value;
+}
+
+function isUnsetOrLegacyNumber(value: number | string | boolean | undefined, legacy: number): boolean {
+  if (value === undefined) return true;
+  if (typeof value === "number") return value === legacy;
+  if (typeof value === "string") return Number(value) === legacy;
+  return false;
 }
 
 type BoxInput = {
@@ -392,7 +431,11 @@ function makeBox(input: BoxInput): Entity {
             ...(input.behavior === "playerPlatformer"
               ? {
                   speed: 300,
-                  jump: 620,
+                  jump: 560,
+                  gravityScale: 1.15,
+                  fallGravityScale: 1.75,
+                  jumpReleaseGravityScale: 2.35,
+                  maxFallSpeed: 1250,
                   health: 3,
                   parryWindowFrames: 8,
                   parryCooldownFrames: 24,

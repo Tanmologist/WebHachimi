@@ -94,8 +94,12 @@
             "description": "玩家平台移动控制器",
             "params": {
               "speed": 300,
-              "jump": 620,
+              "jump": 560,
               "health": 3,
+              "gravityScale": 1.15,
+              "fallGravityScale": 1.75,
+              "jumpReleaseGravityScale": 2.35,
+              "maxFallSpeed": 1250,
               "parryWindowFrames": 7,
               "parryCooldownFrames": 16,
               "attackStartupFrames": 4,

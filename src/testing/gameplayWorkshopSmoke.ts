@@ -73,6 +73,44 @@ runSmoke("runner workshop clears obstacle with frame-stepped control", () => {
   };
 });
 
+runSmoke("combat player short hop turns over quickly", () => {
+  const project = createStarterProject();
+  const scene = activeScene(project);
+  const world = new RuntimeWorld({ scene });
+  const controller = new InteractiveTestRunner({ world });
+  const player = findByInternalName(scene, "Player");
+  const jumpKey = actorScopedKey(player.id, "jump");
+
+  controller.step(12);
+  const startY = requireEntity(world, player.id).transform.position.y;
+  controller.tap(jumpKey, 1);
+  controller.step(20);
+
+  const livePlayer = requireEntity(world, player.id);
+  const turnFrame = controller.frame;
+  const turnedOrLanded = livePlayer.body!.velocity.y > 0 || livePlayer.runtime?.grounded === true;
+  assert(turnedOrLanded, `expected short hop to be falling or landed by frame ${controller.frame}, got velocity ${livePlayer.body!.velocity.y}`);
+  if (!livePlayer.runtime?.grounded) assert(livePlayer.transform.position.y < startY, "player should still be above jump start while turning over");
+
+  const landedFrame = livePlayer.runtime?.grounded === true
+    ? controller.frame
+    : controller.stepUntil({
+        maxFrames: 55,
+        label: "short hop lands",
+        predicate: () => requireEntity(world, player.id).runtime?.grounded === true,
+        freezeOnMatch: true,
+      }).frame;
+  assert(requireEntity(world, player.id).runtime?.grounded === true, "short hop did not land quickly");
+
+  return {
+    turnFrame,
+    velocityY: round(livePlayer.body!.velocity.y),
+    startY: round(startY),
+    turnY: round(livePlayer.transform.position.y),
+    landedFrame,
+  };
+});
+
 runSmoke("parry workshop lands 100ms reaction and counter-hit", () => {
   const project = createStarterProject();
   const scene = activeScene(project);
