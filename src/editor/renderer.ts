@@ -1253,8 +1253,9 @@ function presentationResource(entity: Entity, resources: Record<string, Resource
 
 function presentationAnimationTimeMs(entity: Entity, world: RuntimeWorld, fallbackTimeMs: number): number {
   const isParrySlot = entity.render?.slot === "parry" || entity.render?.state === "parry";
-  const startedFrame = entity.runtime?.parryStartedFrame;
-  if (isParrySlot && typeof startedFrame === "number") {
+  const isAttackSlot = entity.render?.slot === "attack" || entity.render?.state === "attack";
+  const startedFrame = isParrySlot ? entity.runtime?.parryStartedFrame : isAttackSlot ? entity.runtime?.attackStartFrame : undefined;
+  if (typeof startedFrame === "number") {
     return Math.max(0, (world.clock.frame - startedFrame) * world.clock.fixedStepMs);
   }
   return fallbackTimeMs;

@@ -139,7 +139,11 @@ export class PlayerRenderer {
     if (entity.render && !entity.render.visible) return;
     const frame = world.clock.frame;
     const attackTouch = isAttackTouchEntity(entity);
-    const useActionResource = entity.render?.slot === "parry" || entity.render?.state === "parry";
+    const useActionResource =
+      entity.render?.slot === "parry" ||
+      entity.render?.state === "parry" ||
+      entity.render?.slot === "attack" ||
+      entity.render?.state === "attack";
     const resource = !attackTouch && useActionResource ? presentationResource(entity, this.resources) : undefined;
     if (resource && this.drawEntityImage(entity, resource, presentationAnimationTimeMs(entity, world))) {
       if (entity.runtime?.defeated === true) this.drawDefeatedMark(entity);
@@ -449,8 +453,9 @@ function presentationResource(entity: Entity, resources: Record<string, Resource
 
 function presentationAnimationTimeMs(entity: Entity, world: RuntimeWorld): number {
   const isParrySlot = entity.render?.slot === "parry" || entity.render?.state === "parry";
-  const startedFrame = entity.runtime?.parryStartedFrame;
-  if (isParrySlot && typeof startedFrame === "number") {
+  const isAttackSlot = entity.render?.slot === "attack" || entity.render?.state === "attack";
+  const startedFrame = isParrySlot ? entity.runtime?.parryStartedFrame : isAttackSlot ? entity.runtime?.attackStartFrame : undefined;
+  if (typeof startedFrame === "number") {
     return Math.max(0, (world.clock.frame - startedFrame) * world.clock.fixedStepMs);
   }
   return world.clock.timeMs;

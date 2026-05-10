@@ -30,6 +30,7 @@ export function createStarterProject(): Project {
   const playerCurrentResourceId = makeId<"ResourceId">("res") as ResourceId;
   const playerDeathResourceId = makeId<"ResourceId">("res") as ResourceId;
   const playerParryResourceId = "res-player-parry-counter-sequence" as ResourceId;
+  const playerAttackResourceId = "res-player-normal-attack-sequence" as ResourceId;
 
   scene.entities[playerId] = makeBox({
     id: playerId,
@@ -312,10 +313,12 @@ export function createStarterProject(): Project {
   };
 
   project.resources[playerParryResourceId] = createParryCounterResource(playerParryResourceId);
+  project.resources[playerAttackResourceId] = createNormalAttackResource(playerAttackResourceId);
 
   scene.entities[playerId].resources.push(
     makeResourceBinding(playerDeathResourceId, "death", "死亡淡出可视体"),
     makeResourceBinding(playerCurrentResourceId, "current", "当前战斗可视体"),
+    makeResourceBinding(playerAttackResourceId, "attack", "普通攻击动作"),
     makeResourceBinding(playerParryResourceId, "parry", "振刀弹反动作"),
   );
 
@@ -410,6 +413,7 @@ export function repairKnownStarterLabels(project: Project): Project {
     });
   });
   ensureParryCounterResource(project);
+  ensureNormalAttackResource(project);
 
   return project;
 }
@@ -428,6 +432,21 @@ function ensureParryCounterResource(project: Project): void {
     }
     if (player.behavior?.builtin === "playerPlatformer") {
       setNumberDefault(player.behavior.params, "parryAnimationFrames", 50);
+    }
+  }
+}
+
+function ensureNormalAttackResource(project: Project): void {
+  const resourceId = "res-player-normal-attack-sequence" as ResourceId;
+  const existing = project.resources[resourceId];
+  if (!existing || existing.type !== "animation" || (existing.attachments?.length ?? 0) < 6) {
+    project.resources[resourceId] = createNormalAttackResource(resourceId);
+  }
+  for (const scene of Object.values(project.scenes)) {
+    const player = Object.values(scene.entities).find((entity) => entity.internalName === "Player");
+    if (!player) continue;
+    if (!player.resources.some((binding) => binding.resourceId === resourceId || binding.slot === "attack")) {
+      player.resources.push(makeResourceBinding(resourceId, "attack", "普通攻击动作"));
     }
   }
 }
@@ -727,6 +746,34 @@ function createParryCounterResource(resourceId: ResourceId): Resource {
       mode: "sequence",
       frameCount: 22,
       fps: 44,
+      loop: false,
+    },
+  };
+}
+
+function createNormalAttackResource(resourceId: ResourceId): Resource {
+  return {
+    id: resourceId,
+    internalName: "Player_Normal_Attack_Sequence",
+    displayName: "普通攻击动作",
+    type: "animation",
+    description: "玩家普通攻击时播放的 GPT 草稿序列帧动作。",
+    aiDescription: "GPT 生成的玩家普通攻击 6 帧透明 PNG 序列。",
+    tags: ["player", "combat", "attack", "animation", "gpt-draft"],
+    attachments: Array.from({ length: 6 }, (_, index) => {
+      const frame = index + 1;
+      const padded = String(frame).padStart(4, "0");
+      return {
+        id: `att-player-attack-${padded}`,
+        fileName: `player-attack-alpha-${padded}.png`,
+        mime: "image/png",
+        path: `/games/hachimi-nanbei-lvdong/resources/player-attack-alpha-${padded}.png`,
+      };
+    }),
+    sprite: {
+      mode: "sequence",
+      frameCount: 6,
+      fps: 12,
       loop: false,
     },
   };

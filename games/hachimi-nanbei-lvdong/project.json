@@ -178,6 +178,21 @@
               }
             },
             {
+              "resourceId": "res-player-normal-attack-sequence",
+              "slot": "attack",
+              "description": "??????",
+              "aiDescription": "??????",
+              "localOffset": {
+                "x": 0,
+                "y": 0
+              },
+              "localRotation": 0,
+              "localScale": {
+                "x": 1,
+                "y": 1
+              }
+            },
+            {
               "resourceId": "res-player-parry-counter-sequence",
               "slot": "parry",
               "description": "??????",
@@ -1873,6 +1888,65 @@
         "mode": "sequence",
         "frameCount": 22,
         "fps": 44,
+        "loop": false
+      }
+    },
+    "res-player-normal-attack-sequence": {
+      "id": "res-player-normal-attack-sequence",
+      "internalName": "Player_Normal_Attack_Sequence",
+      "displayName": "??????",
+      "type": "animation",
+      "description": "?????????? GPT ????????",
+      "aiDescription": "GPT ????????? 6 ??? PNG ???",
+      "tags": [
+        "player",
+        "combat",
+        "attack",
+        "animation",
+        "gpt-draft"
+      ],
+      "attachments": [
+        {
+          "id": "att-player-attack-0001",
+          "fileName": "player-attack-alpha-0001.png",
+          "mime": "image/png",
+          "path": "/games/hachimi-nanbei-lvdong/resources/player-attack-alpha-0001.png"
+        },
+        {
+          "id": "att-player-attack-0002",
+          "fileName": "player-attack-alpha-0002.png",
+          "mime": "image/png",
+          "path": "/games/hachimi-nanbei-lvdong/resources/player-attack-alpha-0002.png"
+        },
+        {
+          "id": "att-player-attack-0003",
+          "fileName": "player-attack-alpha-0003.png",
+          "mime": "image/png",
+          "path": "/games/hachimi-nanbei-lvdong/resources/player-attack-alpha-0003.png"
+        },
+        {
+          "id": "att-player-attack-0004",
+          "fileName": "player-attack-alpha-0004.png",
+          "mime": "image/png",
+          "path": "/games/hachimi-nanbei-lvdong/resources/player-attack-alpha-0004.png"
+        },
+        {
+          "id": "att-player-attack-0005",
+          "fileName": "player-attack-alpha-0005.png",
+          "mime": "image/png",
+          "path": "/games/hachimi-nanbei-lvdong/resources/player-attack-alpha-0005.png"
+        },
+        {
+          "id": "att-player-attack-0006",
+          "fileName": "player-attack-alpha-0006.png",
+          "mime": "image/png",
+          "path": "/games/hachimi-nanbei-lvdong/resources/player-attack-alpha-0006.png"
+        }
+      ],
+      "sprite": {
+        "mode": "sequence",
+        "frameCount": 6,
+        "fps": 12,
         "loop": false
       }
     }

@@ -1003,9 +1003,19 @@ export class RuntimeWorld {
     const frame = this.clock.frame;
     for (const entity of this.allEntities()) {
       if (!entity.render) continue;
-      const slot = frame <= (entity.runtime?.parryAnimationUntilFrame ?? -1) ? "parry" : "current";
+      const slot = frame <= (entity.runtime?.parryAnimationUntilFrame ?? -1)
+        ? "parry"
+        : this.isAttackAnimating(entity, frame)
+          ? "attack"
+          : "current";
       this.applyPresentationSlot(entity, slot);
     }
+  }
+
+  private isAttackAnimating(entity: Entity, frame: number): boolean {
+    const start = entity.runtime?.attackStartFrame;
+    const cooldownUntil = entity.runtime?.attackCooldownUntilFrame;
+    return typeof start === "number" && typeof cooldownUntil === "number" && frame >= start && frame < cooldownUntil;
   }
 
   private applyPresentationSlot(entity: Entity, slot: string): void {

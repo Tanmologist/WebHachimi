@@ -211,6 +211,7 @@ runSmoke("combat slice lets player attack damage enemy", () => {
 
   const touch = mustCombatEvent(controller, { type: "attackTouch", attackerId: player.id, defenderId: enemy.id });
   const hit = mustCombatEvent(controller, { type: "hit", attackerId: player.id, defenderId: enemy.id });
+  assert(requireEntity(world, player.id).render?.slot === "attack", "player should switch to attack presentation while attacking");
   assert(touch.frame <= hit.frame, "attack touch should be recorded before damage resolves");
   const touchBoxes = world.allEntities().filter((entity) => !entity.persistent && entity.tags.includes("touch"));
   assert(touchBoxes.length > 0, "player attack should spawn a runtime touch box");
