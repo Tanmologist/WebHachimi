@@ -252,6 +252,136 @@ runSmoke("combat attack touch offsets move active window", () => {
   };
 });
 
+runSmoke("combat attack timing follows design table recovery lock", () => {
+  const project = createStarterProject();
+  const scene = activeScene(project);
+  const player = findByInternalName(scene, "Player");
+  const enemy = findByInternalName(scene, "Enemy_Patrol");
+  setupCombatSliceActors(player, enemy, { enemyHealth: 6, autoEnemy: false });
+  const world = new RuntimeWorld({ scene });
+  const controller = new InteractiveTestRunner({ world });
+  const attackKey = actorScopedKey(player.id, "attack");
+  const rightKey = actorScopedKey(player.id, "right");
+
+  controller.tap(attackKey, 1);
+  const startedResult = controller.stepUntil({
+    maxFrames: 5,
+    label: "normal attack starts after release",
+    predicate: () => Boolean(controller.findCombatEvent({ type: "attackStarted", attackerId: player.id })),
+  });
+  assert(startedResult.matched, startedResult.logs[0]?.message || "normal attack did not start");
+
+  const started = mustCombatEvent(controller, { type: "attackStarted", attackerId: player.id });
+  const liveAtStart = requireEntity(world, player.id);
+  const activeStart = readEventNumber(started, "data.activeStartFrame");
+  const activeUntil = readEventNumber(started, "data.activeUntilFrame");
+  const cooldownUntil = readEventNumber(started, "data.cooldownUntilFrame");
+  assert(readEventNumber(started, "data.startup") === 10, "normal attack startup should be 0.1s / 10 frames");
+  assert(readEventNumber(started, "data.active") === 30, "normal attack active window should be 0.3s / 30 frames");
+  assert(readEventNumber(started, "data.recovery") === 20, "normal attack recovery should be 0.2s / 20 frames");
+  assert(activeStart === started.frame + 10, "normal attack active start should follow startup");
+  assert(activeUntil === activeStart + 29, "normal attack active window should last exactly 30 frames");
+  assert(cooldownUntil === started.frame + 60, "normal attack should lock actions for startup + active + recovery");
+  assert(liveAtStart.runtime?.attackCooldownUntilFrame === cooldownUntil, "runtime cooldown should use total action lock");
+
+  const hitResult = controller.stepUntil({
+    maxFrames: 45,
+    label: "normal attack hits during active frames",
+    predicate: () => Boolean(controller.findCombatEvent({ type: "hit", attackerId: player.id, defenderId: enemy.id })),
+  });
+  assert(hitResult.matched, hitResult.logs[0]?.message || "normal attack did not hit during active frames");
+  const hit = mustCombatEvent(controller, { type: "hit", attackerId: player.id, defenderId: enemy.id });
+  assert(hit.frame >= activeStart && hit.frame <= activeUntil, "hit should happen inside active frames");
+  assert(readEventNumber(hit, "data.hitStunFrames") === 100, "normal hit stun should be 1.0s / 100 frames");
+
+  if (controller.frame <= activeUntil) controller.step(activeUntil + 1 - controller.frame);
+  const xBeforeRecoveryMove = requireEntity(world, player.id).transform.position.x;
+  controller.press(rightKey);
+  controller.step(5);
+  controller.release(rightKey);
+  const xAfterRecoveryMove = requireEntity(world, player.id).transform.position.x;
+  assert(Math.abs(xAfterRecoveryMove - xBeforeRecoveryMove) < 0.001, "player should not drift during attack recovery");
+
+  controller.tap(attackKey, 1);
+  if (controller.frame < cooldownUntil) controller.step(cooldownUntil - controller.frame);
+  const earlyRestart = world.combatEvents.find(
+    (event) => event.type === "attackStarted" && event.attackerId === player.id && event.frame > started.frame && event.frame < cooldownUntil,
+  );
+  assert(!earlyRestart, "attack should not restart before recovery cooldown ends");
+
+  controller.tap(attackKey, 1);
+  const restartResult = controller.stepUntil({
+    maxFrames: 5,
+    label: "normal attack can restart after recovery",
+    predicate: () => world.combatEvents.some(
+      (event) => event.type === "attackStarted" && event.attackerId === player.id && event.frame >= cooldownUntil,
+    ),
+    freezeOnMatch: true,
+  });
+  assert(restartResult.matched, restartResult.logs[0]?.message || "attack did not restart after recovery");
+
+  return {
+    attackStartedFrame: started.frame,
+    activeStart,
+    activeUntil,
+    cooldownUntil,
+    hitFrame: hit.frame,
+    recoveryMoveDelta: round(xAfterRecoveryMove - xBeforeRecoveryMove),
+  };
+});
+
+runSmoke("combat failed parry uses table recovery lock", () => {
+  const project = createStarterProject();
+  const scene = activeScene(project);
+  const player = findByInternalName(scene, "Player");
+  const enemy = findByInternalName(scene, "Enemy_Patrol");
+  setupCombatSliceActors(player, enemy, { enemyHealth: 6, autoEnemy: false });
+  const world = new RuntimeWorld({ scene });
+  const controller = new InteractiveTestRunner({ world });
+  const parryKey = actorScopedKey(player.id, "parry");
+  const attackKey = actorScopedKey(player.id, "attack");
+  const rightKey = actorScopedKey(player.id, "right");
+
+  controller.tap(parryKey, 1);
+  const started = mustCombatEvent(controller, { type: "parryStarted", defenderId: player.id });
+  const liveAtStart = requireEntity(world, player.id);
+  const parryUntil = started.frame + 19;
+  const recoveryUntil = started.frame + 50;
+  assert(readEventNumber(started, "data.windowFrames") === 20, "parry active window should be 0.2s / 20 frames");
+  assert(readEventNumber(started, "data.recoveryFrames") === 30, "failed parry recovery should be 0.3s / 30 frames");
+  assert(liveAtStart.runtime?.parryUntilFrame === parryUntil, "runtime parry window should last exactly 20 frames");
+  assert(liveAtStart.runtime?.parryRecoveryUntilFrame === recoveryUntil, "failed parry should lock movement through recovery");
+
+  if (controller.frame <= parryUntil) controller.step(parryUntil + 1 - controller.frame);
+  const xBeforeRecoveryMove = requireEntity(world, player.id).transform.position.x;
+  controller.press(rightKey);
+  controller.step(5);
+  controller.release(rightKey);
+  const xAfterRecoveryMove = requireEntity(world, player.id).transform.position.x;
+  assert(Math.abs(xAfterRecoveryMove - xBeforeRecoveryMove) < 0.001, "player should not drift during failed parry recovery");
+
+  controller.tap(attackKey, 1);
+  if (controller.frame < recoveryUntil) controller.step(recoveryUntil - controller.frame);
+  const earlyAttack = world.combatEvents.find((event) => event.type === "attackStarted" && event.attackerId === player.id && event.frame < recoveryUntil);
+  assert(!earlyAttack, "failed parry recovery should block attack startup");
+
+  controller.tap(attackKey, 1);
+  const restartResult = controller.stepUntil({
+    maxFrames: 5,
+    label: "attack can start after failed parry recovery",
+    predicate: () => world.combatEvents.some((event) => event.type === "attackStarted" && event.attackerId === player.id && event.frame >= recoveryUntil),
+    freezeOnMatch: true,
+  });
+  assert(restartResult.matched, restartResult.logs[0]?.message || "attack did not start after failed parry recovery");
+
+  return {
+    parryStartedFrame: started.frame,
+    parryUntil,
+    recoveryUntil,
+    recoveryMoveDelta: round(xAfterRecoveryMove - xBeforeRecoveryMove),
+  };
+});
+
 runSmoke("combat hold attack releases charged hit", () => {
   const project = createStarterProject();
   const scene = activeScene(project);
@@ -392,7 +522,7 @@ runSmoke("combat slice auto enemy can be parried and defeated", () => {
   for (let index = 0; index < 120; index += 1) {
     const frame = controller.frame;
     const enemyAttack = controller.findCombatEvent({ type: "attackStarted", attackerId: enemy.id });
-    if (enemyAttack && parryQueuedFor === undefined) parryQueuedFor = enemyAttack.frame + 10;
+    if (enemyAttack && parryQueuedFor === undefined) parryQueuedFor = enemyAttack.frame + readEventNumber(enemyAttack, "data.startup") - 1;
     const parrySuccess = controller.findCombatEvent({ type: "parrySuccess", attackerId: enemy.id, defenderId: player.id });
     if (parrySuccess && counterQueuedFor === undefined) counterQueuedFor = frame + 1;
 
@@ -576,19 +706,21 @@ function setupCombatSliceActors(player: Entity, enemy: Entity, options: { enemyH
     attackActiveUntilFrame: undefined,
     attackCooldownUntilFrame: undefined,
     parryUntilFrame: undefined,
+    parryRecoveryUntilFrame: undefined,
     parryCooldownUntilFrame: undefined,
   };
   player.behavior!.params = {
     ...player.behavior!.params,
     health: 3,
-    attackStartupFrames: 4,
-    attackActiveFrames: 5,
-    attackCooldownFrames: 16,
+    attackStartupFrames: 10,
+    attackActiveFrames: 30,
+    attackCooldownFrames: 20,
     attackRange: 128,
     attackHeight: 90,
     attackDamage: 1,
-    parryWindowFrames: 7,
-    parryCooldownFrames: 16,
+    attackHitStunFrames: 100,
+    parryWindowFrames: 20,
+    parryCooldownFrames: 30,
   };
 
   enemy.transform.position = { x: 118, y: 240 };
@@ -602,6 +734,7 @@ function setupCombatSliceActors(player: Entity, enemy: Entity, options: { enemyH
     attackStartFrame: undefined,
     attackActiveUntilFrame: undefined,
     attackCooldownUntilFrame: undefined,
+    parryRecoveryUntilFrame: undefined,
   };
   enemy.behavior!.params = {
     ...enemy.behavior!.params,
@@ -609,12 +742,13 @@ function setupCombatSliceActors(player: Entity, enemy: Entity, options: { enemyH
     left: 118,
     right: 118,
     health: options.enemyHealth,
-    attackStartupFrames: 12,
-    attackActiveFrames: 5,
-    attackCooldownFrames: 28,
+    attackStartupFrames: 10,
+    attackActiveFrames: 30,
+    attackCooldownFrames: 20,
     attackRange: 128,
     attackHeight: 90,
     attackDamage: 1,
+    attackHitStunFrames: 100,
     parryStunFrames: 18,
     ...(options.autoEnemy
       ? {

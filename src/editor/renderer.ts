@@ -109,6 +109,7 @@ export class V2Renderer {
   private viewport = defaultViewportState();
   private resizeObserver?: ResizeObserver;
   private removeResizeFallback?: () => void;
+  private destroyed = false;
 
   async init(options: V2RendererOptions): Promise<void> {
     await this.app.init({
@@ -133,6 +134,8 @@ export class V2Renderer {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.resizeObserver?.disconnect();
     this.removeResizeFallback?.();
     this.frameTextures.forEach((texture) => texture.destroy(false));
@@ -141,7 +144,7 @@ export class V2Renderer {
     this.destroyPools();
     const appWithResizeHook = this.app as Application & { _cancelResize?: () => void };
     if (typeof appWithResizeHook._cancelResize !== "function") appWithResizeHook._cancelResize = () => {};
-    this.app.destroy(true);
+    if (this.hasLiveRenderer()) this.app.destroy(true);
   }
 
   canvas(): HTMLCanvasElement {
@@ -502,7 +505,18 @@ export class V2Renderer {
       if (entity.runtime?.defeated || !entity.collider) continue;
       const start = entity.runtime?.attackStartFrame;
       const activeUntil = entity.runtime?.attackActiveUntilFrame;
-      if (start === undefined || activeUntil === undefined || frame > activeUntil) continue;
+      const cooldownUntil = entity.runtime?.attackCooldownUntilFrame;
+      if (start === undefined || activeUntil === undefined || cooldownUntil === undefined || frame >= cooldownUntil) continue;
+      if (frame > activeUntil) {
+        const bounds = boundsFor(entity);
+        const graphics = this.takeGraphics();
+        graphics.roundRect(bounds.x - 5, bounds.y - 5, bounds.w + 10, bounds.h + 10, 8);
+        graphics.setStrokeStyle({ width: 2, color: 0x9aa0a6, alpha: 0.72 });
+        graphics.stroke();
+        this.worldLayer.addChild(graphics);
+        this.drawCombatRectLabel({ x: bounds.x, y: bounds.y - 6, w: bounds.w, h: 1 }, "RECOVERY");
+        continue;
+      }
       const rect = gameplayAttackRect(entity);
       const graphics = this.takeGraphics();
       graphics.rect(rect.x, rect.y, rect.w, rect.h);

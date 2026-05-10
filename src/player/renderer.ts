@@ -30,6 +30,7 @@ export class PlayerRenderer {
   private scene?: Scene;
   private backdrop?: Graphics;
   private horizon?: Graphics;
+  private destroyed = false;
 
   async init(options: PlayerRendererOptions): Promise<void> {
     this.scene = options.scene;
@@ -57,13 +58,16 @@ export class PlayerRenderer {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
     this.resizeObserver?.disconnect();
     this.removeResizeFallback?.();
     this.drainGraphicsPool();
-    this.app.destroy(true);
+    if (this.hasLiveRenderer()) this.app.destroy(true);
   }
 
   render(world: RuntimeWorld): void {
+    if (!this.hasLiveRenderer()) return;
     this.recycleWorldLayer();
     const player = findPlayer(world.allEntities());
     if (player) this.follow(player.transform.position);
@@ -89,6 +93,10 @@ export class PlayerRenderer {
   private follow(target: Vec2): void {
     this.camera.x += (target.x - this.camera.x) * 0.12;
     this.camera.y += (target.y - 40 - this.camera.y) * 0.1;
+  }
+
+  private hasLiveRenderer(): boolean {
+    return Boolean((this.app as unknown as { renderer?: unknown }).renderer);
   }
 
   private drawBackdrop(): void {
@@ -183,7 +191,18 @@ export class PlayerRenderer {
       if (entity.runtime?.defeated || !entity.collider) continue;
       const start = entity.runtime?.attackStartFrame;
       const activeUntil = entity.runtime?.attackActiveUntilFrame;
-      if (start === undefined || activeUntil === undefined || frame > activeUntil) continue;
+      const cooldownUntil = entity.runtime?.attackCooldownUntilFrame;
+      if (start === undefined || activeUntil === undefined || cooldownUntil === undefined || frame >= cooldownUntil) continue;
+      if (frame > activeUntil) {
+        const bounds = boundsFor(entity);
+        const graphics = this.takeGraphics();
+        graphics.roundRect(bounds.x - 5, bounds.y - 5, bounds.w + 10, bounds.h + 10, 8);
+        graphics.setStrokeStyle({ width: 2, color: 0x9aa0a6, alpha: 0.72 });
+        graphics.stroke();
+        this.worldLayer.addChild(graphics);
+        this.drawWorldLabel("RECOVERY", bounds.x + bounds.w / 2, bounds.y - 4, "#d7dadf");
+        continue;
+      }
       const rect = attackRect(entity);
       const graphics = this.takeGraphics();
       if (frame < start) {
