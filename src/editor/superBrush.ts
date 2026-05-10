@@ -1,4 +1,15 @@
-import type { BrushAnnotation, BrushCompiledContext, BrushContext, BrushStroke, Task, TargetRef } from "../project/schema";
+import type {
+  BrushAnnotation,
+  BrushCompiledContext,
+  BrushContext,
+  BrushShapeInterpretation,
+  BrushStroke,
+  BrushVisualEvidence,
+  BrushVisualFrame,
+  Entity,
+  Task,
+  TargetRef,
+} from "../project/schema";
 import { err, makeId, ok, type Result } from "../shared/types";
 import type { BrushAnnotationId, BrushStrokeId, Rect, TaskId, Vec2 } from "../shared/types";
 
@@ -16,6 +27,18 @@ export type SuperBrushTaskInput = {
   title?: string;
   userText: string;
   draft: SuperBrushDraft;
+  visualEvidence?: BrushVisualEvidenceInput;
+};
+
+export type BrushVisualEvidenceInput = {
+  viewport?: {
+    worldCenter: Vec2;
+    zoom: number;
+    canvasSize: Vec2;
+  };
+  entities?: Entity[];
+  imageRefs?: Record<string, { imageRef: string; imageMime: string }>;
+  capturedAt?: string;
 };
 
 export type SuperBrushAnnotationInput = {
@@ -65,7 +88,7 @@ export function createTaskFromSuperBrush(input: SuperBrushTaskInput): Result<Tas
     return err("super brush requires at least one stroke, annotation, or marked area");
   }
   const now = new Date().toISOString();
-  const brushContext = createBrushContextFromSuperBrushDraft(draft);
+  const brushContext = createBrushContextFromSuperBrushDraft(draft, input.visualEvidence);
   return ok({
     id: makeId<"TaskId">("task") as TaskId,
     source: "superBrush",
@@ -134,7 +157,7 @@ export function hasMeaningfulSuperBrushContext(draft: SuperBrushDraft): boolean 
   );
 }
 
-export function createBrushContextFromSuperBrushDraft(draft: SuperBrushDraft): BrushContext {
+export function createBrushContextFromSuperBrushDraft(draft: SuperBrushDraft, visualEvidenceInput: BrushVisualEvidenceInput = {}): BrushContext {
   const normalized = normalizeSuperBrushDraft(draft);
   const compiled = compileSuperBrushContext(normalized);
   return {
@@ -153,6 +176,70 @@ export function createBrushContextFromSuperBrushDraft(draft: SuperBrushDraft): B
       capturedSnapshotId: normalized.capturedSnapshotId as BrushContext["capturedSnapshotId"],
     },
     compiled,
+    visualEvidence: createBrushVisualEvidence(normalized, { ...visualEvidenceInput, compiled }),
+  };
+}
+
+export function createBrushVisualEvidence(
+  draft: SuperBrushDraft,
+  input: BrushVisualEvidenceInput & { compiled?: BrushCompiledContext } = {},
+): BrushVisualEvidence {
+  const normalized = normalizeSuperBrushDraft(draft);
+  const compiled = input.compiled || compileSuperBrushContext(normalized);
+  const viewport = input.viewport ? normalizeViewport(input.viewport) : undefined;
+  const brushBounds = brushEvidenceBounds(normalized, compiled);
+  const cropWorldRect = expandRect(brushBounds, brushEvidencePadding(brushBounds));
+  const overviewWorldRect = viewport?.visibleWorldRect || expandRect(cropWorldRect, Math.max(cropWorldRect.w, cropWorldRect.h) * 0.75);
+  const frames: BrushVisualFrame[] = [
+    {
+      id: "overview",
+      role: "overview",
+      label: "Full canvas view with brush overlay",
+      worldRect: overviewWorldRect,
+      pixelRect: viewport ? { x: 0, y: 0, w: viewport.canvasSize.x, h: viewport.canvasSize.y } : undefined,
+      ...imageRefFor(input.imageRefs, "overview", "overview"),
+    },
+    {
+      id: "crop-main",
+      role: "crop",
+      label: "Padded brush-local crop",
+      worldRect: cropWorldRect,
+      pixelRect: viewport ? worldRectToPixelRect(cropWorldRect, viewport) : undefined,
+      parentFrameId: "overview",
+      ...imageRefFor(input.imageRefs, "crop-main", "crop"),
+    },
+    ...brushEvidenceTiles(cropWorldRect, compiled, viewport).map((tile, index) => ({
+      id: `tile-${index + 1}`,
+      role: "tile" as const,
+      label: `Brush detail tile ${index + 1}`,
+      worldRect: tile,
+      pixelRect: viewport ? worldRectToPixelRect(tile, viewport) : undefined,
+      parentFrameId: "crop-main",
+      ...imageRefFor(input.imageRefs, `tile-${index + 1}`, "tile"),
+    })),
+  ];
+  const entities = evidenceEntities(input.entities || [], cropWorldRect, viewport);
+  return {
+    version: 1,
+    manifestId: makeId<"BrushEvidenceId">("brush-evidence"),
+    coordinateSpace: "world",
+    capture: {
+      capturedAt: input.capturedAt || new Date().toISOString(),
+      snapshotRef: normalized.capturedSnapshotId as BrushVisualEvidence["capture"]["snapshotRef"],
+      viewport: viewport
+        ? {
+            worldCenter: viewport.worldCenter,
+            zoom: viewport.zoom,
+            canvasSize: viewport.canvasSize,
+            visibleWorldRect: viewport.visibleWorldRect,
+          }
+        : undefined,
+    },
+    frames,
+    anchors: brushEvidenceAnchors(compiled, entities, viewport),
+    entities,
+    shape: compiled.shape,
+    warnings: brushEvidenceWarnings(frames, compiled.shape),
   };
 }
 
@@ -197,6 +284,7 @@ export function compileSuperBrushContext(draft: SuperBrushDraft): BrushCompiledC
     targetRef: annotation.targetRef,
     confidence: annotation.targetRef ? 0.85 : 0.65,
   }));
+  const shape = interpretBrushShape(normalized, targetRefs, areas, paths);
   const evidence = compileBrushEvidence(normalized, targetRefs, areas.length, paths.length);
   return {
     version: 1,
@@ -206,6 +294,7 @@ export function compileSuperBrushContext(draft: SuperBrushDraft): BrushCompiledC
     areas,
     paths,
     annotations,
+    shape,
     confidence: brushConfidence(targetRefs, strokeTargets.length, areas.length, annotations.length),
     evidence,
   };
@@ -236,6 +325,287 @@ export function superBrushSelectionBox(draft: SuperBrushDraft): BrushContext["se
       .filter((target): target is Extract<TargetRef, { kind: "area" }> => target.kind === "area")
       .map((target) => target.rect),
   ]);
+}
+
+type NormalizedViewportEvidence = {
+  worldCenter: Vec2;
+  zoom: number;
+  canvasSize: Vec2;
+  visibleWorldRect: Rect;
+};
+
+function normalizeViewport(input: NonNullable<BrushVisualEvidenceInput["viewport"]>): NormalizedViewportEvidence {
+  const zoom = Math.max(input.zoom || 1, 0.001);
+  const canvasSize = {
+    x: Math.max(1, roundCoord(input.canvasSize.x)),
+    y: Math.max(1, roundCoord(input.canvasSize.y)),
+  };
+  const worldCenter = {
+    x: roundCoord(input.worldCenter.x),
+    y: roundCoord(input.worldCenter.y),
+  };
+  return {
+    worldCenter,
+    zoom: roundCoord(zoom),
+    canvasSize,
+    visibleWorldRect: {
+      x: roundCoord(worldCenter.x - canvasSize.x / 2 / zoom),
+      y: roundCoord(worldCenter.y - canvasSize.y / 2 / zoom),
+      w: roundCoord(canvasSize.x / zoom),
+      h: roundCoord(canvasSize.y / zoom),
+    },
+  };
+}
+
+function brushEvidenceBounds(draft: SuperBrushDraft, compiled: BrushCompiledContext): Rect {
+  const rects = [
+    draft.selectionBox,
+    ...compiled.areas.map((area) => area.rect),
+    ...compiled.strokeTargets.map((target) => target.bounds),
+    ...compiled.paths.map((path) => rectFromPoints(path.points, 0)),
+  ];
+  return unionRects(rects) || { x: 0, y: 0, w: 1, h: 1 };
+}
+
+function brushEvidencePadding(rect: Rect): number {
+  return Math.max(48, Math.min(240, Math.max(rect.w, rect.h) * 0.65));
+}
+
+function expandRect(rect: Rect, padding: number): Rect {
+  return normalizeRect({
+    x: rect.x - padding,
+    y: rect.y - padding,
+    w: rect.w + padding * 2,
+    h: rect.h + padding * 2,
+  });
+}
+
+function imageRefFor(
+  refs: BrushVisualEvidenceInput["imageRefs"],
+  frameId: string,
+  role: BrushVisualFrame["role"],
+): Pick<BrushVisualFrame, "imageRef" | "imageMime"> {
+  const ref = refs?.[frameId] || refs?.[role];
+  return ref ? { imageRef: ref.imageRef, imageMime: ref.imageMime } : {};
+}
+
+function worldRectToPixelRect(rect: Rect, viewport: NormalizedViewportEvidence): Rect {
+  const topLeft = worldToPixel({ x: rect.x, y: rect.y }, viewport);
+  const bottomRight = worldToPixel({ x: rect.x + rect.w, y: rect.y + rect.h }, viewport);
+  const x = Math.min(topLeft.x, bottomRight.x);
+  const y = Math.min(topLeft.y, bottomRight.y);
+  const w = Math.abs(bottomRight.x - topLeft.x);
+  const h = Math.abs(bottomRight.y - topLeft.y);
+  return {
+    x: roundCoord(x),
+    y: roundCoord(y),
+    w: roundCoord(w),
+    h: roundCoord(h),
+  };
+}
+
+function worldToPixel(point: Vec2, viewport: NormalizedViewportEvidence): Vec2 {
+  return {
+    x: roundCoord(viewport.canvasSize.x / 2 + (point.x - viewport.worldCenter.x) * viewport.zoom),
+    y: roundCoord(viewport.canvasSize.y / 2 + (point.y - viewport.worldCenter.y) * viewport.zoom),
+  };
+}
+
+function brushEvidenceTiles(
+  crop: Rect,
+  compiled: BrushCompiledContext,
+  viewport: NormalizedViewportEvidence | undefined,
+): Rect[] {
+  const longestPath = Math.max(0, ...compiled.paths.map((path) => path.length));
+  const shouldTile = crop.w > 420 || crop.h > 320 || longestPath > 560;
+  if (!shouldTile) return [];
+  const minTileWorld = viewport ? Math.max(120, 180 / Math.max(viewport.zoom, 0.001)) : 160;
+  let columns = crop.w >= crop.h * 1.25 ? 2 : 1;
+  let rows = crop.h > crop.w * 1.1 ? 2 : 1;
+  if (crop.w / columns < minTileWorld) columns = 1;
+  if (crop.h / rows < minTileWorld) rows = 1;
+  if (columns === 1 && rows === 1) return [];
+
+  const tiles: Rect[] = [];
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      tiles.push(
+        normalizeRect({
+          x: crop.x + (crop.w / columns) * column,
+          y: crop.y + (crop.h / rows) * row,
+          w: crop.w / columns,
+          h: crop.h / rows,
+        }),
+      );
+    }
+  }
+  return tiles.slice(0, 4);
+}
+
+function evidenceEntities(
+  entities: Entity[],
+  cropWorldRect: Rect,
+  viewport: NormalizedViewportEvidence | undefined,
+): BrushVisualEvidence["entities"] {
+  const labels = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  return entities
+    .map((entity) => ({ entity, bounds: entityWorldBounds(entity) }))
+    .filter(({ bounds }) => rectsIntersect(bounds, cropWorldRect))
+    .slice(0, labels.length)
+    .map(({ entity, bounds }, index) => ({
+      id: entity.id as BrushVisualEvidence["entities"][number]["id"],
+      label: labels[index],
+      displayName: entity.displayName,
+      boundsWorld: bounds,
+      boundsPixel: viewport ? worldRectToPixelRect(bounds, viewport) : undefined,
+    }));
+}
+
+function entityWorldBounds(entity: Entity): Rect {
+  const collider = entity.collider;
+  const render = entity.render;
+  const size = collider?.size || render?.size || { x: 64, y: 64 };
+  const offset = collider?.offset || render?.offset || { x: 0, y: 0 };
+  const scale = entity.transform.scale || { x: 1, y: 1 };
+  const w = Math.max(1, Math.abs(size.x * scale.x));
+  const h = Math.max(1, Math.abs(size.y * scale.y));
+  const center = {
+    x: entity.transform.position.x + offset.x,
+    y: entity.transform.position.y + offset.y,
+  };
+  return normalizeRect({ x: center.x - w / 2, y: center.y - h / 2, w, h });
+}
+
+function rectsIntersect(left: Rect, right: Rect): boolean {
+  return left.x <= right.x + right.w && left.x + left.w >= right.x && left.y <= right.y + right.h && left.y + left.h >= right.y;
+}
+
+function brushEvidenceAnchors(
+  compiled: BrushCompiledContext,
+  entities: BrushVisualEvidence["entities"],
+  viewport: NormalizedViewportEvidence | undefined,
+): BrushVisualEvidence["anchors"] {
+  const anchors: BrushVisualEvidence["anchors"] = [];
+  const primaryPath = [...compiled.paths].sort((left, right) => right.length - left.length)[0];
+  if (primaryPath) {
+    anchors.push(anchor("anchor-start", "S", "start", primaryPath.start, viewport, primaryPath.strokeId));
+    anchors.push(anchor("anchor-end", "E", "end", primaryPath.end, viewport, primaryPath.strokeId));
+  }
+  if (compiled.shape.centerWorld) anchors.push(anchor("anchor-center", "C", "center", compiled.shape.centerWorld, viewport));
+  for (const entity of entities) {
+    anchors.push(anchor(`entity-${entity.label}`, entity.label, "entity", rectCenter(entity.boundsWorld), viewport, undefined, entity.id));
+  }
+  return anchors;
+}
+
+function anchor(
+  id: string,
+  label: string,
+  kind: BrushVisualEvidence["anchors"][number]["kind"],
+  world: Vec2,
+  viewport: NormalizedViewportEvidence | undefined,
+  strokeId?: BrushStrokeId,
+  entityId?: BrushVisualEvidence["anchors"][number]["entityId"],
+): BrushVisualEvidence["anchors"][number] {
+  return {
+    id,
+    label,
+    kind,
+    world: { x: roundCoord(world.x), y: roundCoord(world.y) },
+    pixel: viewport ? worldToPixel(world, viewport) : undefined,
+    strokeId,
+    entityId,
+  };
+}
+
+function brushEvidenceWarnings(frames: BrushVisualFrame[], shape: BrushShapeInterpretation): string[] {
+  const warnings: string[] = [];
+  const crop = frames.find((frame) => frame.role === "crop");
+  if (crop && (crop.worldRect.w < 32 || crop.worldRect.h < 32)) warnings.push("main crop is very small; keep surrounding context when reviewing image evidence");
+  if (frames.filter((frame) => frame.role === "tile").length > 0) warnings.push("detail tiles are supplemental; use overview and crop for spatial context");
+  if (shape.kind === "path" && !shape.startWorld) warnings.push("path has no reliable start anchor");
+  return warnings;
+}
+
+function interpretBrushShape(
+  draft: SuperBrushDraft,
+  targetRefs: TargetRef[],
+  areas: BrushCompiledContext["areas"],
+  paths: BrushCompiledContext["paths"],
+): BrushShapeInterpretation {
+  const longestPath = [...paths].sort((left, right) => right.length - left.length)[0];
+  const bounds = unionRects([
+    draft.selectionBox,
+    ...areas.map((area) => area.rect),
+    ...paths.map((path) => rectFromPoints(path.points, 0)),
+  ]);
+  const closed = longestPath ? closedStrokePolygon(longestPath.points) : undefined;
+  const notes: string[] = [];
+  if (areas.length > 0) notes.push(`${areas.length} area candidate${areas.length === 1 ? "" : "s"}`);
+  if (paths.length > 0) notes.push(`${paths.length} path candidate${paths.length === 1 ? "" : "s"}`);
+  if (targetRefs.some((target) => target.kind === "entity")) notes.push("entity target anchors present");
+
+  let kind: BrushShapeInterpretation["kind"] = "empty";
+  if (closed) kind = "closed-shape";
+  else if (areas.length > 0 && paths.length > 1) kind = "mixed";
+  else if (areas.length > 0) kind = "area";
+  else if (paths.length > 0) kind = "path";
+  else if (targetRefs.length > 0) kind = "target-mark";
+
+  return {
+    kind,
+    confidence: shapeConfidence(kind, areas.length, paths.length, targetRefs.length, Boolean(closed)),
+    boundsWorld: bounds,
+    startWorld: longestPath?.start,
+    endWorld: longestPath?.end,
+    centerWorld: bounds ? rectCenter(bounds) : undefined,
+    approximatePolygon: closed,
+    notes,
+  };
+}
+
+function closedStrokePolygon(points: Vec2[]): Vec2[] | undefined {
+  if (points.length < 4) return undefined;
+  const first = points[0];
+  const last = points[points.length - 1];
+  const length = strokeLength(points);
+  if (Math.hypot(first.x - last.x, first.y - last.y) > Math.max(12, length * 0.08)) return undefined;
+  const simplified = simplifyPolyline(points, Math.max(6, length / 80)).slice(0, 24);
+  return simplified.length >= 3 ? simplified : undefined;
+}
+
+function simplifyPolyline(points: Vec2[], minDistance: number): Vec2[] {
+  const simplified: Vec2[] = [];
+  for (const point of points) {
+    const last = simplified[simplified.length - 1];
+    if (!last || Math.hypot(point.x - last.x, point.y - last.y) >= minDistance) simplified.push(point);
+  }
+  const finalPoint = points[points.length - 1];
+  const last = simplified[simplified.length - 1];
+  if (finalPoint && last && (last.x !== finalPoint.x || last.y !== finalPoint.y)) simplified.push(finalPoint);
+  return simplified;
+}
+
+function shapeConfidence(
+  kind: BrushShapeInterpretation["kind"],
+  areaCount: number,
+  pathCount: number,
+  targetCount: number,
+  closed: boolean,
+): number {
+  const base = kind === "empty" ? 0.1 : 0.38;
+  const areaScore = Math.min(areaCount, 2) * 0.16;
+  const pathScore = Math.min(pathCount, 2) * 0.12;
+  const targetScore = targetCount > 0 ? 0.12 : 0;
+  const closedScore = closed ? 0.18 : 0;
+  return roundCoord(clamp(base + areaScore + pathScore + targetScore + closedScore, 0.1, 0.95));
+}
+
+function rectCenter(rect: Rect): Vec2 {
+  return {
+    x: roundCoord(rect.x + rect.w / 2),
+    y: roundCoord(rect.y + rect.h / 2),
+  };
 }
 
 

@@ -231,6 +231,7 @@ export type BrushContext = {
   summary?: string;
   raw?: BrushRawContext;
   compiled?: BrushCompiledContext;
+  visualEvidence?: BrushVisualEvidence;
 };
 
 export type BrushRawContext = {
@@ -249,8 +250,72 @@ export type BrushCompiledContext = {
   areas: BrushAreaContext[];
   paths: BrushPathContext[];
   annotations: BrushAnnotationContext[];
+  shape: BrushShapeInterpretation;
   confidence: number;
   evidence: string[];
+};
+
+export type BrushVisualEvidence = {
+  version: 1;
+  manifestId: string;
+  coordinateSpace: "world";
+  capture: BrushVisualCaptureContext;
+  frames: BrushVisualFrame[];
+  anchors: BrushVisualAnchor[];
+  entities: BrushVisualEntity[];
+  shape: BrushShapeInterpretation;
+  warnings: string[];
+};
+
+export type BrushVisualCaptureContext = {
+  capturedAt: string;
+  snapshotRef?: SnapshotId;
+  viewport?: {
+    worldCenter: Vec2;
+    zoom: number;
+    canvasSize: Vec2;
+    visibleWorldRect: Rect;
+  };
+};
+
+export type BrushVisualFrame = {
+  id: string;
+  role: "overview" | "crop" | "tile";
+  label: string;
+  worldRect: Rect;
+  pixelRect?: Rect;
+  parentFrameId?: string;
+  imageRef?: string;
+  imageMime?: string;
+};
+
+export type BrushVisualAnchor = {
+  id: string;
+  label: string;
+  kind: "start" | "end" | "center" | "corner" | "entity";
+  world: Vec2;
+  pixel?: Vec2;
+  strokeId?: BrushStrokeId;
+  entityId?: EntityId;
+};
+
+export type BrushVisualEntity = {
+  id: EntityId;
+  label: string;
+  displayName: string;
+  boundsWorld: Rect;
+  boundsPixel?: Rect;
+};
+
+export type BrushShapeInterpretation = {
+  kind: "empty" | "target-mark" | "area" | "path" | "closed-shape" | "mixed";
+  confidence: number;
+  boundsWorld?: Rect;
+  startWorld?: Vec2;
+  endWorld?: Vec2;
+  centerWorld?: Vec2;
+  approximatePolygon?: Vec2[];
+  notes: string[];
 };
 
 export type BrushStrokeTargetContext = {

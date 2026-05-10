@@ -1,17 +1,19 @@
 import "./styles.css";
 import type { AiTaskExecutionResult, AiTaskExecutor } from "../ai/taskExecutor";
 import { createTask } from "../project/tasks";
-import { normalizeProjectDefaults, type BrushContext, type Entity, type Project, type ProjectPatch, type Scene } from "../project/schema";
+import { normalizeProjectDefaults, type BrushContext, type BrushVisualEvidence, type BrushVisualFrame, type Entity, type Project, type ProjectPatch, type Scene } from "../project/schema";
 import { consumeEditorHandoff } from "../project/editorHandoff";
 import { ProjectStore } from "../project/projectStore";
 import {
   createBrushContextFromSuperBrushDraft,
+  createBrushVisualEvidence,
   createSuperBrushStroke,
   createTaskFromSuperBrush,
   hasMeaningfulSuperBrushContext,
   mergeSuperBrushTargets,
   rebuildSuperBrushDraftTargets,
   summarizeSuperBrushDraft,
+  type BrushVisualEvidenceInput,
   type SuperBrushDraft,
 } from "./superBrush";
 import { RuntimeWorld } from "../runtime/world";
@@ -1687,7 +1689,11 @@ function queueSuperBrushTaskFromDialog(): void {
     return;
   }
 
-  const result = createTaskFromSuperBrush({ userText, draft });
+  const result = createTaskFromSuperBrush({
+    userText,
+    draft,
+    visualEvidence: buildSuperBrushVisualEvidenceInput(draft),
+  });
   if (!result.ok) {
     superBrushTaskError = result.error;
     superBrushTaskInput.focus();
@@ -1709,6 +1715,81 @@ function queueSuperBrushTaskFromDialog(): void {
   markProjectDirty("超级画笔任务已排");
   notice = "超级画笔任务已排队";
   renderAll();
+}
+
+function buildSuperBrushVisualEvidenceInput(draft: SuperBrushDraft): BrushVisualEvidenceInput {
+  const viewport = renderer.viewportState();
+  const canvas = renderer.canvas();
+  const canvasSize = {
+    x: Math.max(1, canvas.clientWidth || canvas.width || 1),
+    y: Math.max(1, canvas.clientHeight || canvas.height || 1),
+  };
+  const evidence = createBrushVisualEvidence(draft, {
+    viewport: {
+      worldCenter: { x: viewport.x, y: viewport.y },
+      zoom: viewport.zoom,
+      canvasSize,
+    },
+    entities: editableEntities(),
+  });
+  return {
+    capturedAt: evidence.capture.capturedAt,
+    viewport: {
+      worldCenter: { x: viewport.x, y: viewport.y },
+      zoom: viewport.zoom,
+      canvasSize,
+    },
+    entities: editableEntities(),
+    imageRefs: captureBrushEvidenceImageRefs(evidence),
+  };
+}
+
+function captureBrushEvidenceImageRefs(evidence: BrushVisualEvidence): BrushVisualEvidenceInput["imageRefs"] {
+  const refs: NonNullable<BrushVisualEvidenceInput["imageRefs"]> = {};
+  for (const frame of evidence.frames) {
+    const imageRef = captureBrushFrameDataUrl(frame);
+    if (!imageRef) continue;
+    refs[frame.id] = { imageRef, imageMime: "image/jpeg" };
+  }
+  return Object.keys(refs).length > 0 ? refs : undefined;
+}
+
+function captureBrushFrameDataUrl(frame: BrushVisualFrame): string | undefined {
+  const canvas = renderer.canvas();
+  const sourceRect = frame.pixelRect || { x: 0, y: 0, w: canvas.clientWidth || canvas.width, h: canvas.clientHeight || canvas.height };
+  const cssWidth = Math.max(1, canvas.clientWidth || canvas.width || 1);
+  const cssHeight = Math.max(1, canvas.clientHeight || canvas.height || 1);
+  const visibleRect = intersectRects(sourceRect, { x: 0, y: 0, w: cssWidth, h: cssHeight });
+  if (!visibleRect || visibleRect.w < 2 || visibleRect.h < 2) return undefined;
+
+  const scaleX = canvas.width / cssWidth;
+  const scaleY = canvas.height / cssHeight;
+  const sx = Math.max(0, Math.round(visibleRect.x * scaleX));
+  const sy = Math.max(0, Math.round(visibleRect.y * scaleY));
+  const sw = Math.max(1, Math.min(canvas.width - sx, Math.round(visibleRect.w * scaleX)));
+  const sh = Math.max(1, Math.min(canvas.height - sy, Math.round(visibleRect.h * scaleY)));
+  const maxSide = frame.role === "overview" ? 900 : 720;
+  const outputScale = Math.min(1, maxSide / Math.max(sw, sh));
+  const output = document.createElement("canvas");
+  output.width = Math.max(1, Math.round(sw * outputScale));
+  output.height = Math.max(1, Math.round(sh * outputScale));
+  const context = output.getContext("2d");
+  if (!context) return undefined;
+  context.drawImage(canvas, sx, sy, sw, sh, 0, 0, output.width, output.height);
+  try {
+    return output.toDataURL("image/jpeg", 0.82);
+  } catch {
+    return undefined;
+  }
+}
+
+function intersectRects(left: Rect, right: Rect): Rect | undefined {
+  const x = Math.max(left.x, right.x);
+  const y = Math.max(left.y, right.y);
+  const maxX = Math.min(left.x + left.w, right.x + right.w);
+  const maxY = Math.min(left.y + left.h, right.y + right.h);
+  if (maxX <= x || maxY <= y) return undefined;
+  return { x, y, w: maxX - x, h: maxY - y };
 }
 
 function cancelSuperBrushSession(): void {

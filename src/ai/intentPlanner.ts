@@ -17,6 +17,7 @@ import type {
 } from "../project/schema";
 import { cloneJson, err, makeId, ok, type Result } from "../shared/types";
 import type { EntityId, ResourceId } from "../shared/types";
+import type { Vec2 } from "../shared/types";
 import { createVerificationPlan } from "./verificationPlan";
 
 type EntityTarget = Extract<TargetRef, { kind: "entity" }>;
@@ -335,11 +336,15 @@ function applyBrushSpatialEdits(input: {
   const brush = input.brushContext;
   if (!brush) return;
 
+  const shape = brushShape(brush);
   const area = primaryBrushArea(brush);
   const path = primaryBrushPath(brush);
+  if (shape.kind !== "empty") {
+    input.intents.push(`super brush shape: ${shape.kind} confidence ${shape.confidence}`);
+  }
 
   if (area && wantsBrushAreaEntity(input.text)) {
-    const entity = createBrushAreaEntity(input.scene, area.rect, input.text, input.normalizedText);
+    const entity = createBrushAreaEntity(input.scene, brush, area.rect, input.text, input.normalizedText);
     const entityPath = `/scenes/${input.scene.id}/entities/${entity.id}` as const;
     input.patches.push({ op: "set", path: entityPath, value: entity });
     input.inversePatches.push({ op: "delete", path: entityPath });
@@ -394,6 +399,10 @@ function primaryBrushPath(brush: BrushCompiledContext): BrushCompiledContext["pa
   return [...brush.paths].sort((left, right) => right.length - left.length)[0];
 }
 
+function brushShape(brush: BrushCompiledContext): BrushCompiledContext["shape"] {
+  return brush.shape || { kind: "empty", confidence: 0.1, notes: [] };
+}
+
 function brushAreaSourceScore(source: BrushCompiledContext["areas"][number]["source"]): number {
   if (source === "target") return 3;
   if (source === "selectionBox") return 2;
@@ -422,9 +431,10 @@ function wantsBrushAreaEntity(text: string): boolean {
   return createIntent && Boolean(brushAreaEntityKind(text));
 }
 
-function brushAreaEntityKind(text: string): "hazard" | "trigger" | "platform" | undefined {
+function brushAreaEntityKind(text: string): BrushAreaEntityKind | undefined {
   const lower = text.toLowerCase();
   if (hasAny(lower, ["hazard", "danger", "damage zone", "spike", "\u5371\u9669", "\u4f24\u5bb3", "\u523a"])) return "hazard";
+  if (hasAny(lower, ["terrain", "landform", "\u5730\u5f62", "\u5730\u8c8c"])) return "terrain";
   if (hasAny(lower, ["trigger", "sensor", "zone", "\u89e6\u53d1", "\u533a\u57df", "\u611f\u5e94"])) return "trigger";
   if (hasAny(lower, ["platform", "ground", "block", "floor", "\u5e73\u53f0", "\u5730\u9762", "\u65b9\u5757", "\u5899"])) return "platform";
   return undefined;
@@ -450,30 +460,30 @@ function wantsPatrolPath(text: string): boolean {
   return hasAny(lower, ["patrol", "path", "route", "walk between", "\u5de1\u903b", "\u8def\u5f84", "\u8def\u7ebf", "\u6765\u56de\u8d70"]);
 }
 
-function createBrushAreaEntity(scene: Scene, rect: { x: number; y: number; w: number; h: number }, text: string, normalizedText: string): Entity {
+type BrushAreaEntityKind = "hazard" | "trigger" | "platform" | "terrain";
+
+function createBrushAreaEntity(
+  scene: Scene,
+  brush: BrushCompiledContext,
+  rect: { x: number; y: number; w: number; h: number },
+  text: string,
+  normalizedText: string,
+): Entity {
   const kind = brushAreaEntityKind(text) || "trigger";
   const id = makeId<"EntityId">("ent") as EntityId;
   const displayName = brushAreaEntityDisplayName(kind);
-  const solid = kind === "platform";
-  const trigger = kind !== "platform";
-  return {
+  const solid = kind === "platform" || kind === "terrain";
+  const trigger = !solid;
+  const shape = brushShape(brush);
+  const polygon = shape.kind === "closed-shape" ? brushPolygonGeometry(shape.approximatePolygon) : undefined;
+  const baseEntity: Entity = {
     id,
     internalName: `${displayName.toLowerCase().replace(/[^a-z0-9]+/g, "_")}_${id.slice(-6)}`,
     displayName,
     kind: trigger ? "trigger" : "entity",
     persistent: true,
     transform: {
-      position: { x: roundTo(rect.x + rect.w / 2, 4), y: roundTo(rect.y + rect.h / 2, 4) },
-      rotation: 0,
-      scale: { x: 1, y: 1 },
-    },
-    render: {
-      visible: true,
-      color: kind === "hazard" ? "#d06969" : kind === "platform" ? "#71818f" : "#d7c84a",
-      opacity: kind === "platform" ? 1 : 0.45,
-      layerId: scene.layers[0]?.id || "world",
-      size: { x: rect.w, y: rect.h },
-      offset: { x: 0, y: 0 },
+      position: polygon?.center || { x: roundTo(rect.x + rect.w / 2, 4), y: roundTo(rect.y + rect.h / 2, 4) },
       rotation: 0,
       scale: { x: 1, y: 1 },
     },
@@ -484,15 +494,26 @@ function createBrushAreaEntity(scene: Scene, rect: { x: number; y: number; w: nu
       friction: 0.8,
       bounce: 0,
     },
-    collider: {
-      shape: "box",
-      size: { x: rect.w, y: rect.h },
-      offset: { x: 0, y: 0 },
-      rotation: 0,
-      solid,
-      trigger,
-      layerMask: ["world"],
-    },
+    collider: polygon
+      ? {
+          shape: "polygon",
+          size: polygon.size,
+          points: polygon.localPoints,
+          offset: { x: 0, y: 0 },
+          rotation: 0,
+          solid,
+          trigger,
+          layerMask: ["world"],
+        }
+      : {
+          shape: "box",
+          size: { x: rect.w, y: rect.h },
+          offset: { x: 0, y: 0 },
+          rotation: 0,
+          solid,
+          trigger,
+          layerMask: ["world"],
+        },
     behavior: trigger
       ? {
           description: kind === "hazard" ? "Super brush generated hazard trigger." : "Super brush generated trigger zone.",
@@ -501,12 +522,78 @@ function createBrushAreaEntity(scene: Scene, rect: { x: number; y: number; w: nu
         }
       : undefined,
     resources: [],
-    tags: ["super-brush", kind],
+    tags: ["super-brush", kind, ...(polygon ? ["closed-shape"] : [])],
+  };
+  if (polygon) return baseEntity;
+  return {
+    ...baseEntity,
+    render: {
+      visible: true,
+      color: kind === "hazard" ? "#d06969" : kind === "terrain" ? "#6f8f64" : kind === "platform" ? "#71818f" : "#d7c84a",
+      opacity: solid ? 1 : 0.45,
+      layerId: scene.layers[0]?.id || "world",
+      size: { x: rect.w, y: rect.h },
+      offset: { x: 0, y: 0 },
+      rotation: 0,
+      scale: { x: 1, y: 1 },
+    },
   };
 }
 
-function brushAreaEntityDisplayName(kind: "hazard" | "trigger" | "platform"): string {
+function brushPolygonGeometry(points: Vec2[] | undefined): { center: Vec2; size: Vec2; localPoints: Vec2[] } | undefined {
+  const cleaned = simplifyBrushPolygon(points || [], 4);
+  if (cleaned.length < 3) return undefined;
+  const xs = cleaned.map((point) => point.x);
+  const ys = cleaned.map((point) => point.y);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const size = { x: Math.max(4, roundTo(maxX - minX, 4)), y: Math.max(4, roundTo(maxY - minY, 4)) };
+  if (Math.abs(brushPolygonArea(cleaned)) < 12) return undefined;
+  const center = { x: roundTo((minX + maxX) / 2, 4), y: roundTo((minY + maxY) / 2, 4) };
+  return {
+    center,
+    size,
+    localPoints: cleaned.map((point) => ({ x: roundTo(point.x - center.x, 4), y: roundTo(point.y - center.y, 4) })),
+  };
+}
+
+function simplifyBrushPolygon(points: Vec2[], minDistance: number): Vec2[] {
+  const cleaned: Vec2[] = [];
+  for (const point of points) {
+    const last = cleaned[cleaned.length - 1];
+    if (!last || Math.hypot(point.x - last.x, point.y - last.y) >= minDistance) cleaned.push(point);
+  }
+  const first = cleaned[0];
+  const last = cleaned[cleaned.length - 1];
+  if (first && last && cleaned.length > 2 && Math.hypot(first.x - last.x, first.y - last.y) < minDistance) cleaned.pop();
+  return removeNearlyCollinearBrushPoints(cleaned);
+}
+
+function removeNearlyCollinearBrushPoints(points: Vec2[]): Vec2[] {
+  if (points.length <= 3) return points;
+  return points.filter((point, index) => {
+    const previous = points[(index - 1 + points.length) % points.length];
+    const next = points[(index + 1) % points.length];
+    const cross = Math.abs((point.x - previous.x) * (next.y - point.y) - (point.y - previous.y) * (next.x - point.x));
+    return cross > 2;
+  });
+}
+
+function brushPolygonArea(points: Vec2[]): number {
+  let area = 0;
+  for (let index = 0; index < points.length; index += 1) {
+    const current = points[index];
+    const next = points[(index + 1) % points.length];
+    area += current.x * next.y - next.x * current.y;
+  }
+  return area / 2;
+}
+
+function brushAreaEntityDisplayName(kind: BrushAreaEntityKind): string {
   if (kind === "hazard") return "Brush Hazard Zone";
+  if (kind === "terrain") return "Brush Terrain";
   if (kind === "platform") return "Brush Platform";
   return "Brush Trigger Zone";
 }

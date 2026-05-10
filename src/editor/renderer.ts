@@ -138,6 +138,8 @@ export class V2Renderer {
     this.frameTextures.clear();
     this.lastRender = undefined;
     this.destroyPools();
+    const appWithResizeHook = this.app as Application & { _cancelResize?: () => void };
+    if (typeof appWithResizeHook._cancelResize !== "function") appWithResizeHook._cancelResize = () => {};
     this.app.destroy(true);
   }
 

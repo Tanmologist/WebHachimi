@@ -48,6 +48,7 @@ export function renderTaskPanelHtml(model: TaskPanelViewModel): string {
       const taskSummaryText = (task.normalizedText || task.userText).trim();
       const originalText = task.normalizedText && task.normalizedText !== task.userText ? task.userText.trim() : "";
       const brushSummary = task.brushContext?.summary ? `画笔上下文：${task.brushContext.summary}` : "";
+      const visualEvidenceSummary = summarizeBrushVisualEvidence(task);
       const testSummary = summarizeTestRecords(testRecords);
       const metaLine = [
         sourceLabel(task.source),
@@ -62,6 +63,7 @@ export function renderTaskPanelHtml(model: TaskPanelViewModel): string {
           ${originalText ? `<p><small>原始输入：${escapeHtml(originalText)}</small></p>` : ""}
           ${detailParts.length ? `<p><small>${escapeHtml(detailParts.join(" · "))}</small></p>` : ""}
           ${brushSummary ? `<p><small>${escapeHtml(brushSummary)}</small></p>` : ""}
+          ${visualEvidenceSummary ? `<p><small>${escapeHtml(visualEvidenceSummary)}</small></p>` : ""}
           ${testSummary ? `<p><small>${escapeHtml(testSummary)}</small></p>` : ""}
           <footer>
             <span>${escapeHtml(metaLine.join(" · "))}</span>
@@ -101,6 +103,41 @@ function taskSelectedEntityScore(task: Task, selectedEntityIds: ReadonlySet<Enti
 
 function isSelectedEntityTarget(selectedEntityIds: ReadonlySet<EntityId>): (target: TargetRef) => boolean {
   return (target) => target.kind === "entity" && selectedEntityIds.has(target.entityId);
+}
+
+function summarizeBrushVisualEvidence(task: Task): string {
+  const evidence = task.brushContext?.visualEvidence;
+  if (!evidence) return "";
+  const frameCount = evidence.frames.length;
+  const imageCount = evidence.frames.filter((frame) => frame.imageRef).length;
+  const crop = evidence.frames.find((frame) => frame.role === "crop");
+  const shape = evidence.shape;
+  const shapeLabel = brushShapeLabel(shape.kind);
+  const cropText = crop ? `主裁剪 ${Math.round(crop.worldRect.x)},${Math.round(crop.worldRect.y)} ${Math.round(crop.worldRect.w)}x${Math.round(crop.worldRect.h)}` : "";
+  const anchors = evidence.anchors
+    .filter((anchor) => anchor.kind === "start" || anchor.kind === "end")
+    .map((anchor) => `${anchor.label}(${Math.round(anchor.world.x)},${Math.round(anchor.world.y)})`)
+    .join(" ");
+  return [
+    `视觉证据：${shapeLabel}`,
+    `${frameCount} 帧`,
+    imageCount ? `${imageCount} 张截图` : "",
+    cropText,
+    anchors,
+  ].filter(Boolean).join(" · ");
+}
+
+function brushShapeLabel(kind: string): string {
+  return (
+    {
+      empty: "空标注",
+      "target-mark": "目标标注",
+      area: "区域",
+      path: "路径",
+      "closed-shape": "闭合形状",
+      mixed: "复合形状",
+    } satisfies Record<string, string>
+  )[kind] || kind;
 }
 
 function renderSummaryCard(summary: TaskPanelSummary): string {
