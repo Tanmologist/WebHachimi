@@ -251,6 +251,7 @@ const polygonActionsNode = query<HTMLElement>('[data-role="polygon-actions"]');
 const minimizedTrayNode = query<HTMLElement>('[data-role="minimized-tray"]');
 const contextMenuNode = query<HTMLElement>('[data-role="context-menu"]');
 const brushSummaryNode = query<HTMLElement>('[data-role="super-brush-summary"]');
+const brushSummaryTextNode = query<HTMLElement>('[data-role="super-brush-summary-text"]');
 const brushTaskModalNode = query<HTMLElement>('[data-role="super-brush-task-modal"]');
 const brushTaskSummaryNode = query<HTMLElement>('[data-role="super-brush-task-summary"]');
 const brushTaskErrorNode = query<HTMLElement>('[data-role="super-brush-task-error"]');
@@ -261,7 +262,7 @@ const taskWorkflow = createTaskWorkflowController({
   store,
   executeNextAiTask,
   currentTargets,
-  getPendingBrush: () => pendingBrush,
+  getPendingBrush: () => (superBrushTaskDialogOpen ? pendingBrush : undefined),
   setPendingBrush: (draft) => {
     pendingBrush = draft;
   },
@@ -381,8 +382,12 @@ function bindUi(): void {
   root.querySelectorAll('[data-action="queue-task"]').forEach((button) => {
     button.addEventListener("click", () => queueTaskFromComposer(visibleTaskInput));
   });
-  root.querySelector('[data-action="confirm-super-brush"]')?.addEventListener("click", openSuperBrushTaskDialog);
-  root.querySelector('[data-action="back-super-brush"]')?.addEventListener("click", closeSuperBrushTaskDialog);
+  root.querySelectorAll('[data-action="confirm-super-brush"]').forEach((button) => {
+    button.addEventListener("click", openSuperBrushTaskDialog);
+  });
+  root.querySelectorAll('[data-action="back-super-brush"]').forEach((button) => {
+    button.addEventListener("click", closeSuperBrushTaskDialog);
+  });
   root.querySelector('[data-action="queue-super-brush-task"]')?.addEventListener("click", queueSuperBrushTaskFromDialog);
   root.querySelectorAll('[data-action="cancel-super-brush-session"]').forEach((button) => {
     button.addEventListener("click", cancelSuperBrushSession);
@@ -636,8 +641,19 @@ function bindUi(): void {
 function queueTaskFromComposer(visibleTaskInput: HTMLTextAreaElement | null): void {
   const text = (visibleTaskInput?.value || taskInput.value).trim();
   if (visibleTaskInput) taskInput.value = text;
+  const shouldIgnoreUnconfirmedBrush = Boolean(text && pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush) && !superBrushTaskDialogOpen);
+  if (shouldIgnoreUnconfirmedBrush) {
+    pendingBrush = undefined;
+    currentStrokePoints = [];
+    drawingBrush = false;
+    drawingBrushPointerId = undefined;
+    brushStartPoint = undefined;
+    activeTool = "select";
+  }
   taskWorkflow.queueTaskFromText(text);
+  if (shouldIgnoreUnconfirmedBrush) notice = "未确认的超级画笔已忽略；已按普通 AI 任务发送";
   if (visibleTaskInput && !text) visibleTaskInput.focus();
+  renderAll();
 }
 
 function scheduleWindowMenuPanelClick(panel: PanelId): void {
@@ -2366,7 +2382,9 @@ function renderUi(projectSnapshot?: Project): void {
   taskInput.placeholder = pendingBrush
     ? "描述这些画笔标记要让 AI 改什么"
     : "写给 AI 的任务";
-  brushSummaryNode.textContent = brushSummary;
+  brushSummaryNode.hidden = !isSuperBrushModeActive() || superBrushTaskDialogOpen;
+  brushSummaryNode.setAttribute("aria-hidden", String(brushSummaryNode.hidden));
+  brushSummaryTextNode.textContent = brushSummary;
   confirmBrushButtons.forEach((button) => {
     button.disabled = !canConfirmBrush;
   });
@@ -2374,6 +2392,8 @@ function renderUi(projectSnapshot?: Project): void {
   brushTaskModalNode.setAttribute("aria-hidden", String(!superBrushTaskDialogOpen));
   brushTaskSummaryNode.textContent = brushSummary;
   brushTaskErrorNode.textContent = superBrushTaskError;
+  brushTaskErrorNode.hidden = !superBrushTaskError;
+  brushTaskErrorNode.setAttribute("aria-hidden", String(!superBrushTaskError));
   root.dataset.scenePanel = panelLayout.panelState.scene;
   root.dataset.propertiesPanel = panelLayout.panelState.properties;
   root.dataset.assetsPanel = panelLayout.panelState.assets;

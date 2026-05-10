@@ -387,16 +387,39 @@ export function mountEditorShell(root: HTMLElement): void {
     </div>
 
     <textarea data-role="task-input" hidden></textarea>
-    <textarea data-role="super-brush-task-input" hidden></textarea>
     <input data-role="resource-file-input" type="file" multiple hidden />
     <div data-role="context-menu" hidden></div>
     <div data-role="window-menu" hidden></div>
     <div data-role="polygon-actions" hidden></div>
     <div data-role="minimized-tray" hidden></div>
-    <div data-role="super-brush-summary" hidden></div>
-    <section data-role="super-brush-task-modal" hidden>
-      <div data-role="super-brush-task-summary" hidden></div>
-      <div data-role="super-brush-task-error" hidden></div>
+    <div class="super-brush-confirm" data-role="super-brush-summary" hidden>
+      <div>
+        <strong>超级画笔待确认</strong>
+        <span data-role="super-brush-summary-text"></span>
+      </div>
+      <div class="super-brush-confirm__actions">
+        <button class="is-secondary" type="button" data-action="cancel-super-brush-session">丢弃标记</button>
+        <button class="is-primary" type="button" data-action="confirm-super-brush">确认并写 AI 任务</button>
+      </div>
+    </div>
+    <section class="super-brush-task-modal" data-role="super-brush-task-modal" role="dialog" aria-modal="true" aria-labelledby="super-brush-task-title" hidden>
+      <div class="super-brush-task-card">
+        <header>
+          <div>
+            <b id="super-brush-task-title">确认超级画笔任务</b>
+            <small>画笔只是标注。写清楚要 AI 做什么以后，才会插队成为任务。</small>
+          </div>
+          <button type="button" data-action="back-super-brush" aria-label="返回继续画">×</button>
+        </header>
+        <div class="super-brush-task-summary" data-role="super-brush-task-summary"></div>
+        <textarea data-role="super-brush-task-input" placeholder="例如：把我圈出来的闭合区域生成一块可站立地形"></textarea>
+        <div class="super-brush-task-error" data-role="super-brush-task-error" hidden></div>
+        <footer>
+          <button class="is-secondary" type="button" data-action="back-super-brush">返回继续画</button>
+          <button class="is-secondary" type="button" data-action="cancel-super-brush-session">丢弃这次画笔</button>
+          <button class="is-primary" type="button" data-action="queue-super-brush-task">插队 AI 任务</button>
+        </footer>
+      </div>
     </section>
   `;
   bindWorkbenchPreview(root);
