@@ -1,4 +1,4 @@
-import type { Resource, ResourceAttachment, SpriteResourceMetadata } from "../project/schema";
+import type { Resource, ResourceAttachment, ResourceEffectMetadata, ResourceEffectPresetId, SpriteResourceMetadata } from "../project/schema";
 
 export type ResourceFrameRect = {
   x: number;
@@ -21,7 +21,27 @@ export type TextureSize = {
   height: number;
 };
 
+export type ResourceEffectFrame = {
+  alphaMultiplier: number;
+  scaleMultiplier: number;
+  tint?: number;
+};
+
+export type ResourceEffectPresetOption = {
+  id: ResourceEffectPresetId | "none";
+  label: string;
+  summary: string;
+};
+
 export type VisualResource = Resource & { type: "image" | "sprite" | "animation" };
+
+export const resourceEffectPresetOptions = [
+  { id: "none", label: "无", summary: "保持原始资源" },
+  { id: "deathFade", label: "死亡淡出", summary: "1.2 秒淡出并停在透明态" },
+  { id: "hitFlash", label: "受击闪白", summary: "短促闪烁，适合受击反馈" },
+  { id: "impactPulse", label: "冲击脉冲", summary: "快速放大回弹，适合命中特效" },
+  { id: "ambientLoop", label: "呼吸循环", summary: "轻微循环脉冲，适合待机光效" },
+] as const satisfies readonly ResourceEffectPresetOption[];
 
 export function isVisualResource(resource: Resource | undefined): resource is VisualResource {
   return Boolean(resource && (resource.type === "image" || resource.type === "sprite" || resource.type === "animation"));
@@ -38,6 +58,86 @@ export function imageAttachments(resource: Resource | undefined): ResourceAttach
 export function resourceHasAnimation(resource: Resource | undefined): boolean {
   if (!resource?.sprite) return false;
   return resourceFrameCount(resource) > 1;
+}
+
+export function resourceHasTimelineEffect(resource: Resource | undefined): boolean {
+  return Boolean(resource?.effect);
+}
+
+export function buildResourceEffectPreset(preset: ResourceEffectPresetId | "none"): ResourceEffectMetadata | undefined {
+  if (preset === "none") return undefined;
+  if (preset === "deathFade") {
+    return {
+      preset,
+      durationMs: 1200,
+      fadeOut: true,
+      loop: false,
+    };
+  }
+  if (preset === "hitFlash") {
+    return {
+      preset,
+      durationMs: 320,
+      blink: true,
+      tint: "#ffffff",
+      loop: false,
+    };
+  }
+  if (preset === "impactPulse") {
+    return {
+      preset,
+      durationMs: 420,
+      pulseScale: 0.18,
+      tint: "#fff1a8",
+      loop: false,
+    };
+  }
+  return {
+    preset,
+    durationMs: 1600,
+    pulseScale: 0.06,
+    tint: "#c9f6ff",
+    loop: true,
+  };
+}
+
+export function resourceEffectPresetLabel(resource: Resource | undefined): string {
+  const id = resource?.effect?.preset || "none";
+  return resourceEffectPresetOptions.find((option) => option.id === id)?.label || "无";
+}
+
+export function resourceEffectFrameAtTime(
+  resource: Resource,
+  timeMs: number,
+  options: { previewLoop?: boolean } = {},
+): ResourceEffectFrame {
+  const effect = resource.effect;
+  if (!effect) return defaultEffectFrame();
+  const duration = Math.max(60, effect.durationMs || 1000);
+  const elapsed = Math.max(0, timeMs);
+  const shouldLoop = effect.loop === true || options.previewLoop === true;
+  const finished = !shouldLoop && elapsed >= duration;
+  const localTime = shouldLoop ? elapsed % duration : Math.min(elapsed, duration);
+  const t = clamp01(localTime / duration);
+  const tint = effect.tint ? parseHexColor(effect.tint) : undefined;
+
+  if (finished && !effect.fadeOut) return defaultEffectFrame();
+
+  let alphaMultiplier = 1;
+  if (effect.fadeOut) alphaMultiplier *= 1 - smoothStep(t);
+  if (effect.blink && !finished) alphaMultiplier *= 0.58 + Math.abs(Math.sin(t * Math.PI * 6)) * 0.42;
+
+  let scaleMultiplier = 1;
+  if (effect.pulseScale && !finished) {
+    const wave = effect.loop ? 0.5 + Math.sin(t * Math.PI * 2) * 0.5 : Math.sin(t * Math.PI);
+    scaleMultiplier += Math.max(0, wave) * effect.pulseScale;
+  }
+
+  return {
+    alphaMultiplier: clamp(alphaMultiplier, 0, 1.2),
+    scaleMultiplier: clamp(scaleMultiplier, 0.2, 2),
+    tint: finished ? undefined : tint,
+  };
 }
 
 export function resourceFrameCount(resource: Resource | undefined): number {
@@ -185,4 +285,26 @@ function optionalPositiveInt(value: number | undefined): number | undefined {
 
 function positiveNumber(value: number | undefined): number | undefined {
   return Number.isFinite(value) && value && value > 0 ? value : undefined;
+}
+
+function defaultEffectFrame(): ResourceEffectFrame {
+  return { alphaMultiplier: 1, scaleMultiplier: 1 };
+}
+
+function smoothStep(value: number): number {
+  const t = clamp01(value);
+  return t * t * (3 - 2 * t);
+}
+
+function clamp01(value: number): number {
+  return clamp(value, 0, 1);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function parseHexColor(value: string): number | undefined {
+  if (!/^#[0-9a-fA-F]{6}$/.test(value)) return undefined;
+  return Number.parseInt(value.slice(1), 16);
 }

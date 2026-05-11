@@ -1,12 +1,17 @@
 import type { Resource } from "../project/schema";
 import type { ResourceId } from "../shared/types";
 import {
+  buildResourceEffectPreset,
   buildSequenceSpriteMetadata,
   buildSheetSpriteMetadata,
   resourceAnimationLabel,
+  resourceEffectFrameAtTime,
+  resourceEffectPresetLabel,
   resourceFrameAtTime,
   resourceFrameCount,
+  resourceHasTimelineEffect,
 } from "../editor/resourceAnimation";
+import { renderResourceLibraryHtml } from "../editor/panelViews";
 
 run("sheet animation selects equal grid frames without mutating the source image", () => {
   const resource = makeResource("sheet", "sheet.png");
@@ -32,6 +37,32 @@ run("sequence animation chooses ordered attachments and clamps non-looping playb
   assert(late?.attachment.fileName === "walk_003.png", `expected clamped final frame, got ${late?.attachment.fileName}`);
   assert(resourceFrameCount(resource) === 3, "expected 3 sequence frames");
   assert(resourceAnimationLabel(resource).includes("PNG sequence"), "expected sequence label");
+});
+
+run("effect presets produce timeline multipliers and labels", () => {
+  const resource = makeResource("effect", "flash.png");
+  resource.effect = buildResourceEffectPreset("deathFade");
+
+  assert(resourceHasTimelineEffect(resource), "expected resource to report a timeline effect");
+  assert(resourceEffectPresetLabel(resource) === "死亡淡出", `expected death fade label, got ${resourceEffectPresetLabel(resource)}`);
+
+  const start = resourceEffectFrameAtTime(resource, 0);
+  const end = resourceEffectFrameAtTime(resource, 1200);
+  assert(start.alphaMultiplier === 1, `expected full alpha at start, got ${start.alphaMultiplier}`);
+  assert(end.alphaMultiplier === 0, `expected transparent alpha at the end, got ${end.alphaMultiplier}`);
+
+  resource.effect = buildResourceEffectPreset("impactPulse");
+  const pulse = resourceEffectFrameAtTime(resource, 210);
+  assert(pulse.scaleMultiplier > 1, `expected impact pulse to scale up, got ${pulse.scaleMultiplier}`);
+  assert(typeof pulse.tint === "number", "expected impact pulse tint");
+});
+
+run("resource library exposes effect preset buttons", () => {
+  const resource = makeResource("library-effect", "effect.png");
+  const html = renderResourceLibraryHtml({ [resource.id]: resource });
+  assert(html.includes("特效预设"), "expected resource library to render effect preset controls");
+  assert(html.includes('data-effect-preset="deathFade"'), "expected death fade preset button");
+  assert(html.includes('data-effect-preset="impactPulse"'), "expected impact pulse preset button");
 });
 
 console.log(JSON.stringify({ status: "passed" }, null, 2));

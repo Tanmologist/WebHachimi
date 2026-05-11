@@ -181,6 +181,7 @@ export type Resource = {
   tags: string[];
   attachments: ResourceAttachment[];
   sprite?: SpriteResourceMetadata;
+  effect?: ResourceEffectMetadata;
 };
 
 export type ResourceAttachment = {
@@ -203,6 +204,18 @@ export type SpriteResourceMetadata = {
   loop?: boolean;
   margin?: number;
   spacing?: number;
+};
+
+export type ResourceEffectPresetId = "deathFade" | "hitFlash" | "impactPulse" | "ambientLoop";
+
+export type ResourceEffectMetadata = {
+  preset: ResourceEffectPresetId;
+  durationMs?: number;
+  fadeOut?: boolean;
+  blink?: boolean;
+  pulseScale?: number;
+  tint?: string;
+  loop?: boolean;
 };
 
 export type ResourceBinding = {
@@ -658,6 +671,7 @@ export function normalizeProjectDefaults(project: Project): Project {
 export function normalizeResourceDefaults(resource: Resource): Resource {
   resource.tags ||= [];
   resource.attachments ||= [];
+  if (resource.effect) normalizeResourceEffectDefaults(resource);
   if (!resource.sprite) return resource;
   if (resource.sprite.mode !== "sheet" && resource.sprite.mode !== "sequence") {
     delete resource.sprite;
@@ -673,6 +687,17 @@ export function normalizeResourceDefaults(resource: Resource): Resource {
   if (resource.sprite.margin !== undefined) resource.sprite.margin = Math.max(0, Math.floor(resource.sprite.margin));
   if (resource.sprite.spacing !== undefined) resource.sprite.spacing = Math.max(0, Math.floor(resource.sprite.spacing));
   return resource;
+}
+
+function normalizeResourceEffectDefaults(resource: Resource): void {
+  if (!resource.effect) return;
+  if (!["deathFade", "hitFlash", "impactPulse", "ambientLoop"].includes(resource.effect.preset)) {
+    delete resource.effect;
+    return;
+  }
+  if (resource.effect.durationMs !== undefined) resource.effect.durationMs = Math.max(60, Math.floor(resource.effect.durationMs));
+  if (resource.effect.pulseScale !== undefined) resource.effect.pulseScale = Math.max(0, Math.min(1, Number(resource.effect.pulseScale) || 0));
+  if (resource.effect.tint && !/^#[0-9a-fA-F]{6}$/.test(resource.effect.tint)) delete resource.effect.tint;
 }
 
 export function normalizeSceneSettings(settings: SceneSettings): SceneSettings {

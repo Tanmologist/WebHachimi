@@ -1003,11 +1003,13 @@ export class RuntimeWorld {
     const frame = this.clock.frame;
     for (const entity of this.allEntities()) {
       if (!entity.render) continue;
-      const slot = frame <= (entity.runtime?.parryAnimationUntilFrame ?? -1)
-        ? "parry"
-        : this.isAttackAnimating(entity, frame)
-          ? "attack"
-          : "current";
+      const slot = entity.runtime?.defeated
+        ? "death"
+        : frame <= (entity.runtime?.parryAnimationUntilFrame ?? -1)
+          ? "parry"
+          : this.isAttackAnimating(entity, frame)
+            ? "attack"
+            : "current";
       this.applyPresentationSlot(entity, slot);
     }
   }

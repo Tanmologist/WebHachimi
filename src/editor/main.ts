@@ -69,7 +69,17 @@ import {
   resourceTagsForType,
   sequenceGroupKeyFromFileName,
 } from "./resourceImport";
-import { buildSequenceSpriteMetadata, buildSheetSpriteMetadata, imageAttachments, resourceHasAnimation } from "./resourceAnimation";
+import {
+  buildResourceEffectPreset,
+  buildSequenceSpriteMetadata,
+  buildSheetSpriteMetadata,
+  imageAttachments,
+  resourceEffectPresetLabel,
+  resourceEffectPresetOptions,
+  resourceHasAnimation,
+  resourceHasTimelineEffect,
+  type ResourceEffectPresetOption,
+} from "./resourceAnimation";
 import { AutoSaveController } from "./autoSaveController";
 import { EditorTransactionController } from "./editorTransactionController";
 import { EditorPerformanceController } from "./editorPerformanceController";
@@ -82,6 +92,7 @@ type ToolId = (typeof toolIds)[number];
 type ShapeToolId = Extract<ToolId, "square" | "circle" | "leaf">;
 type ActiveSurface = "canvas" | "world";
 type GameplayMouseInputKey = Extract<PlayerInputKey, "attack" | "parry">;
+type ResourceEffectPresetSelection = ResourceEffectPresetOption["id"];
 type ContextMenuAction =
   | "select-target"
   | "rename-entity"
@@ -2197,6 +2208,13 @@ function onKeyDown(event: KeyboardEvent): void {
     renderer.canvas().style.cursor = "grab";
     return;
   }
+  if (event.key.toLowerCase() === "f" && !event.ctrlKey && !event.metaKey && !event.altKey && world.mode !== "game" && !isTypingTarget(event.target)) {
+    event.preventDefault();
+    const selected = selectedId || selectedIds[0];
+    if (selected) focusEntityOnCanvas(selected, selectedPart);
+    else fitWorldToCanvas("manual");
+    return;
+  }
   if (event.key === "Escape" && isSuperBrushModeActive()) {
     event.preventDefault();
     if (superBrushTaskDialogOpen) closeSuperBrushTaskDialog();
@@ -3048,6 +3066,13 @@ function bindResourceInteractions(resourcesNode: HTMLElement): void {
       if (resourceId) clearResourceAnimation(resourceId);
     });
   });
+  resourcesNode.querySelectorAll<HTMLButtonElement>('[data-action="apply-resource-effect-preset"]').forEach((button) => {
+    button.addEventListener("click", () => {
+      const resourceId = button.dataset.resourceId as ResourceId | undefined;
+      const preset = parseResourceEffectPreset(button.dataset.effectPreset);
+      if (resourceId && preset) applyResourceEffectPreset(resourceId, preset);
+    });
+  });
 }
 
 function onTaskInputPaste(event: ClipboardEvent): void {
@@ -3468,6 +3493,38 @@ function clearResourceAnimation(resourceId: ResourceId): void {
   applyResourceUpdate(resource, nextResource, `清除资源动画${resource.displayName}`, `已把 ${resource.displayName} 改回静态资源。`);
 }
 
+function applyResourceEffectPreset(resourceId: ResourceId, preset: ResourceEffectPresetSelection): void {
+  const projectSnapshot = store.peekProject();
+  const resource = projectSnapshot.resources[resourceId];
+  if (!resource) {
+    notice = "特效预设目标资源已经不存在";
+    renderAll();
+    return;
+  }
+  if (!isVisualResourceType(resource.type)) {
+    notice = "只有图片、精灵或动画资源可以应用特效预设";
+    renderAll();
+    return;
+  }
+  const nextResource = cloneJson(resource);
+  const effect = buildResourceEffectPreset(preset);
+  if (effect) {
+    nextResource.effect = effect;
+  } else {
+    delete nextResource.effect;
+  }
+  nextResource.tags = uniqueStrings([
+    ...nextResource.tags.filter((tag) => !tag.startsWith("特效:")),
+    effect ? `特效:${resourceEffectPresetLabel(nextResource)}` : "",
+  ]);
+  applyResourceUpdate(
+    resource,
+    nextResource,
+    `应用资源特效${resource.displayName}`,
+    `已把 ${resource.displayName} 的特效预设切到 ${resourceEffectPresetLabel(nextResource)}。`,
+  );
+}
+
 function applyResourceUpdate(previousResource: Resource, nextResource: Resource, diffSummary: string, successNotice: string): void {
   const resourcePath = `/resources/${previousResource.id}` as ProjectPatch["path"];
   const applyResult = editorTransactions.apply({
@@ -3502,6 +3559,10 @@ function optionalNumericInputValue(row: HTMLElement, name: string): number | und
 function checkboxInputValue(row: HTMLElement, name: string, fallback: boolean): boolean {
   const input = row.querySelector<HTMLInputElement>(`[data-resource-animation-${name}]`);
   return input ? input.checked : fallback;
+}
+
+function parseResourceEffectPreset(value: string | undefined): ResourceEffectPresetSelection | undefined {
+  return resourceEffectPresetOptions.find((option) => option.id === value)?.id;
 }
 
 function resourceTaskTargets(resourceId: ResourceId): TargetRef[] {
@@ -3582,7 +3643,7 @@ function sceneHasVisibleAnimatedResource(projectSnapshot: Project): boolean {
       entity.render.resourceId ||
       entity.resources.find((binding) => binding.slot === (entity.render?.slot || "current"))?.resourceId;
     const resource = resourceId ? projectSnapshot.resources[resourceId] : undefined;
-    if (resource && resourceHasAnimation(resource)) return true;
+    if (resource && (resourceHasAnimation(resource) || resourceHasTimelineEffect(resource))) return true;
   }
   return false;
 }
@@ -4083,7 +4144,9 @@ function updateCanvasCursor(point: Vec2): void {
   }
   canvas.style.cursor = renderer.pickCanvasTarget(world, point, selectedId ? { entityId: selectedId, part: selectedPart } : undefined)
     ? "pointer"
-    : "default";
+    : world.mode === "editorFrozen"
+      ? "grab"
+      : "default";
 }
 
 function query<T extends HTMLElement>(selector: string): T {

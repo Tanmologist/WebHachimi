@@ -4,7 +4,7 @@ import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
 import { entityHasVisiblePresentation, isAttackTouchEntity, isGameplayDebugEntity } from "../project/entityVisibility";
-import { isVisualResource, resourceFrameAtTime, type ResourceFrameRect } from "./resourceAnimation";
+import { isVisualResource, resourceEffectFrameAtTime, resourceFrameAtTime, type ResourceFrameRect } from "./resourceAnimation";
 import {
   centerViewportOnWorldPoint,
   clampViewportZoom,
@@ -412,6 +412,7 @@ export class V2Renderer {
       this.drawBody(entity, selectedPart === "body", showBodyMaterial);
     }
     this.drawPresentation(
+      world,
       entity,
       selectedPart === "presentation",
       showEditorDecorations,
@@ -434,6 +435,7 @@ export class V2Renderer {
   }
 
   private drawPresentation(
+    world: RuntimeWorld,
     entity: Entity,
     selected: boolean,
     showEditorDecorations: boolean,
@@ -443,7 +445,7 @@ export class V2Renderer {
     if (!entity.render || entity.render.visible === false) return;
     const resource = presentationResource(entity, resources);
     if (resource) {
-      this.drawPresentationImage(entity, selected, showEditorDecorations, resource, animationTimeMs);
+      this.drawPresentationImage(world, entity, selected, showEditorDecorations, resource, animationTimeMs);
       return;
     }
     const attackTouch = isAttackTouchEntity(entity);
@@ -467,6 +469,7 @@ export class V2Renderer {
   }
 
   private drawPresentationImage(
+    world: RuntimeWorld,
     entity: Entity,
     selected: boolean,
     showEditorDecorations: boolean,
@@ -493,12 +496,16 @@ export class V2Renderer {
     const drawTexture = this.textureForFrame(texture, imagePath, frame?.rect);
     const sprite = this.takeSprite(drawTexture);
     const drawSize = containedImageSize(drawTexture, geometry);
+    const effectFrame = resourceEffectActiveInContext(resource, entity, world, showEditorDecorations)
+      ? resourceEffectFrameAtTime(resource, resourceEffectTimeMs(resource, entity, world, animationTimeMs), { previewLoop: showEditorDecorations })
+      : { alphaMultiplier: 1, scaleMultiplier: 1 };
     sprite.anchor.set(0.5, 0.5);
     sprite.position.set(geometry.center.x, geometry.center.y);
     sprite.rotation = geometry.rotation;
-    sprite.width = drawSize.width;
-    sprite.height = drawSize.height;
-    sprite.alpha = entity.render?.opacity ?? 1;
+    sprite.width = drawSize.width * effectFrame.scaleMultiplier;
+    sprite.height = drawSize.height * effectFrame.scaleMultiplier;
+    sprite.alpha = (entity.render?.opacity ?? 1) * effectFrame.alphaMultiplier;
+    if (effectFrame.tint !== undefined) sprite.tint = effectFrame.tint;
     this.worldLayer.addChild(sprite);
 
     if (!showEditorDecorations && !selected) return;
@@ -1263,6 +1270,35 @@ function presentationAnimationTimeMs(entity: Entity, world: RuntimeWorld, fallba
   return fallbackTimeMs;
 }
 
+function resourceEffectActiveInContext(resource: Resource, entity: Entity, world: RuntimeWorld, showEditorDecorations: boolean): boolean {
+  if (!resource.effect) return false;
+  if (showEditorDecorations || resource.effect.loop) return true;
+  if (resource.effect.preset === "deathFade") return entity.runtime?.defeated === true && typeof entity.runtime.defeatFrame === "number";
+  if (resource.effect.preset === "hitFlash") return typeof entity.runtime?.hitFlashUntilFrame === "number" && world.clock.frame <= entity.runtime.hitFlashUntilFrame;
+  if (resource.effect.preset === "impactPulse") {
+    const start = entity.runtime?.attackStartFrame;
+    const activeUntil = entity.runtime?.attackActiveUntilFrame;
+    return typeof start === "number" && world.clock.frame >= start && world.clock.frame <= (activeUntil ?? start);
+  }
+  return true;
+}
+
+function resourceEffectTimeMs(resource: Resource, entity: Entity, world: RuntimeWorld, fallbackTimeMs: number): number {
+  if (!resource.effect) return fallbackTimeMs;
+  if (resource.effect.preset === "deathFade" && typeof entity.runtime?.defeatFrame === "number") {
+    return Math.max(0, (world.clock.frame - entity.runtime.defeatFrame) * world.clock.fixedStepMs);
+  }
+  if (resource.effect.preset === "hitFlash" && typeof entity.runtime?.hitFlashUntilFrame === "number") {
+    const duration = Math.max(60, resource.effect.durationMs || 320);
+    const remaining = Math.max(0, entity.runtime.hitFlashUntilFrame - world.clock.frame) * world.clock.fixedStepMs;
+    return Math.max(0, duration - remaining);
+  }
+  if (resource.effect.preset === "impactPulse" && typeof entity.runtime?.attackStartFrame === "number") {
+    return Math.max(0, (world.clock.frame - entity.runtime.attackStartFrame) * world.clock.fixedStepMs);
+  }
+  return fallbackTimeMs;
+}
+
 function containedImageSize(texture: Texture, box: { width: number; height: number }): { width: number; height: number } {
   const sourceWidth = texture.width || box.width;
   const sourceHeight = texture.height || box.height;
@@ -1400,6 +1436,7 @@ function resetDisplayObject(item: Graphics | Sprite): void {
   item.rotation = 0;
   item.alpha = 1;
   item.visible = true;
+  if (item instanceof Sprite) item.tint = 0xffffff;
 }
 
 function parseColor(value: string): number {

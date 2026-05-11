@@ -2,7 +2,7 @@ import type { Entity, Resource, ResourceBinding } from "../project/schema";
 import type { RuntimeWorld } from "../runtime/world";
 import { bodyModeLabel, escapeHtml, formatScale, typeLabel } from "./viewText";
 import type { CanvasTargetPart } from "./renderer";
-import { imageAttachments, isVisualResource, resourceAnimationLabel } from "./resourceAnimation";
+import { imageAttachments, isVisualResource, resourceAnimationLabel, resourceEffectPresetLabel, resourceEffectPresetOptions } from "./resourceAnimation";
 
 export function renderTreeItemHtml(
   entity: ReturnType<RuntimeWorld["allEntities"]>[number],
@@ -281,8 +281,9 @@ function renderResourceBindingRow(binding: ResourceBinding, resource: Resource |
       <p>${escapeHtml(binding.aiDescription || binding.description || resource?.aiDescription || resource?.description || "暂无描述")}</p>
       <input data-resource-description="${escapeHtml(resourceId)}" type="text" value="${escapeHtml(description)}" placeholder="用一个词或一句话描述这个资源" />
       ${renderResourceAnimationControls(resource)}
+      ${renderResourceEffectPresetControls(resource)}
       <footer>
-        <small>${escapeHtml(label)} · ${escapeHtml(binding.slot || "current")}${resource ? ` · ${escapeHtml(resourceKindLabel(resource.type))} · ${escapeHtml(resourceAnimationLabel(resource))}` : ""}</small>
+        <small>${escapeHtml(label)} · ${escapeHtml(binding.slot || "current")}${resource ? ` · ${escapeHtml(resourceKindLabel(resource.type))} · ${escapeHtml(resourceAnimationLabel(resource))} · ${escapeHtml(resourceEffectPresetLabel(resource))}` : ""}</small>
         <button data-action="save-resource-description" data-resource-id="${escapeHtml(resourceId)}" type="button">保存</button>
       </footer>
     </article>
@@ -300,8 +301,9 @@ function renderLibraryResourceRow(resource: Resource): string {
       <p>${escapeHtml(resource.aiDescription || resource.description || "暂无描述")}</p>
       <input data-resource-description="${escapeHtml(resource.id)}" type="text" value="${escapeHtml(resource.description || "")}" placeholder="用一个词或一句话描述这个资源" />
       ${renderResourceAnimationControls(resource)}
+      ${renderResourceEffectPresetControls(resource)}
       <footer>
-        <small>${escapeHtml(resourceKindLabel(resource.type))} · ${escapeHtml(resourceAnimationLabel(resource))}${resource.tags.includes("待AI处理") ? " · 待AI处理" : ""}</small>
+        <small>${escapeHtml(resourceKindLabel(resource.type))} · ${escapeHtml(resourceAnimationLabel(resource))} · ${escapeHtml(resourceEffectPresetLabel(resource))}${resource.tags.includes("待AI处理") ? " · 待AI处理" : ""}</small>
         <button data-action="save-resource-description" data-resource-id="${escapeHtml(resource.id)}" type="button">保存</button>
       </footer>
     </article>
@@ -371,6 +373,38 @@ function renderResourceAnimationControls(resource: Resource | undefined): string
       <div class="v2-resource-animation-actions">
         <button data-action="save-resource-animation" data-resource-id="${escapeHtml(resource.id)}" type="button">应用切帧</button>
         <button data-action="clear-resource-animation" data-resource-id="${escapeHtml(resource.id)}" type="button">静态</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderResourceEffectPresetControls(resource: Resource | undefined): string {
+  if (!isVisualResource(resource)) return "";
+  const activePreset = resource.effect?.preset || "none";
+  return `
+    <section class="v2-resource-effect-presets" aria-label="特效预设">
+      <header>
+        <span>特效预设</span>
+        <small>${escapeHtml(resourceEffectPresetLabel(resource))}</small>
+      </header>
+      <div class="v2-effect-preset-grid">
+        ${resourceEffectPresetOptions
+          .map(
+            (preset) => `
+              <button
+                class="${preset.id === activePreset ? "is-active" : ""}"
+                data-action="apply-resource-effect-preset"
+                data-resource-id="${escapeHtml(resource.id)}"
+                data-effect-preset="${escapeHtml(preset.id)}"
+                type="button"
+                title="${escapeHtml(preset.summary)}"
+              >
+                <span>${escapeHtml(preset.label)}</span>
+                <small>${escapeHtml(preset.summary)}</small>
+              </button>
+            `,
+          )
+          .join("")}
       </div>
     </section>
   `;
