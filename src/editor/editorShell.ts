@@ -4,6 +4,7 @@ type PreviewDockTarget = "left" | "right" | "bottom" | "center" | "float";
 type PreviewWindowId = string;
 type PreviewSplitSide = "left" | "right" | "top" | "bottom";
 type PreviewWindowState = "open" | "minimized" | "closed";
+export type PreviewWorkspacePreset = "edit" | "focus" | "ai" | "debug";
 type PreviewResizeEdge = "n" | "e" | "s" | "w" | "ne" | "nw" | "se" | "sw";
 
 type PreviewDropTarget =
@@ -34,11 +35,23 @@ type ResizeState = {
   panelHeight: number;
 };
 
-type PreviewWindowRect = {
+export type PreviewWindowRect = {
   left: number;
   top: number;
   width: number;
   height: number;
+};
+
+export type PreviewWorkspacePresetViewport = {
+  width: number;
+  height: number;
+};
+
+export type PreviewWorkspacePresetPlanEntry = {
+  id: PreviewWindowId;
+  state: PreviewWindowState;
+  dock?: string;
+  rect?: PreviewWindowRect;
 };
 
 type PreviewWindowSnapshot = {
@@ -90,6 +103,7 @@ const LEGACY_PREVIEW_LAYOUT_STORAGE_KEYS = [
 ];
 const PREVIEW_MIN_WINDOW_WIDTH = 220;
 const PREVIEW_MIN_WINDOW_HEIGHT = 150;
+const previewWorkspacePresets = ["edit", "focus", "ai", "debug"] as const satisfies readonly PreviewWorkspacePreset[];
 
 export function mountEditorShell(root: HTMLElement): void {
   root.hidden = false;
@@ -368,9 +382,17 @@ export function mountEditorShell(root: HTMLElement): void {
             <header>所有窗口</header>
             <div class="window-launcher-list" data-window-launcher-list></div>
             <footer>
-              <button type="button" data-window-add>添加窗口</button>
-              <button type="button" data-window-open-all>打开全部</button>
-              <button type="button" data-window-reset-layout>重置布局</button>
+              <div class="window-layout-presets" aria-label="工作区预设">
+                <button type="button" data-window-preset="edit">编辑</button>
+                <button type="button" data-window-preset="focus">专注</button>
+                <button type="button" data-window-preset="ai">AI</button>
+                <button type="button" data-window-preset="debug">调试</button>
+              </div>
+              <div class="window-launcher-actions">
+                <button type="button" data-window-add>添加窗口</button>
+                <button type="button" data-window-open-all>打开全部</button>
+                <button type="button" data-window-reset-layout>重置布局</button>
+              </div>
             </footer>
           </div>
         </div>
@@ -463,6 +485,7 @@ function bindWorkbenchPreview(root: HTMLElement): void {
   bindPreviewFragmentButtons(controller);
   if (hasStoredLayout) applyStoredPreviewLayout(controller);
   renderWindowManager(controller);
+  syncWorkspacePresetButtons(controller);
 
   root.querySelectorAll<HTMLButtonElement>("[data-window-launcher]").forEach((button) => {
     button.addEventListener("click", (event) => {
@@ -494,6 +517,15 @@ function bindWorkbenchPreview(root: HTMLElement): void {
   root.querySelector<HTMLButtonElement>("[data-window-reset-layout]")?.addEventListener("click", () => {
     resetPreviewLayout(controller);
     closeLauncher(controller);
+  });
+
+  root.querySelectorAll<HTMLButtonElement>("[data-window-preset]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const preset = button.dataset.windowPreset || "";
+      if (!isPreviewWorkspacePreset(preset)) return;
+      applyPreviewWorkspacePreset(controller, preset);
+      closeLauncher(controller);
+    });
   });
 
   document.addEventListener("pointerdown", (event) => {
@@ -761,6 +793,7 @@ function cancelPreviewResize(controller: PreviewController): void {
 }
 
 function setPreviewWindowState(controller: PreviewController, windowNode: HTMLElement, state: PreviewWindowState): void {
+  if (!controller.restoringLayout) clearActiveWorkspacePreset(controller);
   if (state !== "open") detachFromTabGroup(controller, windowNode);
   if (state !== "open") cacheFloatingWindowRect(controller.root, windowNode);
   windowNode.dataset.windowState = state;
@@ -1245,6 +1278,173 @@ function shouldStartMinimizedOnCompact(windowId: PreviewWindowId): boolean {
   return windowId === "explorer" || windowId === "workspace";
 }
 
+export function previewWorkspacePresetPlan(
+  preset: PreviewWorkspacePreset,
+  viewport: PreviewWorkspacePresetViewport,
+): PreviewWorkspacePresetPlanEntry[] {
+  const worldManagerRect = floatingPresetRect(viewport, preset);
+  const hiddenWorldManager: PreviewWorkspacePresetPlanEntry = { id: "world-manager", state: "closed", dock: "float" };
+  const base: PreviewWorkspacePresetPlanEntry[] = [
+    { id: "tools", state: "open" },
+    { id: "editor", state: "open" },
+  ];
+
+  if (preset === "focus") {
+    return [
+      ...base,
+      { id: "explorer", state: "minimized" },
+      { id: "workspace", state: "minimized" },
+      { id: "output", state: "closed" },
+      hiddenWorldManager,
+    ];
+  }
+
+  if (preset === "ai") {
+    return [
+      ...base,
+      { id: "explorer", state: "minimized" },
+      { id: "workspace", state: "open" },
+      { id: "output", state: "open" },
+      hiddenWorldManager,
+    ];
+  }
+
+  if (preset === "debug") {
+    return [
+      ...base,
+      { id: "explorer", state: "open" },
+      { id: "workspace", state: "minimized" },
+      { id: "output", state: "open" },
+      { id: "world-manager", state: "open", dock: "float", rect: worldManagerRect },
+    ];
+  }
+
+  return [
+    ...base,
+    { id: "explorer", state: "open" },
+    { id: "workspace", state: "open" },
+    { id: "output", state: "minimized" },
+    hiddenWorldManager,
+  ];
+}
+
+function floatingPresetRect(viewport: PreviewWorkspacePresetViewport, preset: PreviewWorkspacePreset): PreviewWindowRect {
+  const width = Math.min(380, Math.max(300, viewport.width - 32));
+  const height = Math.min(preset === "debug" ? 360 : 320, Math.max(240, viewport.height - 128));
+  const left = preset === "debug" ? 58 : Math.max(16, viewport.width - width - 28);
+  const top = preset === "debug" ? 64 : 74;
+  return {
+    left: clamp(left, 12, Math.max(12, viewport.width - width - 12)),
+    top: clamp(top, 40, Math.max(40, viewport.height - height - 42)),
+    width,
+    height,
+  };
+}
+
+function applyPreviewWorkspacePreset(controller: PreviewController, preset: PreviewWorkspacePreset): void {
+  const rootRect = controller.root.getBoundingClientRect();
+  const plan = new Map(
+    previewWorkspacePresetPlan(preset, { width: rootRect.width, height: rootRect.height }).map((entry) => [entry.id, entry]),
+  );
+
+  controller.restoringLayout = true;
+  clearDropPreview(controller);
+  allPreviewWindows(controller.root).forEach((windowNode) => {
+    const windowId = windowNode.dataset.previewWindow || "";
+    const entry = plan.get(windowId);
+    clearWindowGrouping(windowNode);
+
+    if (entry) {
+      applyPreviewWindowState(controller, windowNode, entry.state);
+      windowNode.dataset.dock = entry.dock || windowNode.dataset.dock || "float";
+      applyPresetWindowStyle(controller, windowNode, entry, rootRect);
+      return;
+    }
+
+    if (windowId.startsWith("custom-")) {
+      applyPreviewWindowState(controller, windowNode, "minimized");
+    }
+  });
+  controller.restoringLayout = false;
+
+  controller.workbench.dataset.workspacePreset = preset;
+  syncPreviewOpenButtons(controller, "editor");
+  syncWorkspacePresetButtons(controller);
+  renderWindowManager(controller);
+  updatePointerStatus(controller.pointerStatus, `${previewWorkspacePresetLabel(preset)}布局`);
+  if (controller.noticeStatus) controller.noticeStatus.textContent = `已切换到${previewWorkspacePresetLabel(preset)}布局`;
+  savePreviewLayout(controller);
+}
+
+function applyPresetWindowStyle(
+  controller: PreviewController,
+  windowNode: HTMLElement,
+  entry: PreviewWorkspacePresetPlanEntry,
+  rootRect: DOMRect,
+): void {
+  if (!windowNode.matches("[data-floating-window]")) {
+    windowNode.classList.remove("is-snapped", "is-split-peer", "is-tabbed-peer");
+    return;
+  }
+
+  windowNode.classList.toggle("is-snapped", Boolean(entry.dock && entry.dock !== "float" && !entry.dock.startsWith("tab-")));
+  windowNode.classList.toggle("is-split-peer", Boolean(entry.dock?.startsWith("split-")));
+  windowNode.classList.toggle("is-tabbed-peer", Boolean(entry.dock?.startsWith("tab-")));
+  if (!entry.rect) {
+    restoreDefaultStyle(windowNode, controller.defaultWindows.get(entry.id)?.style ?? windowNode.getAttribute("style"));
+    return;
+  }
+
+  positionFloatingWindow(controller.root, windowNode, {
+    left: rootRect.left + entry.rect.left,
+    top: rootRect.top + entry.rect.top,
+    width: entry.rect.width,
+    height: entry.rect.height,
+  });
+}
+
+function applyPreviewWindowState(controller: PreviewController, windowNode: HTMLElement, state: PreviewWindowState): void {
+  if (state !== "open") cacheFloatingWindowRect(controller.root, windowNode);
+  windowNode.dataset.windowState = state;
+  windowNode.hidden = state !== "open";
+  if (state === "open" && windowNode.matches("[data-floating-window]")) windowNode.style.zIndex = String(nextWindowZ(controller.root));
+  controller.workbench.setAttribute(`data-window-${windowNode.dataset.previewWindow || ""}`, state);
+}
+
+function clearWindowGrouping(windowNode: HTMLElement): void {
+  delete windowNode.dataset.tabGroup;
+  delete windowNode.dataset.tabAnchor;
+  delete windowNode.dataset.tabActive;
+  windowNode.classList.remove("has-merged-tabs", "is-tabbed-peer", "is-split-peer", "is-snapped");
+  windowNode.querySelector<HTMLElement>(":scope > .merged-window-tabs")?.remove();
+}
+
+function clearActiveWorkspacePreset(controller: PreviewController): void {
+  if (!controller.workbench.dataset.workspacePreset) return;
+  delete controller.workbench.dataset.workspacePreset;
+  syncWorkspacePresetButtons(controller);
+}
+
+function syncWorkspacePresetButtons(controller: PreviewController): void {
+  const activePreset = controller.workbench.dataset.workspacePreset;
+  controller.root.querySelectorAll<HTMLButtonElement>("[data-window-preset]").forEach((button) => {
+    const isActive = Boolean(activePreset) && button.dataset.windowPreset === activePreset;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
+}
+
+function isPreviewWorkspacePreset(value: string): value is PreviewWorkspacePreset {
+  return (previewWorkspacePresets as readonly string[]).includes(value);
+}
+
+function previewWorkspacePresetLabel(preset: PreviewWorkspacePreset): string {
+  if (preset === "focus") return "专注";
+  if (preset === "ai") return "AI";
+  if (preset === "debug") return "调试";
+  return "编辑";
+}
+
 function applyDefaultPreviewTabGroups(controller: PreviewController): void {
   void controller;
 }
@@ -1387,6 +1587,7 @@ function resetPreviewLayout(controller: PreviewController): void {
 
   controller.createdWindows = 0;
   delete controller.root.dataset.previewDock;
+  clearActiveWorkspacePreset(controller);
   applyDefaultPreviewTabGroups(controller);
   controller.restoringLayout = false;
   bindWindowChrome(controller);

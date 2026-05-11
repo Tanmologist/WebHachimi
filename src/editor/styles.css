@@ -935,7 +935,21 @@ input {
 .window-launcher-menu footer {
   border-top: 1px solid var(--wb-line-soft);
   border-bottom: 0;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.window-layout-presets,
+.window-launcher-actions {
+  display: flex;
   flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.window-layout-presets {
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--wb-line-soft);
 }
 
 .window-launcher-list {
@@ -954,6 +968,17 @@ input {
   color: var(--wb-muted);
   border-radius: 4px;
   text-align: left;
+}
+
+.window-layout-presets button {
+  flex: 1 1 45px;
+  text-align: center;
+}
+
+.window-layout-presets button.is-active {
+  color: #ffffff;
+  border: 1px solid rgba(47, 143, 237, 0.6);
+  background: #26313e;
 }
 
 .launcher-window {
