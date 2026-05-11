@@ -4,8 +4,11 @@ import {
   resourceImportMetadataFromSequence,
   resourceImportMetadataFromText,
   resourceTagsForType,
+  mimeForImportedFile,
   sequenceGroupKeyFromFileName,
 } from "../editor/resourceImport";
+
+const onePixelPng = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADElEQVR42mP8z8AARQAEsQH+7G8bAAAAAElFTkSuQmCC";
 
 run("file metadata accepts arbitrary and zero byte files", () => {
   const emptyJson = resourceImportMetadataFromFile({ name: "empty.json", type: "" }, "data:;base64,", 0);
@@ -60,6 +63,23 @@ run("numbered PNG files can become one sequence resource", () => {
   assert(sequence.sprite?.mode === "sequence", `expected sequence sprite metadata, got ${sequence.sprite?.mode}`);
   assert(sequence.attachments?.[0].fileName === "walk_001.png", `expected ordered first frame, got ${sequence.attachments?.[0].fileName}`);
   assert(sequence.attachments?.length === 2, `expected 2 attachments, got ${sequence.attachments?.length}`);
+});
+
+run("PNG data signatures override incorrect JPEG clipboard metadata", () => {
+  const mislabeledPng = `data:image/jpeg;base64,${onePixelPng}`;
+  const mime = mimeForImportedFile({ name: "transparent.png", type: "image/jpeg" }, mislabeledPng);
+  assert(mime === "image/png", `expected PNG signature to win over JPEG metadata, got ${mime}`);
+
+  const single = resourceImportMetadataFromFile({ name: "transparent.png", type: "image/jpeg" }, mislabeledPng, 0);
+  assert(single.mime === "image/png", `expected single import mime image/png, got ${single.mime}`);
+  assert(single.type === "image", `expected single import to stay visual, got ${single.type}`);
+
+  const sequence = resourceImportMetadataFromSequence([
+    { file: { name: "walk_001.png", type: "image/jpeg" }, dataUrl: mislabeledPng, index: 0 },
+    { file: { name: "walk_002.png", type: "image/jpeg" }, dataUrl: mislabeledPng, index: 1 },
+  ]);
+  assert(sequence.mime === "image/png", `expected sequence mime image/png, got ${sequence.mime}`);
+  assert(sequence.attachments?.every((attachment) => attachment.mime === "image/png"), "expected all sequence attachments to keep image/png");
 });
 
 console.log(JSON.stringify({ status: "passed" }, null, 2));

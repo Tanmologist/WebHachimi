@@ -36,7 +36,7 @@ export type SequenceFileKey = {
 
 export function resourceImportMetadataFromFile(file: ClipboardFileLike, dataUrl: string, index: number): ResourceImportMetadata {
   const fileName = file.name || clipboardFallbackFileName(file, index);
-  const mime = file.type || mimeFromResourceText(dataUrl, mimeFromFileName(fileName));
+  const mime = mimeForImportedFile(file, dataUrl, fileName);
   return {
     displayName: fileNameWithoutExtension(fileName) || fileName,
     fileName,
@@ -60,14 +60,15 @@ export function resourceImportMetadataFromSequence(items: ImportedFileResource[]
     const fileName = item.file.name || clipboardFallbackFileName(item.file, item.index);
     return {
       fileName,
-      mime: item.file.type || mimeFromResourceText(item.dataUrl, mimeFromFileName(fileName)),
+      mime: mimeForImportedFile(item.file, item.dataUrl, fileName),
       path: item.dataUrl,
     };
   });
+  const firstMime = first ? mimeForImportedFile(first.file, first.dataUrl, firstFileName) : mimeFromFileName(firstFileName, "image/png");
   return {
     displayName,
     fileName: firstFileName,
-    mime: first?.file.type || mimeFromFileName(firstFileName, "image/png"),
+    mime: firstMime,
     path: first?.dataUrl || "",
     description: "",
     type: "animation",
@@ -117,6 +118,12 @@ export function mimeFromResourceText(value: string, fallback = "application/octe
   const dataUrlMatch = /^data:([^;,]+)/i.exec(value);
   if (dataUrlMatch) return dataUrlMatch[1];
   return mimeFromFileName(value, fallback);
+}
+
+export function mimeForImportedFile(file: ClipboardFileLike, dataUrl: string, fileName = file.name): string {
+  const sniffedMime = mimeFromDataUrlSignature(dataUrl);
+  if (sniffedMime) return sniffedMime;
+  return file.type || mimeFromResourceText(dataUrl, mimeFromFileName(fileName));
 }
 
 export function mimeFromFileName(value: string, fallback = "application/octet-stream"): string {
@@ -206,4 +213,46 @@ function fileExtension(value: string): string {
   const cleanValue = value.split(/[?#]/, 1)[0];
   const match = /\.([a-z0-9]+)$/i.exec(cleanValue);
   return match?.[1].toLowerCase() || "";
+}
+
+function mimeFromDataUrlSignature(value: string): string | undefined {
+  if (!/^data:/i.test(value)) return undefined;
+  const comma = value.indexOf(",");
+  if (comma < 0) return undefined;
+  const meta = value.slice(0, comma);
+  const body = value.slice(comma + 1).trim();
+  if (/;base64/i.test(meta)) {
+    const compact = body.replace(/\s/g, "");
+    if (compact.startsWith("iVBORw0KGgo")) return "image/png";
+    if (compact.startsWith("/9j/")) return "image/jpeg";
+    if (compact.startsWith("R0lGOD")) return "image/gif";
+    if (compact.startsWith("Qk")) return "image/bmp";
+    const decoded = decodeBase64Prefix(compact);
+    if (decoded?.startsWith("RIFF") && decoded.slice(8, 12) === "WEBP") return "image/webp";
+    if (looksLikeSvgText(decoded)) return "image/svg+xml";
+    return undefined;
+  }
+  return looksLikeSvgText(decodeDataUrlTextPrefix(body)) ? "image/svg+xml" : undefined;
+}
+
+function decodeBase64Prefix(value: string): string | undefined {
+  if (typeof atob !== "function") return undefined;
+  try {
+    return atob(value.slice(0, 48));
+  } catch {
+    return undefined;
+  }
+}
+
+function decodeDataUrlTextPrefix(value: string): string | undefined {
+  try {
+    return decodeURIComponent(value.slice(0, 256));
+  } catch {
+    return undefined;
+  }
+}
+
+function looksLikeSvgText(value: string | undefined): boolean {
+  const text = value?.trimStart().slice(0, 256).toLowerCase() || "";
+  return text.startsWith("<svg") || (text.startsWith("<?xml") && text.includes("<svg"));
 }

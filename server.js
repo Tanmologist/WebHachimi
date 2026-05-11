@@ -293,12 +293,16 @@ async function extractDataUrlAttachments(root, profile) {
             : '';
         if (!dataUrl) return;
         const parsed = parseDataUrl(dataUrl);
-        if (!parsed || !isSafeAttachment(parsed.mime, parsed.buffer)) return;
-        const ext = extFromMime(parsed.mime || att.mime, att.name);
+        if (!parsed) return;
+        const name = typeof att.fileName === 'string' ? att.fileName : typeof att.name === 'string' ? att.name : '';
+        const mime = sniffMimeFromBuffer(parsed.buffer) || parsed.mime || att.mime || mimeFromFileName(name);
+        if (!isSafeAttachment(mime, parsed.buffer)) return;
+        const ext = extFromMime(mime, name);
         const id = String(att.id || 'asset-' + Date.now()).replace(/[^a-z0-9_-]/gi, '-');
         const fileName = id + '.' + ext;
         writes.push(writeFileAtomic(path.join(targetAssetsDir, fileName), parsed.buffer));
         delete att.dataUrl;
+        att.mime = mime;
         att.path = targetAssetPrefix + '/' + fileName;
       });
     }
@@ -318,6 +322,30 @@ function parseDataUrl(dataUrl) {
   const mime = String(match[1] || 'text/plain').toLowerCase();
   const buffer = match[2] ? Buffer.from(body, 'base64') : Buffer.from(decodeURIComponent(body), 'utf8');
   return { mime, buffer };
+}
+
+function sniffMimeFromBuffer(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 2) return '';
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return 'image/png';
+  }
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return 'image/jpeg';
+  if (buffer.length >= 6 && (buffer.slice(0, 6).toString('ascii') === 'GIF87a' || buffer.slice(0, 6).toString('ascii') === 'GIF89a')) return 'image/gif';
+  if (buffer.length >= 12 && buffer.slice(0, 4).toString('ascii') === 'RIFF' && buffer.slice(8, 12).toString('ascii') === 'WEBP') return 'image/webp';
+  if (buffer[0] === 0x42 && buffer[1] === 0x4d) return 'image/bmp';
+  const text = buffer.slice(0, 256).toString('utf8').trimStart().toLowerCase();
+  if (text.startsWith('<svg') || (text.startsWith('<?xml') && text.includes('<svg'))) return 'image/svg+xml';
+  return '';
 }
 
 function isSafeAttachment(mime, buffer) {

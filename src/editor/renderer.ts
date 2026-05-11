@@ -408,7 +408,9 @@ export class V2Renderer {
   ): void {
     if (!showEditorDecorations && isGameplayDebugEntity(entity)) return;
     const hasVisiblePresentation = entityHasVisiblePresentation(entity);
-    if (showBodyMaterial || (showEditorDecorations && !hasVisiblePresentation)) this.drawBody(entity, selectedPart === "body", showBodyMaterial);
+    if ((showBodyMaterial && !hasVisiblePresentation) || (showEditorDecorations && !hasVisiblePresentation)) {
+      this.drawBody(entity, selectedPart === "body", showBodyMaterial);
+    }
     this.drawPresentation(
       entity,
       selectedPart === "presentation",

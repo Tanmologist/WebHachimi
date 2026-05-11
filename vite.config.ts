@@ -553,15 +553,18 @@ async function extractDataUrlAttachments(root: unknown, profile: ProjectProfile)
             ? attachment.path
             : "";
         if (!dataUrl) return;
-        const parsed = parseDataUrl(dataUrl);
-        if (!parsed || !isSafeAttachment(parsed.mime, parsed.buffer)) return;
         const name = typeof attachment.fileName === "string" ? attachment.fileName : typeof attachment.name === "string" ? attachment.name : "";
-        const ext = extFromMime(parsed.mime || (typeof attachment.mime === "string" ? attachment.mime : ""), name);
+        const parsed = parseDataUrl(dataUrl);
+        if (!parsed) return;
+        const mime = sniffMimeFromBuffer(parsed.buffer) || parsed.mime || (typeof attachment.mime === "string" ? attachment.mime : "") || mimeFromFileName(name);
+        if (!isSafeAttachment(mime, parsed.buffer)) return;
+        const ext = extFromMime(mime, name);
         const rawId = typeof attachment.id === "string" ? attachment.id : `asset-${Date.now()}-${writes.length}`;
         const id = rawId.replace(/[^a-z0-9_-]/gi, "-");
         const fileName = `${id}.${ext}`;
         writes.push(writeFileAtomic(path.join(profile.assetsDir, fileName), parsed.buffer));
         delete attachment.dataUrl;
+        attachment.mime = mime;
         attachment.path = `${profile.assetUrlPrefix}/${fileName}`;
       });
     }
@@ -592,6 +595,33 @@ function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } | undef
   const mime = (match[1] || "text/plain").toLowerCase();
   const buffer = match[2] ? Buffer.from(body, "base64") : Buffer.from(decodeURIComponent(body), "utf8");
   return { mime, buffer };
+}
+
+function sniffMimeFromBuffer(buffer: Buffer): string {
+  if (buffer.length < 2) return "";
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return "image/png";
+  }
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
+  const gifHeader = buffer.length >= 6 ? buffer.subarray(0, 6).toString("ascii") : "";
+  if (gifHeader === "GIF87a" || gifHeader === "GIF89a") return "image/gif";
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") {
+    return "image/webp";
+  }
+  if (buffer[0] === 0x42 && buffer[1] === 0x4d) return "image/bmp";
+  const text = buffer.subarray(0, 256).toString("utf8").trimStart().toLowerCase();
+  if (text.startsWith("<svg") || (text.startsWith("<?xml") && text.includes("<svg"))) return "image/svg+xml";
+  return "";
 }
 
 function isSafeAttachment(mime: string, buffer: Buffer): boolean {
