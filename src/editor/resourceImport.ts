@@ -35,8 +35,9 @@ export type SequenceFileKey = {
 };
 
 export function resourceImportMetadataFromFile(file: ClipboardFileLike, dataUrl: string, index: number): ResourceImportMetadata {
-  const fileName = file.name || clipboardFallbackFileName(file, index);
-  const mime = mimeForImportedFile(file, dataUrl, fileName);
+  const rawFileName = file.name || clipboardFallbackFileName(file, index);
+  const mime = mimeForImportedFile(file, dataUrl, rawFileName);
+  const fileName = fileNameForMime(rawFileName, mime);
   return {
     displayName: fileNameWithoutExtension(fileName) || fileName,
     fileName,
@@ -54,17 +55,20 @@ export function resourceImportMetadataFromSequence(items: ImportedFileResource[]
     return (leftKey?.order ?? left.index) - (rightKey?.order ?? right.index);
   });
   const first = ordered[0];
-  const firstFileName = first?.file.name || "sequence.png";
+  const firstRawFileName = first?.file.name || "sequence.png";
+  const firstMime = first ? mimeForImportedFile(first.file, first.dataUrl, firstRawFileName) : mimeFromFileName(firstRawFileName, "image/png");
+  const firstFileName = fileNameForMime(firstRawFileName, firstMime);
   const displayName = sequenceDisplayName(firstFileName);
   const attachments = ordered.map((item) => {
-    const fileName = item.file.name || clipboardFallbackFileName(item.file, item.index);
+    const rawFileName = item.file.name || clipboardFallbackFileName(item.file, item.index);
+    const mime = mimeForImportedFile(item.file, item.dataUrl, rawFileName);
+    const fileName = fileNameForMime(rawFileName, mime);
     return {
       fileName,
-      mime: mimeForImportedFile(item.file, item.dataUrl, fileName),
+      mime,
       path: item.dataUrl,
     };
   });
-  const firstMime = first ? mimeForImportedFile(first.file, first.dataUrl, firstFileName) : mimeFromFileName(firstFileName, "image/png");
   return {
     displayName,
     fileName: firstFileName,
@@ -213,6 +217,25 @@ function fileExtension(value: string): string {
   const cleanValue = value.split(/[?#]/, 1)[0];
   const match = /\.([a-z0-9]+)$/i.exec(cleanValue);
   return match?.[1].toLowerCase() || "";
+}
+
+function fileNameForMime(fileName: string, mime: string): string {
+  const extension = extensionForMime(mime);
+  if (!extension) return fileName;
+  if (!fileExtension(fileName)) return `${fileName}.${extension}`;
+  return mimeFromFileName(fileName, "") === mime ? fileName : fileName.replace(/\.[^.]+$/, `.${extension}`);
+}
+
+function extensionForMime(mime: string): string | undefined {
+  const extensionByMime: Record<string, string> = {
+    "image/png": "png",
+    "image/jpeg": "jpg",
+    "image/gif": "gif",
+    "image/webp": "webp",
+    "image/bmp": "bmp",
+    "image/svg+xml": "svg",
+  };
+  return extensionByMime[mime];
 }
 
 function mimeFromDataUrlSignature(value: string): string | undefined {

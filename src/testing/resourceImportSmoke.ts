@@ -67,19 +67,22 @@ run("numbered PNG files can become one sequence resource", () => {
 
 run("PNG data signatures override incorrect JPEG clipboard metadata", () => {
   const mislabeledPng = `data:image/jpeg;base64,${onePixelPng}`;
-  const mime = mimeForImportedFile({ name: "transparent.png", type: "image/jpeg" }, mislabeledPng);
+  const mime = mimeForImportedFile({ name: "transparent.jpg", type: "image/jpeg" }, mislabeledPng);
   assert(mime === "image/png", `expected PNG signature to win over JPEG metadata, got ${mime}`);
 
-  const single = resourceImportMetadataFromFile({ name: "transparent.png", type: "image/jpeg" }, mislabeledPng, 0);
+  const single = resourceImportMetadataFromFile({ name: "transparent.jpg", type: "image/jpeg" }, mislabeledPng, 0);
   assert(single.mime === "image/png", `expected single import mime image/png, got ${single.mime}`);
+  assert(single.fileName === "transparent.png", `expected corrected PNG file name, got ${single.fileName}`);
   assert(single.type === "image", `expected single import to stay visual, got ${single.type}`);
 
   const sequence = resourceImportMetadataFromSequence([
-    { file: { name: "walk_001.png", type: "image/jpeg" }, dataUrl: mislabeledPng, index: 0 },
-    { file: { name: "walk_002.png", type: "image/jpeg" }, dataUrl: mislabeledPng, index: 1 },
+    { file: { name: "walk_001.jpg", type: "image/jpeg" }, dataUrl: mislabeledPng, index: 0 },
+    { file: { name: "walk_002.jpg", type: "image/jpeg" }, dataUrl: mislabeledPng, index: 1 },
   ]);
   assert(sequence.mime === "image/png", `expected sequence mime image/png, got ${sequence.mime}`);
+  assert(sequence.fileName === "walk_001.png", `expected corrected sequence file name, got ${sequence.fileName}`);
   assert(sequence.attachments?.every((attachment) => attachment.mime === "image/png"), "expected all sequence attachments to keep image/png");
+  assert(sequence.attachments?.every((attachment) => attachment.fileName.endsWith(".png")), "expected all sequence attachment names to use .png");
 });
 
 console.log(JSON.stringify({ status: "passed" }, null, 2));

@@ -269,6 +269,12 @@ function extFromMime(mime, fallbackName) {
   return match ? match[1].toLowerCase() : 'bin';
 }
 
+function fileNameWithMimeExtension(fileName, mime, extension) {
+  if (!fileName || !extension || mimeFromFileName(fileName) === mime) return fileName || '';
+  const cleanExtension = String(extension).replace(/^\./, '');
+  return String(fileName).replace(/(\.[a-z0-9]+)?$/i, '.' + cleanExtension);
+}
+
 function dataUrlToBuffer(dataUrl) {
   const comma = String(dataUrl || '').indexOf(',');
   if (comma < 0) return Buffer.alloc(0);
@@ -303,6 +309,8 @@ async function extractDataUrlAttachments(root, profile) {
         writes.push(writeFileAtomic(path.join(targetAssetsDir, fileName), parsed.buffer));
         delete att.dataUrl;
         att.mime = mime;
+        const normalizedFileName = fileNameWithMimeExtension(name, mime, ext);
+        if (normalizedFileName) att.fileName = normalizedFileName;
         att.path = targetAssetPrefix + '/' + fileName;
       });
     }

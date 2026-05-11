@@ -565,6 +565,8 @@ async function extractDataUrlAttachments(root: unknown, profile: ProjectProfile)
         writes.push(writeFileAtomic(path.join(profile.assetsDir, fileName), parsed.buffer));
         delete attachment.dataUrl;
         attachment.mime = mime;
+        const normalizedFileName = fileNameWithMimeExtension(name, mime, ext);
+        if (normalizedFileName) attachment.fileName = normalizedFileName;
         attachment.path = `${profile.assetUrlPrefix}/${fileName}`;
       });
     }
@@ -583,6 +585,12 @@ function extFromMime(mime: string, fallbackName: string): string {
   if (mime === "application/json") return "json";
   const match = fallbackName.match(/\.([a-z0-9]+)$/i);
   return match ? match[1].toLowerCase() : "bin";
+}
+
+function fileNameWithMimeExtension(fileName: string, mime: string, extension: string): string {
+  if (!fileName || !extension || mimeFromFileName(fileName) === mime) return fileName;
+  const cleanExtension = extension.replace(/^\./, "");
+  return fileName.replace(/(\.[a-z0-9]+)?$/i, `.${cleanExtension}`);
 }
 
 function parseDataUrl(dataUrl: string): { mime: string; buffer: Buffer } | undefined {
