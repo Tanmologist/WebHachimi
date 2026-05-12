@@ -65,6 +65,36 @@ run("resource library exposes effect preset buttons", () => {
   assert(html.includes('data-effect-preset="impactPulse"'), "expected impact pulse preset button");
 });
 
+run("resource library renders resource previews by type", () => {
+  const image = makeResource("preview-image", "hero.png");
+  const audio = makeResource("preview-audio", "theme.mp3");
+  audio.type = "audio";
+  audio.attachments[0].mime = "audio/mpeg";
+  audio.attachments[0].path = "/assets/theme.mp3";
+  const note = makeResource("preview-note");
+  note.type = "note";
+  note.description = "这是一段资源说明，可以直接在资源库里快速查看。";
+  const material = makeResource("preview-material", "pack.zip");
+  material.type = "material";
+  material.attachments[0].mime = "application/zip";
+  material.attachments[0].path = "/assets/pack.zip";
+
+  const html = renderResourceLibraryHtml({
+    [image.id]: image,
+    [audio.id]: audio,
+    [note.id]: note,
+    [material.id]: material,
+  });
+  assert(html.includes("v2-resource-preview is-visual"), "expected visual preview shell");
+  assert(html.includes('src="/assets/hero.png"'), "expected image preview src");
+  assert(html.includes("v2-resource-preview is-audio"), "expected audio preview shell");
+  assert(html.includes("<audio controls"), "expected audio preview controls");
+  assert(html.includes("v2-resource-preview is-note"), "expected note preview shell");
+  assert(html.includes("这是一段资源说明"), "expected note preview text");
+  assert(html.includes("v2-resource-preview is-file"), "expected file preview shell");
+  assert(html.includes("application/zip"), "expected file preview mime");
+});
+
 console.log(JSON.stringify({ status: "passed" }, null, 2));
 
 function makeResource(name: string, ...fileNames: string[]): Resource {

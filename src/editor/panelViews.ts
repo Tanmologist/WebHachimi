@@ -293,6 +293,7 @@ function renderResourceBindingRow(binding: ResourceBinding, resource: Resource |
 function renderLibraryResourceRow(resource: Resource): string {
   return `
     <article class="v2-resource-row is-library-resource" data-resource-row="${escapeHtml(resource.id)}">
+      ${renderLibraryResourcePreview(resource)}
       <b>${escapeHtml(resource.displayName)}</b>
       <div class="v2-name-edit">
         <input data-resource-name="${escapeHtml(resource.id)}" type="text" value="${escapeHtml(resource.displayName)}" placeholder="资源名称" />
@@ -308,6 +309,74 @@ function renderLibraryResourceRow(resource: Resource): string {
       </footer>
     </article>
   `;
+}
+
+function renderLibraryResourcePreview(resource: Resource): string {
+  const visualAttachments = imageAttachments(resource);
+  if (visualAttachments.length > 0) {
+    const primary = visualAttachments[0];
+    const frameStrip = visualAttachments.length > 1
+      ? `
+        <div class="v2-resource-preview-strip" aria-label="序列帧缩略图">
+          ${visualAttachments.slice(0, 5).map(renderResourcePreviewThumb).join("")}
+          ${
+            visualAttachments.length > 5
+              ? `<span class="v2-resource-preview-more">+${visualAttachments.length - 5}</span>`
+              : ""
+          }
+        </div>
+      `
+      : "";
+    const previewLabel = visualAttachments.length > 1 ? `${visualAttachments.length} 帧序列` : primary.fileName;
+    return `
+      <figure class="v2-resource-preview is-visual">
+        <img src="${escapeHtml(primary.path)}" alt="${escapeHtml(resource.displayName)} 预览" loading="lazy" />
+        <figcaption>${escapeHtml(previewLabel)}</figcaption>
+        ${frameStrip}
+      </figure>
+    `;
+  }
+
+  const attachment = resource.attachments[0];
+  if (resource.type === "audio" && attachment?.path) {
+    return `
+      <div class="v2-resource-preview is-audio">
+        <audio controls preload="metadata" src="${escapeHtml(attachment.path)}"></audio>
+        <small>${escapeHtml(attachment.fileName || resource.displayName)}</small>
+      </div>
+    `;
+  }
+
+  if (resource.type === "note") {
+    const noteText = compactPreviewText(resource.description || resource.aiDescription || attachment?.fileName || "", "暂无可预览内容");
+    return `
+      <div class="v2-resource-preview is-note">
+        <p>${escapeHtml(noteText)}</p>
+      </div>
+    `;
+  }
+
+  if (attachment) {
+    return `
+      <div class="v2-resource-preview is-file">
+        <span>FILE</span>
+        <div>
+          <b>${escapeHtml(attachment.fileName || resource.displayName)}</b>
+          <small>${escapeHtml(attachment.mime || resource.type)}</small>
+        </div>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="v2-resource-preview is-empty">
+      <small>暂无可预览附件</small>
+    </div>
+  `;
+}
+
+function renderResourcePreviewThumb(attachment: Resource["attachments"][number]): string {
+  return `<img src="${escapeHtml(attachment.path)}" alt="${escapeHtml(attachment.fileName)}" loading="lazy" />`;
 }
 
 function renderResourceAnimationControls(resource: Resource | undefined): string {
@@ -425,6 +494,11 @@ function renderMetric(label: string, value: number): string {
 
 function renderPill(value: string): string {
   return `<span class="v2-pill">${escapeHtml(value)}</span>`;
+}
+
+function compactPreviewText(value: string, fallback: string): string {
+  const compact = value.replace(/\s+/g, " ").trim() || fallback;
+  return compact.length > 140 ? `${compact.slice(0, 137)}...` : compact;
 }
 
 function isCurrentResource(entity: Entity, binding: ResourceBinding): boolean {
