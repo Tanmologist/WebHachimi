@@ -18,7 +18,7 @@ import {
   type SuperBrushDraft,
 } from "./superBrush";
 import { RuntimeWorld } from "../runtime/world";
-import { cloneJson, makeId, type EntityId, type Rect, type ResourceId, type Result, type Transform2D, type Vec2 } from "../shared/types";
+import { cloneJson, makeId, type EntityId, type Rect, type ResourceId, type Result, type SceneId, type Transform2D, type Vec2 } from "../shared/types";
 import type { Resource, ResourceBinding, TargetRef, Task } from "../project/schema";
 import {
   applyCanvasDragState,
@@ -41,6 +41,7 @@ import { PanelLayoutController, type PanelId } from "./panelLayout";
 import { renderInspectorHtml, renderResourceLibraryHtml, renderResourcesHtml } from "./panelViews";
 import { bindSceneTreeInteractions, renderSceneTreeHtml } from "./sceneTreeController";
 import { renderTaskPanelHtml } from "./taskPanelViews";
+import { renderWorldManagerPopoverHtml } from "./worldManagerViews";
 import { planPersistentFolderMoveTransaction } from "./folderMoveTransaction";
 import {
   planBatchDeleteEntitiesTransaction,
@@ -197,6 +198,7 @@ let shapeDrag: ShapeDragState | undefined;
 let polygonDraft: PolygonDraftState | undefined;
 let spacePanActive = false;
 let windowMenuOpen = false;
+let worldManagerOpen = false;
 let pendingWindowMenuClick: number | undefined;
 let activeSurface: ActiveSurface = "canvas";
 let contextMenu: ContextMenuState | undefined;
@@ -217,6 +219,7 @@ const uiRenderState = {
   chrome: "",
   frame: "",
   layout: "",
+  worldManager: "",
 };
 const autoSave = new AutoSaveController({
   initialStatus: initialProject.loadedFromDisk ? "已从磁盘载入，自动保存就绪" : "自动保存就绪",
@@ -262,6 +265,8 @@ const saveStatusNode = query<HTMLElement>('[data-role="save-status"]');
 const pointerNode = query<HTMLElement>('[data-role="pointer"]');
 const noticeNode = query<HTMLElement>('[data-role="notice"]');
 const frameNode = query<HTMLElement>('[data-role="frame"]');
+const worldManagerToggle = query<HTMLButtonElement>("[data-world-manager-toggle]");
+const worldManagerPopover = query<HTMLElement>('[data-role="world-manager-popover"]');
 const polygonActionsNode = query<HTMLElement>('[data-role="polygon-actions"]');
 const minimizedTrayNode = query<HTMLElement>('[data-role="minimized-tray"]');
 const contextMenuNode = query<HTMLElement>('[data-role="context-menu"]');
@@ -422,6 +427,17 @@ function bindUi(): void {
       event.preventDefault();
       queueTaskFromComposer(visibleTaskInput);
     }
+  });
+  worldManagerToggle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    worldManagerOpen = !worldManagerOpen;
+    renderUi();
+  });
+  worldManagerPopover.addEventListener("click", (event) => {
+    event.stopPropagation();
+  });
+  worldManagerPopover.addEventListener("pointerdown", (event) => {
+    event.stopPropagation();
   });
   resourceFileInput.addEventListener("change", () => {
     void importResourceFiles(Array.from(resourceFileInput.files || []));
@@ -651,6 +667,10 @@ function bindUi(): void {
       clearPendingWindowMenuClick();
       changed = true;
     }
+    if (worldManagerOpen && !target.closest('[data-role="world-manager-popover"], [data-world-manager-toggle]')) {
+      worldManagerOpen = false;
+      changed = true;
+    }
     if (changed) renderUi();
   });
 }
@@ -728,6 +748,153 @@ function centerWindowPanel(panel: PanelId): void {
   if (panel === "scene") activeSurface = "world";
   notice = `${panelLabel(panel)}已归中`;
   renderAll();
+}
+
+function addWorldFromManager(): void {
+  const projectSnapshot = store.peekProject();
+  const sourceScene = projectSnapshot.scenes[projectSnapshot.activeSceneId] || Object.values(projectSnapshot.scenes)[0];
+  if (!sourceScene) return;
+  const sceneId = makeId<"SceneId">("scene") as SceneId;
+  const sceneName = uniqueWorldName(projectSnapshot, "新世界");
+  const sceneValue: Scene = {
+    id: sceneId,
+    name: sceneName,
+    settings: cloneJson(sourceScene.settings),
+    entities: {},
+    folders: [],
+    layers: cloneJson(sourceScene.layers?.length ? sourceScene.layers : [{ id: "world", displayName: "世界", order: 0, visible: true, locked: false }]),
+  };
+  applyWorldManagerTransaction({
+    patches: [
+      { op: "set", path: `/scenes/${sceneId}` as ProjectPatch["path"], value: sceneValue },
+      { op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: sceneId },
+    ],
+    inversePatches: [
+      { op: "delete", path: `/scenes/${sceneId}` as ProjectPatch["path"] },
+      { op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: projectSnapshot.activeSceneId },
+    ],
+    diffSummary: `添加世界：${sceneName}`,
+    dirtyReason: `已添加世界 ${sceneName}`,
+    noticeText: `已添加并切换到 ${sceneName}`,
+  });
+}
+
+function selectWorldFromManager(sceneId: SceneId): void {
+  const projectSnapshot = store.peekProject();
+  const target = projectSnapshot.scenes[sceneId];
+  if (!target) return;
+  if (projectSnapshot.activeSceneId === sceneId) {
+    notice = `${target.name || "未命名世界"} 已经是当前世界`;
+    renderUi();
+    return;
+  }
+  applyWorldManagerTransaction({
+    patches: [{ op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: sceneId }],
+    inversePatches: [{ op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: projectSnapshot.activeSceneId }],
+    diffSummary: `切换世界：${target.name || "未命名世界"}`,
+    dirtyReason: `已切换世界 ${target.name || "未命名世界"}`,
+    noticeText: `已切换到 ${target.name || "未命名世界"}`,
+  });
+}
+
+function renameWorldFromManager(sceneId: SceneId, rawName: string): void {
+  const projectSnapshot = store.peekProject();
+  const sceneValue = projectSnapshot.scenes[sceneId];
+  if (!sceneValue) return;
+  const nextName = rawName.trim();
+  if (!nextName) {
+    notice = "世界名称不能为空";
+    renderUi();
+    return;
+  }
+  if (nextName === sceneValue.name) {
+    notice = "世界名称没有变化";
+    renderUi();
+    return;
+  }
+  applyWorldManagerTransaction({
+    patches: [{ op: "set", path: `/scenes/${sceneId}/name` as ProjectPatch["path"], value: nextName }],
+    inversePatches: [{ op: "set", path: `/scenes/${sceneId}/name` as ProjectPatch["path"], value: sceneValue.name }],
+    diffSummary: `重命名世界：${sceneValue.name} -> ${nextName}`,
+    dirtyReason: `已重命名世界 ${nextName}`,
+    noticeText: `世界已重命名为 ${nextName}`,
+    resetSelection: false,
+  });
+}
+
+function removeWorldFromManager(sceneId: SceneId): void {
+  const projectSnapshot = store.peekProject();
+  const scenes = Object.values(projectSnapshot.scenes);
+  const sceneValue = projectSnapshot.scenes[sceneId];
+  if (!sceneValue) return;
+  if (scenes.length <= 1) {
+    notice = "至少需要保留一个世界";
+    renderUi();
+    return;
+  }
+  const nextActiveSceneId = projectSnapshot.activeSceneId === sceneId
+    ? scenes.find((item) => item.id !== sceneId)?.id as SceneId | undefined
+    : projectSnapshot.activeSceneId;
+  if (!nextActiveSceneId) return;
+  const patches: ProjectPatch[] = [];
+  const inversePatches: ProjectPatch[] = [];
+  if (projectSnapshot.activeSceneId !== nextActiveSceneId) {
+    patches.push({ op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: nextActiveSceneId });
+    inversePatches.push({ op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: projectSnapshot.activeSceneId });
+  }
+  patches.push({ op: "delete", path: `/scenes/${sceneId}` as ProjectPatch["path"] });
+  inversePatches.unshift({ op: "set", path: `/scenes/${sceneId}` as ProjectPatch["path"], value: cloneJson(sceneValue) });
+  applyWorldManagerTransaction({
+    patches,
+    inversePatches,
+    diffSummary: `移除世界：${sceneValue.name || "未命名世界"}`,
+    dirtyReason: `已移除世界 ${sceneValue.name || "未命名世界"}`,
+    noticeText: `已移除 ${sceneValue.name || "未命名世界"}`,
+  });
+}
+
+function applyWorldManagerTransaction(input: {
+  patches: ProjectPatch[];
+  inversePatches: ProjectPatch[];
+  diffSummary: string;
+  dirtyReason: string;
+  noticeText: string;
+  resetSelection?: boolean;
+}): void {
+  const result = editorTransactions.apply({
+    actor: "user",
+    patches: input.patches,
+    inversePatches: input.inversePatches,
+    diffSummary: input.diffSummary,
+    dirtyReason: input.dirtyReason,
+    syncOnSuccess: false,
+    syncOnFailure: false,
+  });
+  if (!result.ok) {
+    syncWorldFromStore();
+    notice = `世界管理器操作失败：${result.error}`;
+    renderAll();
+    return;
+  }
+  rebuildWorldFromStore();
+  if (input.resetSelection !== false) resetSelectionToFirstEditableEntity();
+  notice = input.noticeText;
+  renderAll();
+}
+
+function resetSelectionToFirstEditableEntity(): void {
+  selectedId = firstEditableEntityId();
+  selectedPart = "body";
+  selectedIds = selectedId ? [selectedId as EntityId] : [];
+  selectionArea = undefined;
+}
+
+function uniqueWorldName(projectSnapshot: Project, baseName: string): string {
+  const existing = new Set(Object.values(projectSnapshot.scenes).map((item) => item.name));
+  if (!existing.has(baseName)) return baseName;
+  let index = 2;
+  while (existing.has(`${baseName} ${index}`)) index += 1;
+  return `${baseName} ${index}`;
 }
 
 function focusEntityOnCanvas(entityId: string, part: CanvasTargetPart): void {
@@ -2177,13 +2344,20 @@ function onKeyDown(event: KeyboardEvent): void {
       if (event.repeat) return;
 
       const isRedo = key === "y" || event.shiftKey;
+      const previousSceneId = store.peekProject().activeSceneId;
       const didApply = isRedo ? store.redo() : store.undo();
       if (!didApply) {
         notice = isRedo ? "无可重做" : "无可撤销";
         renderAll();
         return;
       }
-      syncWorldFromStore();
+      const nextSceneId = store.peekProject().activeSceneId;
+      if (previousSceneId !== nextSceneId || world.sceneId !== nextSceneId) {
+        rebuildWorldFromStore();
+        resetSelectionToFirstEditableEntity();
+      } else {
+        syncWorldFromStore();
+      }
       markProjectDirty(isRedo ? "已重做" : "已撤销");
       renderAll();
       return;
@@ -2231,6 +2405,12 @@ function onKeyDown(event: KeyboardEvent): void {
     event.preventDefault();
     contextMenu = undefined;
     renderAll();
+    return;
+  }
+  if (event.key === "Escape" && worldManagerOpen && !isTypingTarget(event.target)) {
+    event.preventDefault();
+    worldManagerOpen = false;
+    renderUi();
     return;
   }
   if ((event.key === "Delete" || event.key === "Backspace") && !isTypingTarget(event.target)) {
@@ -2575,6 +2755,7 @@ function renderUi(projectSnapshot?: Project): void {
   renderInspector(snapshotProject);
   renderResources(snapshotProject);
   renderOutput();
+  renderWorldManager(snapshotProject);
   renderFrame();
   renderContextMenu();
   renderMinimizedTray();
@@ -3001,6 +3182,65 @@ function renderOutput(): void {
   if (uiRenderState.output === signature) return;
   uiRenderState.output = signature;
   outputNode.innerHTML = outputLog.renderHtml();
+}
+
+function renderWorldManager(projectSnapshot: Project): void {
+  const sceneSignature = Object.values(projectSnapshot.scenes)
+    .map((item) => [item.id, item.name, Object.keys(item.entities || {}).length].join(":"))
+    .sort()
+    .join("|");
+  const signature = [worldManagerOpen ? "open" : "closed", projectSnapshot.activeSceneId, sceneSignature].join("||");
+  if (uiRenderState.worldManager === signature) return;
+  uiRenderState.worldManager = signature;
+  worldManagerToggle.classList.toggle("is-active", worldManagerOpen);
+  worldManagerToggle.setAttribute("aria-expanded", String(worldManagerOpen));
+  worldManagerPopover.hidden = !worldManagerOpen;
+  worldManagerPopover.setAttribute("aria-hidden", String(!worldManagerOpen));
+  if (!worldManagerOpen) {
+    worldManagerPopover.innerHTML = "";
+    return;
+  }
+  worldManagerPopover.innerHTML = renderWorldManagerPopoverHtml(projectSnapshot);
+  bindWorldManagerInteractions(worldManagerPopover);
+}
+
+function bindWorldManagerInteractions(popover: HTMLElement): void {
+  popover.querySelectorAll<HTMLButtonElement>("[data-world-manager-action]").forEach((button) => {
+    const runAction = () => runWorldManagerAction(popover, button);
+    button.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      runAction();
+    });
+    button.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      event.stopPropagation();
+      runAction();
+    });
+  });
+  popover.querySelectorAll<HTMLInputElement>("[data-world-manager-name]").forEach((input) => {
+    input.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      const sceneId = input.dataset.worldManagerName as SceneId | undefined;
+      if (sceneId) renameWorldFromManager(sceneId, input.value);
+    });
+  });
+}
+
+function runWorldManagerAction(popover: HTMLElement, button: HTMLButtonElement): void {
+  if (button.disabled) return;
+  const action = button.dataset.worldManagerAction || "";
+  const sceneId = button.dataset.sceneId as SceneId | undefined;
+  if (action === "add") addWorldFromManager();
+  else if (action === "select" && sceneId) selectWorldFromManager(sceneId);
+  else if (action === "rename" && sceneId) {
+    const input = popover.querySelector<HTMLInputElement>(`[data-world-manager-name="${sceneId}"]`);
+    renameWorldFromManager(sceneId, input?.value || "");
+  } else if (action === "remove" && sceneId) {
+    removeWorldFromManager(sceneId);
+  }
 }
 
 function bindResourceInteractions(resourcesNode: HTMLElement): void {

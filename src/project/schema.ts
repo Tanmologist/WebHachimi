@@ -427,6 +427,7 @@ export type Transaction = {
 };
 
 export type ProjectPatchPath =
+  | "/activeSceneId"
   | `/meta/${string}`
   | `/scenes/${string}`
   | `/resources/${string}`
