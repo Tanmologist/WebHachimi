@@ -341,6 +341,21 @@ export function mountEditorShell(root: HTMLElement): void {
       </div>
 
       <div class="world-manager-popover" data-role="world-manager-popover" hidden></div>
+      <div class="world-speed-control" data-role="world-speed-control" aria-label="世界播放速度">
+        <div class="world-speed-control__head">
+          <span>世界速度</span>
+          <strong data-role="world-speed-value">1x</strong>
+        </div>
+        <div class="world-speed-control__inputs">
+          <input type="range" min="0" max="4" step="0.05" value="1" data-role="world-speed-range" aria-label="世界速度滑杆" />
+          <input type="number" min="0" max="4" step="0.05" value="1" data-role="world-speed-input" aria-label="世界速度数值" />
+        </div>
+        <div class="world-speed-control__presets" aria-label="世界速度预设">
+          <button type="button" data-world-speed-preset="0.5">0.5x</button>
+          <button type="button" data-world-speed-preset="1">1x</button>
+          <button type="button" data-world-speed-preset="2">2x</button>
+        </div>
+      </div>
 
       <footer class="window-taskbar" data-window-manager>
         <div class="window-launcher">

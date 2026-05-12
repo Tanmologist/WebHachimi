@@ -68,6 +68,7 @@ function createPerformanceScene(count: number): Scene {
       gravity: { x: 0, y: 1400 },
       tickRate: 100,
       fixedStepMs: 10,
+      timeScale: 1,
     },
     entities,
     folders: [],

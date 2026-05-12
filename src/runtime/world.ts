@@ -16,7 +16,7 @@ import {
   combatWindowIsOpen,
 } from "../combat/actions";
 import type { CombatActionId, CombatActionRuntime } from "../combat/types";
-import { normalizeEntityDefaults, normalizeSceneSettings } from "../project/schema";
+import { normalizeEntityDefaults, normalizeSceneSettings, normalizeSceneTimeScale } from "../project/schema";
 import { cloneJson, makeId } from "../shared/types";
 import type { EntityId, RuntimeMode, SnapshotId } from "../shared/types";
 import type { Rect, SceneId, Vec2 } from "../shared/types";
@@ -55,6 +55,7 @@ export class RuntimeWorld {
   readonly sceneId: SceneId;
   readonly clock: FixedStepClock;
   readonly gravity: Vec2;
+  timeScale: number;
   mode: RuntimeMode = "editorFrozen";
   entities = new Map<string, Entity>();
   transientEntities = new Map<string, Entity>();
@@ -68,9 +69,10 @@ export class RuntimeWorld {
     const settings = normalizeSceneSettings(cloneJson(options.scene.settings));
     this.sceneId = options.scene.id;
     this.gravity = cloneJson(settings.gravity);
+    this.timeScale = settings.timeScale;
     this.clock = new FixedStepClock({
       fixedStepMs: settings.fixedStepMs,
-      maxStepsPerFrame: 5,
+      maxStepsPerFrame: 16,
     });
     Object.values(options.scene.entities).forEach((entity) => {
       const copy = cloneJson(entity);
@@ -94,8 +96,12 @@ export class RuntimeWorld {
     return this.setMode(this.mode === "game" ? "editorFrozen" : "game");
   }
 
+  setTimeScale(value: number): void {
+    this.timeScale = normalizeSceneTimeScale(value);
+  }
+
   pushDelta(deltaMs: number): void {
-    const tick = this.clock.pushDelta(deltaMs);
+    const tick = this.clock.pushDelta(deltaMs * this.timeScale);
     for (let index = 0; index < tick.steps; index += 1) this.stepFixed();
   }
 

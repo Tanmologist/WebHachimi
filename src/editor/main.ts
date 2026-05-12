@@ -2,7 +2,7 @@ import "./styles.css";
 import type { AiTaskExecutionResult, AiTaskExecutor } from "../ai/taskExecutor";
 import { attackTouchKindForEntities, planMovedAttackTouchOffsets } from "../combat/hitboxEdit";
 import { createTask } from "../project/tasks";
-import { normalizeProjectDefaults, type BrushContext, type BrushVisualEvidence, type BrushVisualFrame, type Entity, type Project, type ProjectPatch, type Scene } from "../project/schema";
+import { normalizeProjectDefaults, normalizeSceneTimeScale, type BrushContext, type BrushVisualEvidence, type BrushVisualFrame, type Entity, type Project, type ProjectPatch, type Scene } from "../project/schema";
 import { consumeEditorHandoff } from "../project/editorHandoff";
 import { ProjectStore } from "../project/projectStore";
 import {
@@ -163,6 +163,9 @@ if (handoff?.snapshot) world.restoreSnapshot(handoff.snapshot);
 const renderer = new V2Renderer();
 let animatedResourcePresent = sceneHasVisibleAnimatedResource(project);
 const DISK_AUTO_LOAD_INTERVAL_MS = 4000;
+const WORLD_SPEED_MIN = 0;
+const WORLD_SPEED_MAX = 4;
+const WORLD_SPEED_STEP = 0.05;
 
 let selectedId = firstPersistentSceneEntityId(scene);
 let selectedPart: CanvasTargetPart = "body";
@@ -220,6 +223,7 @@ const uiRenderState = {
   frame: "",
   layout: "",
   worldManager: "",
+  worldSpeed: "",
 };
 const autoSave = new AutoSaveController({
   initialStatus: initialProject.loadedFromDisk ? "已从磁盘载入，自动保存就绪" : "自动保存就绪",
@@ -265,6 +269,10 @@ const saveStatusNode = query<HTMLElement>('[data-role="save-status"]');
 const pointerNode = query<HTMLElement>('[data-role="pointer"]');
 const noticeNode = query<HTMLElement>('[data-role="notice"]');
 const frameNode = query<HTMLElement>('[data-role="frame"]');
+const worldSpeedControl = query<HTMLElement>('[data-role="world-speed-control"]');
+const worldSpeedRange = query<HTMLInputElement>('[data-role="world-speed-range"]');
+const worldSpeedInput = query<HTMLInputElement>('[data-role="world-speed-input"]');
+const worldSpeedValueNode = query<HTMLElement>('[data-role="world-speed-value"]');
 const worldManagerToggle = query<HTMLButtonElement>("[data-world-manager-toggle]");
 const worldManagerPopover = query<HTMLElement>('[data-role="world-manager-popover"]');
 const polygonActionsNode = query<HTMLElement>('[data-role="polygon-actions"]');
@@ -277,6 +285,7 @@ const brushTaskSummaryNode = query<HTMLElement>('[data-role="super-brush-task-su
 const brushTaskErrorNode = query<HTMLElement>('[data-role="super-brush-task-error"]');
 const toolButtons = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-tool]"));
 const surfaceButtons = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-surface-target]"));
+const worldSpeedPresetButtons = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-world-speed-preset]"));
 const confirmBrushButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-action="confirm-super-brush"]'));
 const taskWorkflow = createTaskWorkflowController({
   store,
@@ -362,6 +371,25 @@ async function executeNextAiTask(): Promise<Result<AiTaskExecutionResult | undef
 function bindUi(): void {
   const visibleTaskInput = root.querySelector<HTMLTextAreaElement>('[data-role="visible-task-input"]');
   root.querySelectorAll('[data-action="toggle-run"]').forEach((button) => button.addEventListener("click", toggleRun));
+  worldSpeedRange.addEventListener("input", () => previewWorldSpeed(worldSpeedRange.value));
+  worldSpeedRange.addEventListener("change", () => commitWorldSpeed(worldSpeedRange.value));
+  worldSpeedInput.addEventListener("input", () => previewWorldSpeed(worldSpeedInput.value));
+  worldSpeedInput.addEventListener("change", () => commitWorldSpeed(worldSpeedInput.value));
+  worldSpeedInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      commitWorldSpeed(worldSpeedInput.value);
+      worldSpeedInput.blur();
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      renderWorldSpeedControl();
+      worldSpeedInput.blur();
+    }
+  });
+  worldSpeedPresetButtons.forEach((button) => {
+    button.addEventListener("click", () => commitWorldSpeed(button.dataset.worldSpeedPreset || "1"));
+  });
   root.querySelectorAll('[data-action="step"]').forEach((button) => {
     button.addEventListener("click", () => {
       world.runFixedFrame();
@@ -895,6 +923,69 @@ function uniqueWorldName(projectSnapshot: Project, baseName: string): string {
   let index = 2;
   while (existing.has(`${baseName} ${index}`)) index += 1;
   return `${baseName} ${index}`;
+}
+
+function previewWorldSpeed(rawValue: string): void {
+  const nextSpeed = parseWorldSpeedInput(rawValue);
+  if (nextSpeed === undefined) return;
+  world.setTimeScale(nextSpeed);
+  renderWorldSpeedControl({ force: true, preserveInput: document.activeElement === worldSpeedInput });
+  renderFrame();
+}
+
+function commitWorldSpeed(rawValue: string): void {
+  const nextSpeed = parseWorldSpeedInput(rawValue);
+  if (nextSpeed === undefined) {
+    notice = "世界速度需要是 0 到 4 之间的数字";
+    renderWorldSpeedControl({ force: true });
+    renderUi();
+    return;
+  }
+  const projectSnapshot = store.peekProject();
+  const activeScene = projectSnapshot.scenes[projectSnapshot.activeSceneId];
+  if (!activeScene) return;
+  const previousSpeed = normalizeSceneTimeScale(activeScene.settings.timeScale);
+  world.setTimeScale(nextSpeed);
+  if (Math.abs(previousSpeed - nextSpeed) < 0.001) {
+    notice = `世界速度已是 ${formatWorldSpeed(nextSpeed)}`;
+    renderWorldSpeedControl({ force: true });
+    renderFrame();
+    return;
+  }
+
+  const speedPath = `/scenes/${activeScene.id}/settings/timeScale` as ProjectPatch["path"];
+  const result = editorTransactions.apply({
+    actor: "user",
+    patches: [{ op: "set", path: speedPath, value: nextSpeed }],
+    inversePatches: [{ op: "set", path: speedPath, value: previousSpeed }],
+    diffSummary: `设置世界速度为 ${formatWorldSpeed(nextSpeed)}`,
+    dirtyReason: `世界速度已调整为 ${formatWorldSpeed(nextSpeed)}`,
+    syncOnSuccess: false,
+    syncOnFailure: false,
+  });
+  if (!result.ok) {
+    syncWorldFromStore();
+    notice = `世界速度更新失败：${result.error}`;
+    renderAll();
+    return;
+  }
+  scene = store.peekProject().scenes[store.peekProject().activeSceneId];
+  world.setTimeScale(nextSpeed);
+  notice = `世界速度已调整为 ${formatWorldSpeed(nextSpeed)}`;
+  renderAll();
+}
+
+function parseWorldSpeedInput(rawValue: string): number | undefined {
+  const text = rawValue.trim();
+  if (!text) return undefined;
+  const numeric = Number(text);
+  if (!Number.isFinite(numeric)) return undefined;
+  return normalizeSceneTimeScale(numeric);
+}
+
+function formatWorldSpeed(value: number): string {
+  const normalized = normalizeSceneTimeScale(value);
+  return `${Number.isInteger(normalized) ? normalized.toFixed(0) : normalized.toFixed(2).replace(/0$/, "")}x`;
 }
 
 function focusEntityOnCanvas(entityId: string, part: CanvasTargetPart): void {
@@ -2756,6 +2847,7 @@ function renderUi(projectSnapshot?: Project): void {
   renderResources(snapshotProject);
   renderOutput();
   renderWorldManager(snapshotProject);
+  renderWorldSpeedControl();
   renderFrame();
   renderContextMenu();
   renderMinimizedTray();
@@ -3202,6 +3294,31 @@ function renderWorldManager(projectSnapshot: Project): void {
   }
   worldManagerPopover.innerHTML = renderWorldManagerPopoverHtml(projectSnapshot);
   bindWorldManagerInteractions(worldManagerPopover);
+}
+
+function renderWorldSpeedControl(options: { force?: boolean; preserveInput?: boolean } = {}): void {
+  const speed = normalizeSceneTimeScale(world.timeScale);
+  const signature = `${world.sceneId}|${speed}|${world.mode}`;
+  if (!options.force && uiRenderState.worldSpeed === signature) return;
+  uiRenderState.worldSpeed = signature;
+  const controlValue = String(speed);
+  worldSpeedControl.dataset.worldSpeed = controlValue;
+  worldSpeedValueNode.textContent = formatWorldSpeed(speed);
+  worldSpeedRange.min = String(WORLD_SPEED_MIN);
+  worldSpeedRange.max = String(WORLD_SPEED_MAX);
+  worldSpeedRange.step = String(WORLD_SPEED_STEP);
+  worldSpeedRange.value = controlValue;
+  worldSpeedRange.setAttribute("aria-valuetext", formatWorldSpeed(speed));
+  worldSpeedInput.min = String(WORLD_SPEED_MIN);
+  worldSpeedInput.max = String(WORLD_SPEED_MAX);
+  worldSpeedInput.step = String(WORLD_SPEED_STEP);
+  if (!options.preserveInput) worldSpeedInput.value = controlValue;
+  worldSpeedPresetButtons.forEach((button) => {
+    const preset = parseWorldSpeedInput(button.dataset.worldSpeedPreset || "");
+    const isActive = preset !== undefined && Math.abs(preset - speed) < 0.001;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", String(isActive));
+  });
 }
 
 function bindWorldManagerInteractions(popover: HTMLElement): void {
@@ -4328,6 +4445,7 @@ function syncWorldFromStore(): void {
   scene = latestScene;
   animatedResourcePresent = sceneHasVisibleAnimatedResource(latestProject);
   world.syncPersistentEntities(latestScene);
+  world.setTimeScale(latestScene.settings.timeScale);
   reconcileSelectionWithWorld();
 }
 

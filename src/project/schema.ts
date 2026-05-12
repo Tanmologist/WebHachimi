@@ -35,6 +35,7 @@ export type SceneSettings = {
   gravity: Vec2;
   tickRate: number;
   fixedStepMs: number;
+  timeScale: number;
 };
 
 export type Project = {
@@ -430,6 +431,7 @@ export type ProjectPatchPath =
   | "/activeSceneId"
   | `/meta/${string}`
   | `/scenes/${string}`
+  | `/scenes/${string}/settings/${string}`
   | `/resources/${string}`
   | `/tasks/${string}`
   | `/transactions/${string}`
@@ -646,6 +648,7 @@ export function createEmptyProject(name = "未命名游戏"): Result<Project> {
           gravity: { x: 0, y: 1600 },
           tickRate: 100,
           fixedStepMs: 1000 / 100,
+          timeScale: 1,
         },
         entities: {},
         folders: [],
@@ -712,7 +715,14 @@ export function normalizeSceneSettings(settings: SceneSettings): SceneSettings {
   const tickRate = Number.isFinite(settings.tickRate) && settings.tickRate > 0 ? settings.tickRate : 100;
   settings.tickRate = tickRate;
   settings.fixedStepMs = 1000 / tickRate;
+  settings.timeScale = normalizeSceneTimeScale(settings.timeScale);
   return settings;
+}
+
+export function normalizeSceneTimeScale(value: unknown): number {
+  const numeric = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(numeric)) return 1;
+  return Math.round(Math.max(0, Math.min(4, numeric)) * 100) / 100;
 }
 
 export function normalizeEntityDefaults(entity: Entity): Entity {
