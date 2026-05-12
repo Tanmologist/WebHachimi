@@ -1054,7 +1054,13 @@ export class RuntimeWorld {
         existing.render.opacity = 0.32;
       }
       if (existing.collider) existing.collider.size = { x: rect.w, y: rect.h };
-      existing.runtime = { ...existing.runtime, ageMs: 0, lifetimeMs };
+      existing.runtime = {
+        ...existing.runtime,
+        ageMs: 0,
+        lifetimeMs,
+        attackKind: attacker.runtime?.attackKind,
+        combatAction: attacker.runtime?.combatAction,
+      };
       return;
     }
 
@@ -1100,6 +1106,8 @@ export class RuntimeWorld {
       runtime: {
         ageMs: 0,
         lifetimeMs,
+        attackKind: attacker.runtime?.attackKind,
+        combatAction: attacker.runtime?.combatAction,
       },
     };
     const touchId = this.spawnTransient(touchEntity, lifetimeMs);

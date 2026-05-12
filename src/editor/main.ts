@@ -1,5 +1,6 @@
 import "./styles.css";
 import type { AiTaskExecutionResult, AiTaskExecutor } from "../ai/taskExecutor";
+import { attackTouchKindForEntities, planMovedAttackTouchOffsets } from "../combat/hitboxEdit";
 import { createTask } from "../project/tasks";
 import { normalizeProjectDefaults, type BrushContext, type BrushVisualEvidence, type BrushVisualFrame, type Entity, type Project, type ProjectPatch, type Scene } from "../project/schema";
 import { consumeEditorHandoff } from "../project/editorHandoff";
@@ -797,12 +798,12 @@ function startCanvasTransform(event: PointerEvent, entityId: string, part: Canva
   if (!entity) return;
   if (isAttackTouchDebugEntity(entity)) {
     if (handle !== "core") {
-      notice = "普通攻击 TOUCH BOX 目前只支持移动；大小请改父角色的 attackRange / attackHeight。";
+      notice = "TOUCH BOX 目前只支持移动；大小仍通过父角色的攻击范围/高度参数调整。";
       return;
     }
     renderer.canvas().setPointerCapture(event.pointerId);
     canvasDrag = createCanvasDragState(event.pointerId, entity, "body", "core", point);
-    notice = "正在移动普通攻击 TOUCH BOX；松开后会写入父角色 attackTouchOffsetX/Y。";
+    notice = "正在移动 TOUCH BOX；松开后会按当前攻击动作写入父角色的相对偏移。";
     return;
   }
   if (!entity.persistent || !scene.entities[entity.id]) return;
@@ -933,37 +934,35 @@ function commitAttackTouchDebugTransform(touch: Entity, drag: CanvasDragState): 
   }
 
   const direction = owner.runtime?.facing === -1 ? -1 : 1;
-  const previousRawX = params.attackTouchOffsetX;
-  const previousRawY = params.attackTouchOffsetY;
-  const previousX = numberParamValue(previousRawX) ?? 0;
-  const previousY = numberParamValue(previousRawY) ?? 0;
   const dx = touch.transform.position.x - drag.originalTransform.position.x;
   const dy = touch.transform.position.y - drag.originalTransform.position.y;
-  const nextX = roundParam(previousX + dx * direction);
-  const nextY = roundParam(previousY + dy);
+  const kind = attackTouchKindForEntities(touch, owner);
+  const edit = planMovedAttackTouchOffsets(params, kind, direction, { x: dx, y: dy });
+  const previousRawX = params[edit.offsetXKey];
+  const previousRawY = params[edit.offsetYKey];
 
-  if (Math.abs(nextX - previousX) < 0.001 && Math.abs(nextY - previousY) < 0.001) {
+  if (Math.abs(edit.nextX - edit.previousX) < 0.001 && Math.abs(edit.nextY - edit.previousY) < 0.001) {
     return "已选中普通攻击 TOUCH BOX；拖动可调整位置。";
   }
 
   const patches: ProjectPatch[] = [];
   const inversePatches: ProjectPatch[] = [];
-  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, "attackTouchOffsetX", nextX, previousRawX, hasOwnParam(params, "attackTouchOffsetX"));
-  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, "attackTouchOffsetY", nextY, previousRawY, hasOwnParam(params, "attackTouchOffsetY"));
+  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, edit.offsetXKey, edit.nextX, previousRawX, hasOwnParam(params, edit.offsetXKey));
+  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, edit.offsetYKey, edit.nextY, previousRawY, hasOwnParam(params, edit.offsetYKey));
 
   const result = editorTransactions.apply({
     actor: "user",
     patches,
     inversePatches,
-    diffSummary: `调整 ${storedOwner.displayName} 普通攻击 TOUCH BOX 偏移。`,
-    dirtyReason: `已调整 ${storedOwner.displayName} 普通攻击 TOUCH BOX`,
+    diffSummary: `调整 ${storedOwner.displayName} ${attackTouchKindLabel(kind)} TOUCH BOX 偏移。`,
+    dirtyReason: `已调整 ${storedOwner.displayName} ${attackTouchKindLabel(kind)} TOUCH BOX`,
   });
-  if (!result.ok) return `普通攻击 TOUCH BOX 偏移未提交：${result.error}`;
+  if (!result.ok) return `${attackTouchKindLabel(kind)} TOUCH BOX 偏移未提交：${result.error}`;
   selectedId = touch.id;
   selectedPart = "body";
   selectedIds = [touch.id as EntityId];
   selectionArea = undefined;
-  return `已写入 ${storedOwner.displayName} 的普通攻击 TOUCH BOX 偏移：前向 ${nextX}，上下 ${nextY}。`;
+  return `已写入 ${storedOwner.displayName} 的${attackTouchKindLabel(kind)} TOUCH BOX 偏移：前向 ${edit.nextX}，上下 ${edit.nextY}。`;
 }
 
 function commitMultiCanvasTransform(drag: MultiCanvasDragState): string | undefined {
@@ -1034,17 +1033,10 @@ function hasOwnParam(params: Record<string, unknown>, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(params, key);
 }
 
-function numberParamValue(value: unknown): number | undefined {
-  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
-  if (typeof value === "string") {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-  return undefined;
-}
-
-function roundParam(value: number): number {
-  return Math.round(value * 100) / 100;
+function attackTouchKindLabel(kind: "normal" | "charged" | "superParry"): string {
+  if (kind === "charged") return "蓄力攻击";
+  if (kind === "superParry") return "振刀处决";
+  return "普通攻击";
 }
 
 function sameTransform(left: Transform2D, right: Transform2D): boolean {

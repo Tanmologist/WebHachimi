@@ -1,4 +1,5 @@
-import { combatActionDefForEntity, combatPhaseFrames } from "../combat/actions";
+import { combatActionDefForEntity, combatAttackRectForEntity, combatPhaseFrames } from "../combat/actions";
+import { planMovedAttackTouchOffsets } from "../combat/hitboxEdit";
 import type { CombatEvent, Entity, Project, Scene } from "../project/schema";
 import { createStarterProject } from "../editor/starterProject";
 import { RuntimeWorld } from "../runtime/world";
@@ -9,6 +10,7 @@ const player = findByInternalName(scene, "Player");
 const enemy = findByInternalName(scene, "Enemy_Patrol");
 
 assertActionDefinitions(player);
+assertRelativeHitboxEditing(player);
 assertRuntimeActionContext(scene, player);
 assertDodgeWindow(scene, player, enemy);
 
@@ -36,6 +38,26 @@ function assertActionDefinitions(entity: Entity): void {
 
   assert(combatPhaseFrames(dodge, "evade") === 18, "dodge should expose an invulnerable evade phase");
   assert(dodge.windows.some((window) => window.type === "invulnerable"), "dodge should have an invulnerable window");
+}
+
+function assertRelativeHitboxEditing(entity: Entity): void {
+  entity.runtime = { ...entity.runtime, facing: 1, attackKind: "charged" };
+  const baseline = combatAttackRectForEntity(entity);
+  entity.behavior!.params.chargedAttackTouchOffsetX = 24;
+  entity.behavior!.params.chargedAttackTouchOffsetY = -10;
+  const shifted = combatAttackRectForEntity(entity);
+  assert(round(shifted.x - baseline.x) === 24, "charged attack should use its own relative x offset");
+  assert(round(shifted.y - baseline.y) === -10, "charged attack should use its own relative y offset");
+
+  const rightFacingEdit = planMovedAttackTouchOffsets(entity.behavior!.params, "charged", 1, { x: 14, y: -6 });
+  assert(rightFacingEdit.offsetXKey === "chargedAttackTouchOffsetX", "charged touch edits should write charged x offset");
+  assert(rightFacingEdit.nextX === 38 && rightFacingEdit.nextY === -16, "right-facing touch move should add local forward/up offsets");
+
+  const leftFacingEdit = planMovedAttackTouchOffsets(entity.behavior!.params, "charged", -1, { x: 14, y: -6 });
+  assert(leftFacingEdit.nextX === 10 && leftFacingEdit.nextY === -16, "left-facing touch move should invert world x into local forward offset");
+  delete entity.behavior!.params.chargedAttackTouchOffsetX;
+  delete entity.behavior!.params.chargedAttackTouchOffsetY;
+  entity.runtime = { ...entity.runtime, attackKind: undefined };
 }
 
 function assertRuntimeActionContext(sourceScene: Scene, sourcePlayer: Entity): void {
@@ -141,4 +163,8 @@ function readPath(source: unknown, path: string): unknown {
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+function round(value: number): number {
+  return Math.round(value * 100) / 100;
 }

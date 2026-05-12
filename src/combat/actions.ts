@@ -15,6 +15,7 @@ import type {
   CombatWindowShape,
   CombatWindowType,
 } from "./types";
+import { combatAttackKindFromValue } from "./hitboxEdit";
 
 type CombatActionBuildOptions = {
   chargeStage?: number;
@@ -320,8 +321,8 @@ function attackHitboxShape(entity: Entity, kind: CombatAttackKind): CombatWindow
     range: attackKindNumberParam(entity, kind, "Range") ?? numberParam(entity, "attackRange") ?? Math.max(64, bounds.w),
     height: attackKindNumberParam(entity, kind, "Height") ?? numberParam(entity, "attackHeight") ?? bounds.h,
     inset: Math.max(0, numberParam(entity, "attackTouchInset") ?? 8),
-    offsetX: numberParam(entity, "attackTouchOffsetX") ?? 0,
-    offsetY: numberParam(entity, "attackTouchOffsetY") ?? 0,
+    offsetX: attackKindNumberParam(entity, kind, "TouchOffsetX") ?? numberParam(entity, "attackTouchOffsetX") ?? 0,
+    offsetY: attackKindNumberParam(entity, kind, "TouchOffsetY") ?? numberParam(entity, "attackTouchOffsetY") ?? 0,
   };
 }
 
@@ -368,10 +369,6 @@ function attackKindNumberParam(entity: Entity, kind: CombatAttackKind, suffix: s
   if (kind === "charged") return numberParam(entity, `chargedAttack${suffix}`);
   if (kind === "superParry") return numberParam(entity, `superParryAttack${suffix}`);
   return undefined;
-}
-
-function combatAttackKindFromValue(value: unknown): CombatAttackKind | undefined {
-  return value === "normal" || value === "charged" || value === "superParry" ? value : undefined;
 }
 
 function attackLabel(kind: CombatAttackKind): string {
