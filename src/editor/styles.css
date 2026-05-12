@@ -157,7 +157,8 @@ input {
 .window-button:hover,
 .taskbar-launcher:hover,
 .window-launcher-menu button:hover,
-.world-fragment:hover {
+.world-fragment:hover,
+.world-manager-actions button:hover {
   color: var(--wb-text);
   background: #2a2f38;
 }
@@ -1449,7 +1450,17 @@ input {
 }
 
 .world-manager-window {
-  grid-template-rows: 34px minmax(0, 1fr);
+  min-width: 188px;
+  min-height: 112px;
+  grid-template-rows: 30px minmax(0, 1fr);
+}
+
+.world-manager-window .floating-tool-window__title {
+  padding: 0 6px 0 8px;
+}
+
+.world-manager-window [data-preview-reset] {
+  display: none;
 }
 
 .has-merged-tabs {
@@ -1644,25 +1655,54 @@ input {
 
 .world-manager-body {
   display: grid;
-  gap: 10px;
+  gap: 7px;
   min-height: 0;
   overflow: auto;
-  padding: 10px;
+  padding: 8px;
 }
 
-.world-manager-section {
+.world-manager-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.world-manager-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+}
+
+.world-manager-actions button {
   display: grid;
-  gap: 7px;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  color: var(--wb-muted);
+  border: 1px solid #343b46;
+  border-radius: 5px;
+  background: #202630;
+  font-weight: 800;
+}
+
+.world-compact-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
   min-width: 0;
 }
 
 .world-fragment {
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
-  min-height: 48px;
-  padding: 7px 9px;
+  min-height: 38px;
+  padding: 6px;
   color: var(--wb-muted);
-  text-align: left;
+  text-align: center;
   border: 1px solid #333a45;
   border-radius: 6px;
   background: #181c22;
@@ -1684,6 +1724,7 @@ input {
 
 .world-fragment span {
   color: #dce3ec;
+  font-size: 11px;
   font-weight: 700;
 }
 

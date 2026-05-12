@@ -67,7 +67,7 @@ type PreviewWindowSnapshot = {
 };
 
 type PreviewLayoutSnapshot = {
-  version: 6;
+  version: 7;
   createdWindows: number;
   windows: PreviewWindowSnapshot[];
 };
@@ -93,13 +93,14 @@ type PreviewController = {
   defaultWindows: Map<PreviewWindowId, PreviewWindowDefault>;
 };
 
-const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v6";
+const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v7";
 const LEGACY_PREVIEW_LAYOUT_STORAGE_KEYS = [
   "webhachimi.v2.workbenchPreview.layout.v1",
   "webhachimi.v2.workbenchPreview.layout.v2",
   "webhachimi.v2.workbenchPreview.layout.v3",
   "webhachimi.v2.workbenchPreview.layout.v4",
   "webhachimi.v2.workbenchPreview.layout.v5",
+  "webhachimi.v2.workbenchPreview.layout.v6",
 ];
 const PREVIEW_MIN_WINDOW_WIDTH = 220;
 const PREVIEW_MIN_WINDOW_HEIGHT = 150;
@@ -337,7 +338,7 @@ export function mountEditorShell(root: HTMLElement): void {
         <div class="dock-target dock-target--center" data-dock-zone="center" data-label="世界编辑组"></div>
       </div>
 
-      <section class="floating-tool-window preview-extra-window world-manager-window" data-floating-window data-dock="float" data-preview-window="world-manager" data-window-title="世界管理器" data-window-state="closed" style="left: 342px; top: 92px; width: 326px; height: 294px;" hidden>
+      <section class="floating-tool-window preview-extra-window world-manager-window" data-floating-window data-dock="float" data-preview-window="world-manager" data-window-title="世界管理器" data-window-state="open" style="left: 342px; top: 44px; width: 236px; height: 132px;">
         <div class="floating-tool-window__title" data-preview-drag>
           <span>世界管理器</span>
           <div class="pane-actions">
@@ -347,31 +348,24 @@ export function mountEditorShell(root: HTMLElement): void {
           </div>
         </div>
         <div class="world-manager-body">
-          <section class="world-manager-section">
-            <div class="section-title">世界片段</div>
+          <div class="world-manager-toolbar">
+            <span class="section-title">世界</span>
+            <div class="world-manager-actions" aria-label="世界操作">
+              <button type="button" data-world-manager-action="add" aria-label="添加世界" title="添加世界">+</button>
+              <button type="button" data-world-manager-action="edit" aria-label="修改当前世界" title="修改当前世界">✎</button>
+            </div>
+          </div>
+          <div class="world-compact-list" aria-label="切换世界">
             <button class="world-fragment is-active" type="button" data-preview-fragment>
               <span>起始世界</span>
-              <small>出生点 · 摄像机 · 地面</small>
             </button>
             <button class="world-fragment" type="button" data-preview-fragment>
               <span>死亡过场</span>
-              <small>图片淡出 · 延迟播放</small>
             </button>
             <button class="world-fragment" type="button" data-preview-fragment>
               <span>重生区域</span>
-              <small>回到安全点</small>
             </button>
-          </section>
-          <section class="world-manager-section">
-            <div class="section-title">拼接顺序</div>
-            <div class="world-chain" aria-label="世界拼接顺序">
-              <span>起始世界</span>
-              <i aria-hidden="true">→</i>
-              <span>死亡过场</span>
-              <i aria-hidden="true">→</i>
-              <span>重生区域</span>
-            </div>
-          </section>
+          </div>
         </div>
       </section>
 
@@ -483,6 +477,7 @@ function bindWorkbenchPreview(root: HTMLElement): void {
   bindFloatingWindows(controller);
   bindPreviewOpenButtons(controller);
   bindPreviewFragmentButtons(controller);
+  bindWorldManagerActions(controller);
   if (hasStoredLayout) applyStoredPreviewLayout(controller);
   renderWindowManager(controller);
   syncWorkspacePresetButtons(controller);
@@ -604,6 +599,18 @@ function bindPreviewFragmentButtons(controller: PreviewController): void {
         item.setAttribute("aria-pressed", String(item === button));
       });
       updatePointerStatus(controller.noticeStatus, `${label}已选中`);
+    });
+  });
+}
+
+function bindWorldManagerActions(controller: PreviewController): void {
+  controller.root.querySelectorAll<HTMLButtonElement>("[data-world-manager-action]").forEach((button) => {
+    if (button.dataset.worldManagerActionBound === "true") return;
+    button.dataset.worldManagerActionBound = "true";
+    button.addEventListener("click", () => {
+      const action = button.dataset.worldManagerAction || "";
+      const label = action === "edit" ? "修改当前世界" : "添加世界";
+      if (controller.noticeStatus) controller.noticeStatus.textContent = `${label}入口已就绪`;
     });
   });
 }
@@ -1282,7 +1289,7 @@ export function previewWorkspacePresetPlan(
   preset: PreviewWorkspacePreset,
   viewport: PreviewWorkspacePresetViewport,
 ): PreviewWorkspacePresetPlanEntry[] {
-  const worldManagerRect = floatingPresetRect(viewport, preset);
+  const worldManagerRect = worldManagerPresetRect(viewport);
   const hiddenWorldManager: PreviewWorkspacePresetPlanEntry = { id: "world-manager", state: "closed", dock: "float" };
   const base: PreviewWorkspacePresetPlanEntry[] = [
     { id: "tools", state: "open" },
@@ -1324,18 +1331,18 @@ export function previewWorkspacePresetPlan(
     { id: "explorer", state: "open" },
     { id: "workspace", state: "open" },
     { id: "output", state: "minimized" },
-    hiddenWorldManager,
+    { id: "world-manager", state: "open", dock: "float", rect: worldManagerRect },
   ];
 }
 
-function floatingPresetRect(viewport: PreviewWorkspacePresetViewport, preset: PreviewWorkspacePreset): PreviewWindowRect {
-  const width = Math.min(380, Math.max(300, viewport.width - 32));
-  const height = Math.min(preset === "debug" ? 360 : 320, Math.max(240, viewport.height - 128));
-  const left = preset === "debug" ? 58 : Math.max(16, viewport.width - width - 28);
-  const top = preset === "debug" ? 64 : 74;
+function worldManagerPresetRect(viewport: PreviewWorkspacePresetViewport): PreviewWindowRect {
+  const width = Math.min(236, Math.max(196, viewport.width - 24));
+  const height = Math.min(132, Math.max(112, viewport.height - 84));
+  const preferredLeft = viewport.width >= 760 ? 342 : 52;
+  const preferredTop = 44;
   return {
-    left: clamp(left, 12, Math.max(12, viewport.width - width - 12)),
-    top: clamp(top, 40, Math.max(40, viewport.height - height - 42)),
+    left: clamp(preferredLeft, 8, Math.max(8, viewport.width - width - 8)),
+    top: clamp(preferredTop, 36, Math.max(36, viewport.height - height - 40)),
     width,
     height,
   };
@@ -1517,7 +1524,7 @@ function restoreFloatingWindowStyle(root: HTMLElement, windowNode: HTMLElement, 
 function savePreviewLayout(controller: PreviewController): void {
   if (controller.restoringLayout) return;
   const snapshot: PreviewLayoutSnapshot = {
-    version: 6,
+    version: 7,
     createdWindows: controller.createdWindows,
     windows: allPreviewWindows(controller.root).map((windowNode) => previewWindowSnapshot(controller.root, windowNode)),
   };
@@ -1550,7 +1557,7 @@ function readPreviewLayoutSnapshot(): PreviewLayoutSnapshot | undefined {
     const raw = localStorage.getItem(PREVIEW_LAYOUT_STORAGE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Partial<PreviewLayoutSnapshot>;
-    if (parsed.version !== 6 || !Array.isArray(parsed.windows)) return undefined;
+    if (parsed.version !== 7 || !Array.isArray(parsed.windows)) return undefined;
     return parsed as PreviewLayoutSnapshot;
   } catch {
     return undefined;

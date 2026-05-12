@@ -9,7 +9,8 @@ assertState(edit, "explorer", "open");
 assertState(edit, "editor", "open");
 assertState(edit, "workspace", "open");
 assertState(edit, "output", "minimized");
-assertState(edit, "world-manager", "closed");
+assertState(edit, "world-manager", "open");
+assertCompactWorldManager(edit.get("world-manager"), desktop.width, desktop.height);
 
 const focus = byId(previewWorkspacePresetPlan("focus", desktop));
 assertState(focus, "tools", "open");
@@ -28,10 +29,10 @@ assertState(debug, "explorer", "open");
 assertState(debug, "workspace", "minimized");
 assertState(debug, "output", "open");
 assertState(debug, "world-manager", "open");
-assertRectInside(debug.get("world-manager"), desktop.width, desktop.height);
+assertCompactWorldManager(debug.get("world-manager"), desktop.width, desktop.height);
 
 const compactDebug = byId(previewWorkspacePresetPlan("debug", compact));
-assertRectInside(compactDebug.get("world-manager"), compact.width, compact.height);
+assertCompactWorldManager(compactDebug.get("world-manager"), compact.width, compact.height);
 
 console.log(
   JSON.stringify(
@@ -53,12 +54,14 @@ function assertState(plan: Map<string, PreviewWorkspacePresetPlanEntry>, id: str
   assert(entry?.state === state, `${id} should be ${state}`);
 }
 
-function assertRectInside(entry: PreviewWorkspacePresetPlanEntry | undefined, width: number, height: number): void {
+function assertCompactWorldManager(entry: PreviewWorkspacePresetPlanEntry | undefined, width: number, height: number): void {
   assert(entry?.rect, `${entry?.id || "window"} should include a rect`);
   assert(entry.rect.left >= 0, "floating rect should stay inside the left edge");
   assert(entry.rect.top >= 0, "floating rect should stay inside the top edge");
-  assert(entry.rect.width >= 220, "floating rect should keep a usable width");
-  assert(entry.rect.height >= 150, "floating rect should keep a usable height");
+  assert(entry.rect.width >= 188, "world manager should keep a usable compact width");
+  assert(entry.rect.width <= 236, "world manager should stay compact");
+  assert(entry.rect.height >= 112, "world manager should keep a usable compact height");
+  assert(entry.rect.height <= 132, "world manager should stay short");
   assert(entry.rect.left + entry.rect.width <= width, "floating rect should stay inside the right edge");
   assert(entry.rect.top + entry.rect.height <= height, "floating rect should stay inside the bottom edge");
 }
