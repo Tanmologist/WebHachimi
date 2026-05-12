@@ -5,11 +5,22 @@ import type {
   RuntimeSnapshot,
   Scene,
 } from "../project/schema";
+import {
+  buildCombatActionRuntime,
+  combatActionDefForEntity,
+  combatActionIdForAttackKind,
+  combatActionTotalFrames,
+  combatAttackRectForEntity,
+  combatAttackStatsForEntity,
+  combatPhaseFrames,
+  combatWindowIsOpen,
+} from "../combat/actions";
+import type { CombatActionId, CombatActionRuntime } from "../combat/types";
 import { normalizeEntityDefaults, normalizeSceneSettings } from "../project/schema";
 import { cloneJson, makeId } from "../shared/types";
 import type { EntityId, RuntimeMode, SnapshotId } from "../shared/types";
 import type { Rect, SceneId, Vec2 } from "../shared/types";
-import { boundsFor, collectDynamicPairs, entityIntersectsRect } from "./collision";
+import { collectDynamicPairs, entityIntersectsRect } from "./collision";
 import { FixedStepClock } from "./time";
 
 export type RuntimeWorldOptions = {
@@ -28,6 +39,8 @@ type AttackKind = NonNullable<NonNullable<Entity["runtime"]>["attackKind"]>;
 
 type AttackConfig = {
   kind: AttackKind;
+  actionId: CombatActionId;
+  actionRuntime: CombatActionRuntime;
   startup: number;
   active: number;
   recovery: number;
@@ -179,6 +192,7 @@ export class RuntimeWorld {
           defeated: entity.runtime?.defeated,
           hitFlashUntilFrame: entity.runtime?.hitFlashUntilFrame,
           defeatFrame: entity.runtime?.defeatFrame,
+          combatAction: entity.runtime?.combatAction,
           attackStartFrame: entity.runtime?.attackStartFrame,
           attackActiveUntilFrame: entity.runtime?.attackActiveUntilFrame,
           attackCooldownUntilFrame: entity.runtime?.attackCooldownUntilFrame,
@@ -192,6 +206,10 @@ export class RuntimeWorld {
           attackInputDown: entity.runtime?.attackInputDown,
           attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease,
           parryInputDown: entity.runtime?.parryInputDown,
+          dodgeInputDown: entity.runtime?.dodgeInputDown,
+          dodgeStartedFrame: entity.runtime?.dodgeStartedFrame,
+          dodgeUntilFrame: entity.runtime?.dodgeUntilFrame,
+          dodgeRecoveryUntilFrame: entity.runtime?.dodgeRecoveryUntilFrame,
           chargeStartedFrame: entity.runtime?.chargeStartedFrame,
           chargeHeldFrames: entity.runtime?.chargeHeldFrames,
           chargeStage: entity.runtime?.chargeStage,
@@ -253,6 +271,7 @@ export class RuntimeWorld {
         defeated: state.state.defeated === true,
         hitFlashUntilFrame: typeof state.state.hitFlashUntilFrame === "number" ? state.state.hitFlashUntilFrame : undefined,
         defeatFrame: typeof state.state.defeatFrame === "number" ? state.state.defeatFrame : undefined,
+        combatAction: combatActionRuntimeFromValue(state.state.combatAction),
         attackStartFrame: typeof state.state.attackStartFrame === "number" ? state.state.attackStartFrame : undefined,
         attackActiveUntilFrame:
           typeof state.state.attackActiveUntilFrame === "number" ? state.state.attackActiveUntilFrame : undefined,
@@ -268,6 +287,11 @@ export class RuntimeWorld {
         attackInputDown: state.state.attackInputDown === true,
         attackConsumedUntilRelease: state.state.attackConsumedUntilRelease === true,
         parryInputDown: state.state.parryInputDown === true,
+        dodgeInputDown: state.state.dodgeInputDown === true,
+        dodgeStartedFrame: typeof state.state.dodgeStartedFrame === "number" ? state.state.dodgeStartedFrame : undefined,
+        dodgeUntilFrame: typeof state.state.dodgeUntilFrame === "number" ? state.state.dodgeUntilFrame : undefined,
+        dodgeRecoveryUntilFrame:
+          typeof state.state.dodgeRecoveryUntilFrame === "number" ? state.state.dodgeRecoveryUntilFrame : undefined,
         chargeStartedFrame: typeof state.state.chargeStartedFrame === "number" ? state.state.chargeStartedFrame : undefined,
         chargeHeldFrames: typeof state.state.chargeHeldFrames === "number" ? state.state.chargeHeldFrames : undefined,
         chargeStage: typeof state.state.chargeStage === "number" ? state.state.chargeStage : undefined,
@@ -362,12 +386,14 @@ export class RuntimeWorld {
       this.stopEntity(entity);
       this.clearActiveAttack(entity);
       this.clearCharge(entity);
+      this.clearDodge(entity);
       return;
     }
     if (this.isHitStunned(entity, frame)) {
       this.stopEntity(entity);
       this.clearActiveAttack(entity);
       this.clearCharge(entity);
+      this.clearDodge(entity);
       return;
     }
     if (entity.behavior?.builtin === "enemyPatrol") {
@@ -389,6 +415,7 @@ export class RuntimeWorld {
       entity.body.velocity.x = 0;
       return;
     }
+    if (this.applyDodgeMovement(entity)) return;
     if (this.isCombatMovementLocked(entity)) {
       entity.body.velocity.x = 0;
       return;
@@ -406,6 +433,7 @@ export class RuntimeWorld {
 
   private applyEnemyPatrol(entity: Entity): void {
     if (!entity.body) return;
+    if (this.applyDodgeMovement(entity)) return;
     if (this.isCombatMovementLocked(entity)) {
       entity.body.velocity.x = 0;
       if (entity.body.mode === "kinematic") entity.body.velocity.y = 0;
@@ -449,14 +477,35 @@ export class RuntimeWorld {
     const frame = this.clock.frame;
     const attackDown = this.isInputDown(entity, "attack");
     const parryDown = this.isInputDown(entity, "parry");
+    const dodgeDown = this.isInputDown(entity, "dodge", "shift");
     const wasAttackDown = entity.runtime?.attackInputDown === true;
     const wasParryDown = entity.runtime?.parryInputDown === true;
+    const wasDodgeDown = entity.runtime?.dodgeInputDown === true;
     const attackPressed = attackDown && !wasAttackDown;
     const attackReleased = !attackDown && wasAttackDown;
     const parryPressed = parryDown && !wasParryDown;
+    const dodgePressed = dodgeDown && !wasDodgeDown;
 
     if (!attackDown && entity.runtime?.attackConsumedUntilRelease) {
-      entity.runtime = { ...entity.runtime, attackInputDown: false, attackConsumedUntilRelease: false, parryInputDown: parryDown };
+      entity.runtime = {
+        ...entity.runtime,
+        attackInputDown: false,
+        attackConsumedUntilRelease: false,
+        parryInputDown: parryDown,
+        dodgeInputDown: dodgeDown,
+      };
+      return;
+    }
+
+    if (dodgePressed && this.tryStartDodge(entity)) {
+      this.clearCharge(entity);
+      entity.runtime = {
+        ...entity.runtime,
+        attackInputDown: attackDown,
+        attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease === true || attackDown,
+        parryInputDown: parryDown,
+        dodgeInputDown: dodgeDown,
+      };
       return;
     }
 
@@ -464,8 +513,9 @@ export class RuntimeWorld {
       entity.runtime = {
         ...entity.runtime,
         attackInputDown: attackDown,
-        attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease === true || attackPressed || parryPressed,
+        attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease === true || attackPressed || parryPressed || dodgePressed,
         parryInputDown: parryDown,
+        dodgeInputDown: dodgeDown,
       };
       return;
     }
@@ -474,19 +524,31 @@ export class RuntimeWorld {
       const fromCharge = attackDown && (entity.runtime?.chargeHeldFrames ?? 0) > 0;
       if (fromCharge) {
         this.clearCharge(entity);
-        entity.runtime = { ...entity.runtime, attackInputDown: attackDown, attackConsumedUntilRelease: true, parryInputDown: parryDown };
+        entity.runtime = {
+          ...entity.runtime,
+          attackInputDown: attackDown,
+          attackConsumedUntilRelease: true,
+          parryInputDown: parryDown,
+          dodgeInputDown: dodgeDown,
+        };
       }
       this.tryStartParry(entity, { fromCharge });
     }
 
     if (entity.runtime?.attackConsumedUntilRelease) {
-      entity.runtime = { ...entity.runtime, attackInputDown: attackDown, parryInputDown: parryDown };
+      entity.runtime = { ...entity.runtime, attackInputDown: attackDown, parryInputDown: parryDown, dodgeInputDown: dodgeDown };
       return;
     }
 
     if (attackPressed && this.hasSuperParryReady(entity, frame)) {
       this.tryStartAttack(entity, { kind: "superParry" });
-      entity.runtime = { ...entity.runtime, attackInputDown: attackDown, attackConsumedUntilRelease: true, parryInputDown: parryDown };
+      entity.runtime = {
+        ...entity.runtime,
+        attackInputDown: attackDown,
+        attackConsumedUntilRelease: true,
+        parryInputDown: parryDown,
+        dodgeInputDown: dodgeDown,
+      };
       return;
     }
 
@@ -494,7 +556,7 @@ export class RuntimeWorld {
     if (attackDown) this.updateCharge(entity, wasAttackDown);
     if (attackReleased) this.releaseChargeAttack(entity);
 
-    entity.runtime = { ...entity.runtime, attackInputDown: attackDown, parryInputDown: parryDown };
+    entity.runtime = { ...entity.runtime, attackInputDown: attackDown, parryInputDown: parryDown, dodgeInputDown: dodgeDown };
   }
 
   private effectiveGravityScale(entity: Entity): number {
@@ -525,6 +587,19 @@ export class RuntimeWorld {
     return frame <= (entity.runtime?.superParryLockUntilFrame ?? -1);
   }
 
+  private applyDodgeMovement(entity: Entity, frame = this.clock.frame): boolean {
+    if (!entity.body || frame > (entity.runtime?.dodgeUntilFrame ?? -1)) return false;
+    const direction = entity.runtime?.facing === -1 ? -1 : 1;
+    entity.body.velocity.x = this.dodgeSpeed(entity) * direction;
+    if (entity.body.mode === "kinematic") entity.body.velocity.y = 0;
+    return true;
+  }
+
+  private dodgeSpeed(entity: Entity, action = combatActionDefForEntity(entity, "dodge")): number {
+    const value = action.data?.speed;
+    return typeof value === "number" && Number.isFinite(value) ? value : numberParam(entity, "dodgeSpeed") ?? 650;
+  }
+
   private isAttackActionLocked(entity: Entity, frame = this.clock.frame): boolean {
     return frame < (entity.runtime?.attackCooldownUntilFrame ?? -1);
   }
@@ -533,8 +608,16 @@ export class RuntimeWorld {
     return frame < (entity.runtime?.parryRecoveryUntilFrame ?? -1);
   }
 
+  private isDodgeActionLocked(entity: Entity, frame = this.clock.frame): boolean {
+    return frame < (entity.runtime?.dodgeRecoveryUntilFrame ?? -1);
+  }
+
+  private isDodgeInvulnerable(entity: Entity, frame = this.clock.frame): boolean {
+    return Boolean(combatWindowIsOpen(entity.runtime?.combatAction, "invulnerable", frame)) || frame <= (entity.runtime?.dodgeUntilFrame ?? -1);
+  }
+
   private isCombatActionLocked(entity: Entity, frame = this.clock.frame): boolean {
-    return this.isAttackActionLocked(entity, frame) || this.isParryActionLocked(entity, frame);
+    return this.isAttackActionLocked(entity, frame) || this.isParryActionLocked(entity, frame) || this.isDodgeActionLocked(entity, frame);
   }
 
   private isCombatMovementLocked(entity: Entity, frame = this.clock.frame): boolean {
@@ -542,46 +625,19 @@ export class RuntimeWorld {
   }
 
   private attackConfig(entity: Entity, kind: AttackKind, chargeStageInput?: number): AttackConfig {
-    if (kind === "charged") {
-      const chargeStage = Math.max(1, Math.floor(chargeStageInput || entity.runtime?.chargeStage || 1));
-      const baseDamage = Math.max(1, numberParam(entity, "chargedAttackDamage") ?? (numberParam(entity, "attackDamage") ?? 1) * 2);
-      const growth = Math.max(1, numberParam(entity, "chargedAttackDamageGrowth") ?? 1.2);
-      const storedDamage = entity.runtime?.chargeStoredDamage ?? 0;
-      return {
-        kind,
-        startup: Math.max(0, Math.floor(numberParam(entity, "chargedAttackStartupFrames") ?? 20)),
-        active: Math.max(1, Math.floor(numberParam(entity, "chargedAttackActiveFrames") ?? 50)),
-        recovery: Math.max(0, Math.floor(numberParam(entity, "chargedAttackRecoveryFrames") ?? numberParam(entity, "chargedAttackCooldownFrames") ?? 30)),
-        damage: roundDamage(baseDamage * Math.pow(growth, chargeStage - 1) + storedDamage),
-        hitStun: Math.max(0, Math.floor(numberParam(entity, "chargedAttackHitStunFrames") ?? 80)),
-        controlLevel: Math.max(1, Math.floor(numberParam(entity, "chargedAttackControlLevel") ?? 3)),
-        armorLevel: Math.max(0, Math.floor(numberParam(entity, "chargedAttackArmorLevel") ?? 3)),
-        chargeStage,
-      };
-    }
-    if (kind === "superParry") {
-      const baseDamage = Math.max(1, numberParam(entity, "attackDamage") ?? 1);
-      const multiplier = Math.max(1, numberParam(entity, "superParryAttackBaseDamageMultiplier") ?? 3);
-      return {
-        kind,
-        startup: Math.max(0, Math.floor(numberParam(entity, "superParryAttackStartupFrames") ?? 4)),
-        active: Math.max(1, Math.floor(numberParam(entity, "superParryAttackActiveFrames") ?? 12)),
-        recovery: Math.max(0, Math.floor(numberParam(entity, "superParryAttackRecoveryFrames") ?? numberParam(entity, "superParryAttackCooldownFrames") ?? 22)),
-        damage: roundDamage(baseDamage * multiplier + (entity.runtime?.superParryBonusDamage ?? 0)),
-        hitStun: Math.max(0, Math.floor(numberParam(entity, "superParryAttackHitStunFrames") ?? 60)),
-        controlLevel: Math.max(1, Math.floor(numberParam(entity, "superParryAttackControlLevel") ?? 4)),
-        armorLevel: Math.max(0, Math.floor(numberParam(entity, "superParryAttackArmorLevel") ?? 4)),
-      };
-    }
+    const stats = combatAttackStatsForEntity(entity, kind, chargeStageInput);
     return {
-      kind,
-      startup: Math.max(0, Math.floor(numberParam(entity, "attackStartupFrames") ?? 10)),
-      active: Math.max(1, Math.floor(numberParam(entity, "attackActiveFrames") ?? 30)),
-      recovery: Math.max(0, Math.floor(numberParam(entity, "attackRecoveryFrames") ?? numberParam(entity, "attackCooldownFrames") ?? 20)),
-      damage: Math.max(1, numberParam(entity, "attackDamage") ?? 1),
-      hitStun: Math.max(0, Math.floor(numberParam(entity, "attackHitStunFrames") ?? 100)),
-      controlLevel: Math.max(1, Math.floor(numberParam(entity, "attackControlLevel") ?? 1)),
-      armorLevel: Math.max(0, Math.floor(numberParam(entity, "attackArmorLevel") ?? 1)),
+      kind: stats.kind,
+      actionId: stats.action.id,
+      actionRuntime: buildCombatActionRuntime(stats.action, this.clock.frame),
+      startup: stats.startup,
+      active: stats.active,
+      recovery: stats.recovery,
+      damage: stats.damage,
+      hitStun: stats.hitStun,
+      controlLevel: stats.controlLevel,
+      armorLevel: stats.armorLevel,
+      chargeStage: stats.chargeStage,
     };
   }
 
@@ -601,6 +657,8 @@ export class RuntimeWorld {
 
   private currentArmorLevel(entity: Entity): number {
     const frame = this.clock.frame;
+    const armorWindow = combatWindowIsOpen(entity.runtime?.combatAction, "armor", frame);
+    if (armorWindow) return Math.max(0, Math.floor(armorWindow.armorLevel ?? armorWindow.level ?? 0));
     if (frame <= (entity.runtime?.parryUntilFrame ?? -1)) return Math.max(0, Math.floor(numberParam(entity, "parryArmorLevel") ?? 3));
     if (frame <= (entity.runtime?.attackActiveUntilFrame ?? -1) || frame < (entity.runtime?.attackStartFrame ?? -1)) {
       return Math.max(0, Math.floor(entity.runtime?.attackArmorLevel ?? 0));
@@ -621,12 +679,6 @@ export class RuntimeWorld {
     const diff = Math.max(0, armorLevel - controlLevel);
     const damage = roundDamage(rawDamage * (1 / (2 + k * diff)));
     return { damage, resistedDamage: roundDamage(rawDamage - damage) };
-  }
-
-  private attackKindNumberParam(entity: Entity, kind: AttackKind, suffix: string): number | undefined {
-    if (kind === "charged") return numberParam(entity, `chargedAttack${suffix}`);
-    if (kind === "superParry") return numberParam(entity, `superParryAttack${suffix}`);
-    return undefined;
   }
 
   private beginCharge(entity: Entity): void {
@@ -707,6 +759,7 @@ export class RuntimeWorld {
       attackControlLevel: config.controlLevel,
       attackArmorLevel: config.armorLevel,
       attackChargeStage: config.chargeStage,
+      combatAction: config.actionRuntime,
     };
     this.emitCombatEvent({
       type: "attackStarted",
@@ -714,6 +767,7 @@ export class RuntimeWorld {
       sourceId: entity.id,
       message: `${entity.displayName} started ${attackKindLabel(config.kind)}.`,
       data: {
+        actionId: config.actionId,
         kind: config.kind,
         startup: config.startup,
         active: config.active,
@@ -727,6 +781,47 @@ export class RuntimeWorld {
         controlLevel: config.controlLevel,
         armorLevel: config.armorLevel,
         chargeStage: config.chargeStage,
+        phases: cloneJson(config.actionRuntime.phases),
+        windows: cloneJson(config.actionRuntime.windows),
+      },
+    });
+    return true;
+  }
+
+  private tryStartDodge(entity: Entity): boolean {
+    const frame = this.clock.frame;
+    if (entity.runtime?.defeated || this.isHitStunned(entity, frame)) return false;
+    if (this.isCombatActionLocked(entity, frame)) return false;
+    const action = combatActionDefForEntity(entity, "dodge");
+    const actionRuntime = buildCombatActionRuntime(action, frame);
+    const evadeFrames = Math.max(1, combatPhaseFrames(action, "evade"));
+    const recoveryFrames = Math.max(0, combatPhaseFrames(action, "recovery"));
+    const cooldown = combatActionTotalFrames(action);
+    const speed = this.dodgeSpeed(entity, action);
+    const direction = entity.runtime?.facing === -1 ? -1 : 1;
+    if (entity.body) entity.body.velocity.x = speed * direction;
+    entity.runtime = {
+      ...entity.runtime,
+      combatAction: actionRuntime,
+      dodgeStartedFrame: frame,
+      dodgeUntilFrame: frame + evadeFrames - 1,
+      dodgeRecoveryUntilFrame: frame + cooldown,
+      attackTouchEntityId: undefined,
+    };
+    this.emitCombatEvent({
+      type: "dodgeStarted",
+      sourceId: entity.id,
+      targetId: entity.id,
+      message: `${entity.displayName} started dodge.`,
+      data: {
+        actionId: action.id,
+        evadeFrames,
+        recoveryFrames,
+        cooldown,
+        speed,
+        direction,
+        phases: cloneJson(actionRuntime.phases),
+        windows: cloneJson(actionRuntime.windows),
       },
     });
     return true;
@@ -739,12 +834,15 @@ export class RuntimeWorld {
     if (this.isParryActionLocked(entity, frame)) return false;
     const parryCooldownUntil = entity.runtime?.parryCooldownUntilFrame ?? -1;
     if (frame < parryCooldownUntil) return false;
-    const windowFrames = Math.max(1, Math.floor(numberParam(entity, "parryWindowFrames") ?? 20));
-    const recoveryFrames = Math.max(0, Math.floor(numberParam(entity, "parryRecoveryFrames") ?? numberParam(entity, "parryCooldownFrames") ?? 30));
+    const action = combatActionDefForEntity(entity, "parry");
+    const actionRuntime = buildCombatActionRuntime(action, frame);
+    const windowFrames = Math.max(1, combatPhaseFrames(action, "active"));
+    const recoveryFrames = Math.max(0, combatPhaseFrames(action, "recovery"));
     const cooldown = windowFrames + recoveryFrames;
     const animationFrames = Math.max(1, Math.floor(numberParam(entity, "parryAnimationFrames") ?? cooldown));
     entity.runtime = {
       ...entity.runtime,
+      combatAction: actionRuntime,
       parryStartedFrame: frame,
       parryAnimationUntilFrame: frame + animationFrames - 1,
       parryUntilFrame: frame + windowFrames - 1,
@@ -756,7 +854,18 @@ export class RuntimeWorld {
       defenderId: entity.id,
       sourceId: entity.id,
       message: `${entity.displayName} opened shock parry window.`,
-      data: { windowFrames, recoveryFrames, cooldown, animationFrames, fromCharge: options.fromCharge === true, armorLevel: numberParam(entity, "parryArmorLevel") ?? 3 },
+      data: {
+        actionId: action.id,
+        windowFrames,
+        recoveryFrames,
+        cooldown,
+        animationFrames,
+        fromCharge: options.fromCharge === true,
+        armorLevel: numberParam(entity, "parryArmorLevel") ?? 3,
+        controlLevel: numberParam(entity, "parryControlLevel") ?? 3,
+        phases: cloneJson(actionRuntime.phases),
+        windows: cloneJson(actionRuntime.windows),
+      },
     });
     return true;
   }
@@ -790,7 +899,14 @@ export class RuntimeWorld {
           sourceId: attacker.id,
           targetId: defender.id,
           message: `${attacker.displayName} 的普通攻击触摸到 ${defender.displayName}。`,
-          data: { actionId: attackKind, kind: attackKind, phase: "active", window: "hitbox", rect: cloneJson(attackArea), controlLevel },
+          data: {
+            actionId: combatActionIdForAttackKind(attackKind),
+            kind: attackKind,
+            phase: "active",
+            window: "hitbox",
+            rect: cloneJson(attackArea),
+            controlLevel,
+          },
         });
         const parryUntil = defender.runtime?.parryUntilFrame ?? -1;
         const parryControlLevel = numberParam(defender, "parryControlLevel") ?? 3;
@@ -820,6 +936,7 @@ export class RuntimeWorld {
           this.stopEntity(defender);
           this.clearActiveAttack(defender);
           this.clearCharge(defender);
+          this.clearDodge(defender);
         }
         attacker.runtime = { ...attacker.runtime, attackHitIds: [...hitIds] };
         this.emitCombatEvent({
@@ -877,9 +994,11 @@ export class RuntimeWorld {
       attackControlLevel: undefined,
       attackArmorLevel: undefined,
       attackChargeStage: undefined,
+      combatAction: undefined,
     };
     defender.runtime = {
       ...defender.runtime,
+      combatAction: undefined,
       parryUntilFrame: undefined,
       parryRecoveryUntilFrame: undefined,
       superParryUntilFrame: frame + superFrames,
@@ -908,20 +1027,7 @@ export class RuntimeWorld {
   }
 
   private attackTouchBounds(entity: Entity): Rect {
-    const bounds = boundsFor(entity);
-    const direction = entity.runtime?.facing === -1 ? -1 : 1;
-    const kind = entity.runtime?.attackKind || "normal";
-    const range = this.attackKindNumberParam(entity, kind, "Range") ?? numberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
-    const height = this.attackKindNumberParam(entity, kind, "Height") ?? numberParam(entity, "attackHeight") ?? bounds.h;
-    const inset = Math.max(0, numberParam(entity, "attackTouchInset") ?? 8);
-    const offsetX = numberParam(entity, "attackTouchOffsetX") ?? 0;
-    const offsetY = numberParam(entity, "attackTouchOffsetY") ?? 0;
-    return {
-      x: (direction === 1 ? bounds.x + bounds.w - inset : bounds.x - range) + direction * offsetX,
-      y: bounds.y + bounds.h / 2 - height / 2 + offsetY,
-      w: range + inset,
-      h: height,
-    };
+    return combatAttackRectForEntity(entity);
   }
 
   private canUseAttackTouch(entity: Entity): boolean {
@@ -932,6 +1038,7 @@ export class RuntimeWorld {
   private canReceiveAttackTouch(attacker: Entity, defender: Entity): boolean {
     if (defender.id === attacker.id || defender.kind !== "entity" || !defender.collider) return false;
     if (defender.runtime?.defeated) return false;
+    if (this.isDodgeInvulnerable(defender)) return false;
     if (defender.body?.mode !== "dynamic" && defender.body?.mode !== "kinematic") return false;
     return hasHealth(defender);
   }
@@ -1057,6 +1164,8 @@ export class RuntimeWorld {
     };
     this.stopEntity(entity);
     this.clearActiveAttack(entity);
+    this.clearCharge(entity);
+    this.clearDodge(entity);
     this.emitCombatEvent({
       type: "defeated",
       attackerId: source.id,
@@ -1086,6 +1195,7 @@ export class RuntimeWorld {
       attackControlLevel: undefined,
       attackArmorLevel: undefined,
       attackChargeStage: undefined,
+      combatAction: isAttackCombatAction(entity.runtime?.combatAction?.actionId) ? undefined : entity.runtime?.combatAction,
     };
   }
 
@@ -1096,6 +1206,16 @@ export class RuntimeWorld {
       chargeHeldFrames: undefined,
       chargeStage: undefined,
       chargeStoredDamage: undefined,
+    };
+  }
+
+  private clearDodge(entity: Entity): void {
+    entity.runtime = {
+      ...entity.runtime,
+      dodgeStartedFrame: undefined,
+      dodgeUntilFrame: undefined,
+      dodgeRecoveryUntilFrame: undefined,
+      combatAction: entity.runtime?.combatAction?.actionId === "dodge" ? undefined : entity.runtime?.combatAction,
     };
   }
 
@@ -1140,10 +1260,15 @@ export class RuntimeWorld {
       defeated: entity.runtime?.defeated ?? false,
       hitFlashUntilFrame: entity.runtime?.hitFlashUntilFrame,
       defeatFrame: entity.runtime?.defeatFrame,
+      combatAction: combatActionRuntimeFromValue(entity.runtime?.combatAction),
       attackKind: attackKindFromValue(entity.runtime?.attackKind),
       attackInputDown: entity.runtime?.attackInputDown ?? false,
       attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease ?? false,
       parryInputDown: entity.runtime?.parryInputDown ?? false,
+      dodgeInputDown: entity.runtime?.dodgeInputDown ?? false,
+      dodgeStartedFrame: entity.runtime?.dodgeStartedFrame,
+      dodgeUntilFrame: entity.runtime?.dodgeUntilFrame,
+      dodgeRecoveryUntilFrame: entity.runtime?.dodgeRecoveryUntilFrame,
       parryStartedFrame: entity.runtime?.parryStartedFrame,
       parryAnimationUntilFrame: entity.runtime?.parryAnimationUntilFrame,
       parryRecoveryUntilFrame: entity.runtime?.parryRecoveryUntilFrame,
@@ -1178,6 +1303,29 @@ function numberParam(entity: Entity, key: string): number | undefined {
 
 function attackKindFromValue(value: unknown): AttackKind | undefined {
   return value === "normal" || value === "charged" || value === "superParry" ? value : undefined;
+}
+
+function combatActionRuntimeFromValue(value: unknown): CombatActionRuntime | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<CombatActionRuntime>;
+  if (!isCombatActionId(candidate.actionId)) return undefined;
+  if (typeof candidate.startedFrame !== "number" || !Number.isFinite(candidate.startedFrame)) return undefined;
+  if (!Array.isArray(candidate.phases) || !Array.isArray(candidate.windows)) return undefined;
+  return cloneJson(candidate) as CombatActionRuntime;
+}
+
+function isCombatActionId(value: unknown): value is CombatActionId {
+  return (
+    value === "normalAttack" ||
+    value === "chargeAttack" ||
+    value === "parry" ||
+    value === "dodge" ||
+    value === "superParryExecution"
+  );
+}
+
+function isAttackCombatAction(actionId: CombatActionId | undefined): boolean {
+  return actionId === "normalAttack" || actionId === "chargeAttack" || actionId === "superParryExecution";
 }
 
 function attackKindLabel(kind: AttackKind): string {

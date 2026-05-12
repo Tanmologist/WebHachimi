@@ -1,4 +1,5 @@
 import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
+import { combatAttackRectForEntity } from "../combat/actions";
 import type { BrushContext, Entity, Resource, Task } from "../project/schema";
 import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
@@ -1401,23 +1402,7 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 function gameplayAttackRect(entity: Entity): { x: number; y: number; w: number; h: number } {
-  const bounds = boundsFor(entity);
-  const direction = entity.runtime?.facing === -1 ? -1 : 1;
-  const kind = entity.runtime?.attackKind || "normal";
-  const range = readAttackKindParam(entity, kind, "Range") ?? readNumberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
-  const height = readAttackKindParam(entity, kind, "Height") ?? readNumberParam(entity, "attackHeight") ?? bounds.h;
-  const inset = Math.max(0, readNumberParam(entity, "attackTouchInset") ?? 8);
-  const offsetX = readNumberParam(entity, "attackTouchOffsetX") ?? 0;
-  const offsetY = readNumberParam(entity, "attackTouchOffsetY") ?? 0;
-  const x = (direction >= 0 ? bounds.x + bounds.w - inset : bounds.x - range) + direction * offsetX;
-  const y = bounds.y + bounds.h / 2 - height / 2 + offsetY;
-  return { x, y, w: range + inset, h: height };
-}
-
-function readAttackKindParam(entity: Entity, kind: string, suffix: string): number | undefined {
-  if (kind === "charged") return readNumberParam(entity, `chargedAttack${suffix}`);
-  if (kind === "superParry") return readNumberParam(entity, `superParryAttack${suffix}`);
-  return undefined;
+  return combatAttackRectForEntity(entity);
 }
 
 function readNumberParam(entity: Entity, key: string): number | undefined {

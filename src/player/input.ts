@@ -4,7 +4,7 @@ export type PlayerInputBinding = {
   destroy(): void;
 };
 
-export type PlayerInputKey = "left" | "right" | "jump" | "attack" | "parry";
+export type PlayerInputKey = "left" | "right" | "jump" | "attack" | "parry" | "dodge";
 
 const keyMap: Record<string, PlayerInputKey | undefined> = {
   ArrowLeft: "left",
@@ -21,6 +21,9 @@ const keyMap: Record<string, PlayerInputKey | undefined> = {
   J: "attack",
   k: "parry",
   K: "parry",
+  Shift: "dodge",
+  l: "dodge",
+  L: "dodge",
 };
 
 export function playerInputKeyForMouseButton(button: number): Extract<PlayerInputKey, "attack" | "parry"> | undefined {
@@ -128,6 +131,7 @@ export function bindPlayerInput(root: HTMLElement, world: RuntimeWorld): PlayerI
       setInput("jump", false);
       setInput("attack", false);
       setInput("parry", false);
+      setInput("dodge", false);
     },
   };
 }

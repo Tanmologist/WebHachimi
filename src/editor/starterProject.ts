@@ -52,6 +52,10 @@ export function createStarterProject(): Project {
       jumpReleaseGravityScale: 2.35,
       maxFallSpeed: 1250,
       health: 3,
+      dodgeInvulnerableFrames: 18,
+      dodgeRecoveryFrames: 12,
+      dodgeSpeed: 650,
+      dodgeDistance: 86,
       parryWindowFrames: 20,
       parryCooldownFrames: 30,
       attackStartupFrames: 10,
@@ -467,6 +471,10 @@ function repairKnownCombatTouchTuning(entity: Entity): void {
     setNumberDefault(params, "attackTouchOffsetX", 0);
     setNumberDefault(params, "attackTouchOffsetY", 0);
     setNumberDefault(params, "attackTouchVisibleMs", 220);
+    setNumberDefault(params, "dodgeInvulnerableFrames", 18);
+    setNumberDefault(params, "dodgeRecoveryFrames", 12);
+    setNumberDefault(params, "dodgeSpeed", 650);
+    setNumberDefault(params, "dodgeDistance", 86);
     setNumberDefault(params, "attackControlLevel", 1);
     setNumberDefault(params, "attackArmorLevel", 1);
     setNumberDefault(params, "attackHitStunFrames", 100);
@@ -506,6 +514,10 @@ function repairKnownCombatTouchTuning(entity: Entity): void {
     setNumberDefault(params, "attackTouchOffsetX", 0);
     setNumberDefault(params, "attackTouchOffsetY", 0);
     setNumberDefault(params, "attackTouchVisibleMs", 180);
+    setNumberDefault(params, "dodgeInvulnerableFrames", 18);
+    setNumberDefault(params, "dodgeRecoveryFrames", 12);
+    setNumberDefault(params, "dodgeSpeed", 650);
+    setNumberDefault(params, "dodgeDistance", 86);
     setNumberDefault(params, "attackControlLevel", 1);
     setNumberDefault(params, "attackArmorLevel", 1);
     setNumberDefault(params, "attackHitStunFrames", 100);
@@ -645,6 +657,10 @@ function makeBox(input: BoxInput): Entity {
                   jumpReleaseGravityScale: 2.35,
                   maxFallSpeed: 1250,
                   health: 3,
+                  dodgeInvulnerableFrames: 18,
+                  dodgeRecoveryFrames: 12,
+                  dodgeSpeed: 650,
+                  dodgeDistance: 86,
                   parryWindowFrames: 20,
                   parryCooldownFrames: 30,
                   attackStartupFrames: 10,

@@ -20,6 +20,7 @@ import type {
   Vec2,
 } from "../shared/types";
 import { makeId, ok } from "../shared/types";
+import type { CombatActionRuntime } from "../combat/types";
 
 export type ProjectMeta = {
   name: string;
@@ -143,6 +144,7 @@ export type RuntimeComponent = {
   defeated?: boolean;
   hitFlashUntilFrame?: number;
   defeatFrame?: number;
+  combatAction?: CombatActionRuntime;
   attackStartFrame?: number;
   attackActiveUntilFrame?: number;
   attackCooldownUntilFrame?: number;
@@ -156,6 +158,10 @@ export type RuntimeComponent = {
   attackInputDown?: boolean;
   attackConsumedUntilRelease?: boolean;
   parryInputDown?: boolean;
+  dodgeInputDown?: boolean;
+  dodgeStartedFrame?: number;
+  dodgeUntilFrame?: number;
+  dodgeRecoveryUntilFrame?: number;
   chargeStartedFrame?: number;
   chargeHeldFrames?: number;
   chargeStage?: number;
@@ -474,6 +480,7 @@ export type CombatEvent = {
     | "parryStarted"
     | "parrySuccess"
     | "superParryReady"
+    | "dodgeStarted"
     | "hit"
     | "defeated";
   attackerId?: EntityId;

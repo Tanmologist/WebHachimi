@@ -1,4 +1,5 @@
 import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
+import { combatAttackRectForEntity } from "../combat/actions";
 import type { Entity, Resource, Scene } from "../project/schema";
 import { isAttackTouchEntity, isGameplayDebugEntity } from "../project/entityVisibility";
 import { isVisualResource, resourceFrameAtTime, type ResourceFrameRect } from "../editor/resourceAnimation";
@@ -247,7 +248,7 @@ export class PlayerRenderer {
     const latest = world.combatEvents[world.combatEvents.length - 1]?.message;
     this.hudText.text = [
       player ? `Frame ${world.clock.frame}  X ${Math.round(player.transform.position.x)}  Y ${Math.round(player.transform.position.y)}${hp}` : `Frame ${world.clock.frame}`,
-      "A/D move  W/Space jump  LMB/J attack  hold LMB/J charge  RMB/K parry",
+      "A/D move  W/Space jump  LMB/J attack  hold LMB/J charge  RMB/K parry  Shift/L dodge",
       latest ? `Latest: ${latest}` : "",
     ]
       .filter(Boolean)
@@ -423,26 +424,7 @@ function findPlayer(entities: Entity[]): Entity | undefined {
 }
 
 function attackRect(entity: Entity): { x: number; y: number; w: number; h: number } {
-  const bounds = boundsFor(entity);
-  const direction = entity.runtime?.facing === -1 ? -1 : 1;
-  const kind = entity.runtime?.attackKind || "normal";
-  const range = readAttackKindParam(entity, kind, "Range") ?? readNumberParam(entity, "attackRange") ?? Math.max(64, bounds.w);
-  const height = readAttackKindParam(entity, kind, "Height") ?? readNumberParam(entity, "attackHeight") ?? bounds.h;
-  const inset = Math.max(0, readNumberParam(entity, "attackTouchInset") ?? 8);
-  const offsetX = readNumberParam(entity, "attackTouchOffsetX") ?? 0;
-  const offsetY = readNumberParam(entity, "attackTouchOffsetY") ?? 0;
-  return {
-    x: (direction === 1 ? bounds.x + bounds.w - inset : bounds.x - range) + direction * offsetX,
-    y: bounds.y + bounds.h / 2 - height / 2 + offsetY,
-    w: range + inset,
-    h: height,
-  };
-}
-
-function readAttackKindParam(entity: Entity, kind: string, suffix: string): number | undefined {
-  if (kind === "charged") return readNumberParam(entity, `chargedAttack${suffix}`);
-  if (kind === "superParry") return readNumberParam(entity, `superParryAttack${suffix}`);
-  return undefined;
+  return combatAttackRectForEntity(entity);
 }
 
 function presentationResource(entity: Entity, resources: Record<string, Resource>): Resource | undefined {
