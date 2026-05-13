@@ -23,15 +23,19 @@ import type { Resource, ResourceBinding, TargetRef, Task } from "../project/sche
 import {
   applyCanvasDragState,
   applyMultiCanvasDragState,
+  applyParentChildMoveState,
   createCanvasDragState,
   createMultiCanvasDragState,
+  createParentChildMoveState,
   cursorForTransformHandle,
   dragNotice,
   multiDragNotice,
+  parentChildMoveDelta,
   setRotationSnapEnabled,
   setMoveSnapEnabled,
   type CanvasDragState,
   type MultiCanvasDragState,
+  type ParentChildMoveState,
 } from "./canvasTransform";
 import { createStarterProject, repairKnownStarterLabels } from "./starterProject";
 import { geometryAabb, targetGeometry, V2Renderer, type CanvasTargetPart, type ShapeDraftPreview, type TransformHandle } from "./renderer";
@@ -193,6 +197,7 @@ let pendingBrush: SuperBrushDraft | undefined;
 let superBrushTaskDialogOpen = false;
 let superBrushTaskError = "";
 let canvasDrag: CanvasDragState | undefined;
+let parentChildMoveDrag: ParentChildMoveState | undefined;
 let multiCanvasDrag: MultiCanvasDragState | undefined;
 let canvasCameraDrag: { pointerId: number; clientX: number; clientY: number; moved: boolean; clearSelectionOnClick?: boolean } | undefined;
 const gameplayMouseInputs = new Map<number, GameplayMouseInputKey>();
@@ -1054,6 +1059,7 @@ function mergeBounds(bounds: Rect[]): Rect | undefined {
 function startCanvasTransform(event: PointerEvent, entityId: string, part: CanvasTargetPart, handle: TransformHandle, point: Vec2): void {
   const entity = canvasTransformEntity(entityId);
   if (!entity) return;
+  parentChildMoveDrag = undefined;
   if (isAttackTouchDebugEntity(entity)) {
     if (handle !== "core") {
       notice = "TOUCH BOX 目前只支持移动；大小仍通过父角色的攻击范围/高度参数调整。";
@@ -1067,10 +1073,14 @@ function startCanvasTransform(event: PointerEvent, entityId: string, part: Canva
   if (!entity.persistent || !scene.entities[entity.id]) return;
   renderer.canvas().setPointerCapture(event.pointerId);
   canvasDrag = createCanvasDragState(event.pointerId, entity, part, handle, point);
+  if (canvasDrag.kind === "move" && part === "body") {
+    parentChildMoveDrag = createParentChildMoveState(entity, childEntitiesForParent(entity.id as EntityId));
+  }
   notice = dragNotice(canvasDrag.kind, "start");
 }
 
 function startMultiCanvasTransform(event: PointerEvent, entities: Entity[], handle: TransformHandle, point: Vec2): void {
+  parentChildMoveDrag = undefined;
   renderer.canvas().setPointerCapture(event.pointerId);
   multiCanvasDrag = createMultiCanvasDragState(event.pointerId, entities, handle, point);
   notice = multiDragNotice(multiCanvasDrag.kind, "start", entities.length);
@@ -1086,6 +1096,9 @@ function updateCanvasTransform(point: Vec2): void {
     movingEntityIds: [canvasDrag.entityId],
     enabled: !isTouch,
   });
+  if (parentChildMoveDrag && parentChildMoveDrag.parentId === entity.id) {
+    applyParentChildMoveState(world.allEntities(), parentChildMoveDrag, entity);
+  }
 }
 
 function updateMultiCanvasTransform(point: Vec2): void {
@@ -1110,6 +1123,29 @@ function sceneTreeEntities(): Entity[] {
   return world.allEntities();
 }
 
+function childEntitiesForParent(parentId: EntityId): Entity[] {
+  const byParent = new Map<string, Entity[]>();
+  for (const entity of world.allEntities()) {
+    if (!entity.parentId) continue;
+    const list = byParent.get(entity.parentId) || [];
+    list.push(entity);
+    byParent.set(entity.parentId, list);
+  }
+
+  const descendants: Entity[] = [];
+  const seen = new Set<string>([parentId]);
+  const visit = (entityId: EntityId) => {
+    for (const child of byParent.get(entityId) || []) {
+      if (seen.has(child.id)) continue;
+      seen.add(child.id);
+      descendants.push(child);
+      visit(child.id as EntityId);
+    }
+  };
+  visit(parentId);
+  return descendants;
+}
+
 function editableEntity(entityId: string): Entity | undefined {
   return world.entities.get(entityId);
 }
@@ -1131,7 +1167,7 @@ function isAttackTouchDebugEntity(entity: Entity | undefined): boolean {
   );
 }
 
-function commitCanvasTransform(drag: CanvasDragState): string | undefined {
+function commitCanvasTransform(drag: CanvasDragState, parentChildMove?: ParentChildMoveState): string | undefined {
   const entity = editableEntity(drag.entityId);
   if (!entity) {
     const runtimeEntity = world.entityById(drag.entityId as EntityId);
@@ -1160,6 +1196,7 @@ function commitCanvasTransform(drag: CanvasDragState): string | undefined {
       drag.originalCollider ? { op: "set", path: colliderPath, value: drag.originalCollider } : { op: "delete", path: colliderPath },
     );
   }
+  appendParentChildMovePatches(patches, inversePatches, parentChildMove, entity);
   if (!patches.length) return undefined;
 
   const result = editorTransactions.apply({
@@ -1173,6 +1210,27 @@ function commitCanvasTransform(drag: CanvasDragState): string | undefined {
     return `变换未提交：${result.error}`;
   }
   return `已提交本体变换：${transformActionLabel(drag.kind)}。`;
+}
+
+function appendParentChildMovePatches(
+  patches: ProjectPatch[],
+  inversePatches: ProjectPatch[],
+  parentChildMove: ParentChildMoveState | undefined,
+  parent: Entity,
+): void {
+  if (!parentChildMove || parentChildMove.parentId !== parent.id) return;
+  const delta = parentChildMoveDelta(parentChildMove, parent);
+  if (Math.abs(delta.x) < 0.001 && Math.abs(delta.y) < 0.001) return;
+
+  for (const entry of parentChildMove.entries) {
+    const child = editableEntity(entry.entityId);
+    if (!child || !child.persistent || !scene.entities[child.id]) continue;
+    const finalTransform = cloneJson(child.transform);
+    if (sameTransform(entry.originalTransform, finalTransform)) continue;
+    const transformPath = `/scenes/${scene.id}/entities/${child.id}/transform` as ProjectPatch["path"];
+    patches.push({ op: "set", path: transformPath, value: finalTransform });
+    inversePatches.push({ op: "set", path: transformPath, value: entry.originalTransform });
+  }
 }
 
 function commitAttackTouchDebugTransform(touch: Entity, drag: CanvasDragState): string | undefined {
@@ -1399,6 +1457,7 @@ function cancelCanvasPointerInteraction(event: PointerEvent): void {
   }
   if (canvasDrag?.pointerId === event.pointerId) {
     canvasDrag = undefined;
+    parentChildMoveDrag = undefined;
     syncWorldFromStore();
     renderAll();
     return;
@@ -2043,9 +2102,11 @@ function onCanvasPointerUp(event: PointerEvent): void {
   if (finishCanvasCameraDrag(event)) return;
   if (canvasDrag && canvasDrag.pointerId === event.pointerId) {
     const finishedDrag = canvasDrag;
+    const finishedParentChildMove = parentChildMoveDrag;
     canvasDrag = undefined;
+    parentChildMoveDrag = undefined;
     releaseCanvasPointer(event.pointerId);
-    notice = commitCanvasTransform(finishedDrag) || dragNotice(finishedDrag.kind, "finish");
+    notice = commitCanvasTransform(finishedDrag, finishedParentChildMove) || dragNotice(finishedDrag.kind, "finish");
     renderAll();
     return;
   }
@@ -2696,6 +2757,7 @@ function applyLoadedProjectFromDisk(projectFromDisk: Project, saveStatus: string
   superBrushTaskInput.value = "";
   currentStrokePoints = [];
   canvasDrag = undefined;
+  parentChildMoveDrag = undefined;
   shapeDrag = undefined;
   polygonDraft = undefined;
   invalidateUiRenderCache();

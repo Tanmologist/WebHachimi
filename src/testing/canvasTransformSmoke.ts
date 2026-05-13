@@ -3,10 +3,13 @@ import type { EntityId } from "../shared/types";
 import {
   applyCanvasDragState,
   applyMultiCanvasDragState,
+  applyParentChildMoveState,
   createCanvasDragState,
   createMultiCanvasDragState,
+  createParentChildMoveState,
   snapRotation,
 } from "../editor/canvasTransform";
+import { shouldDrawAnchorLineForEntity, shouldDrawPresentationAnchorLineForEntity } from "../editor/renderer";
 
 run("body east handle scales body from one side without resizing presentation", () => {
   const entity = createEntity();
@@ -104,6 +107,40 @@ run("body move snaps body anchors to the editor grid", () => {
 
   assert(entity.transform.position.x === 144, `expected x to snap to 48px grid, got ${entity.transform.position.x}`);
   assert(entity.transform.position.y === 120, `expected y unchanged, got ${entity.transform.position.y}`);
+});
+
+run("parent move carries child world positions and preserves relative offset", () => {
+  const parent = createUnrotatedEntity("entity-parent", 100, 100);
+  const child = createUnrotatedEntity("entity-child", 135, 88);
+  child.parentId = parent.id;
+  const grandchild = createUnrotatedEntity("entity-grandchild", 150, 90);
+  grandchild.parentId = child.id;
+  const drag = createParentChildMoveState(parent, [child, grandchild]);
+  assert(drag, "expected parent child move state");
+
+  parent.transform.position = { x: 124, y: 108 };
+  applyParentChildMoveState([parent, child, grandchild], drag, parent);
+
+  assert(child.transform.position.x === 159, `expected child x to follow parent delta, got ${child.transform.position.x}`);
+  assert(child.transform.position.y === 96, `expected child y to follow parent delta, got ${child.transform.position.y}`);
+  assert(grandchild.transform.position.x === 174, `expected grandchild x to follow parent delta, got ${grandchild.transform.position.x}`);
+  assert(grandchild.transform.position.y === 98, `expected grandchild y to follow parent delta, got ${grandchild.transform.position.y}`);
+  assert(
+    child.transform.position.x - parent.transform.position.x === 35,
+    `expected child relative x 35, got ${child.transform.position.x - parent.transform.position.x}`,
+  );
+});
+
+run("anchor line appears only for selected child entities", () => {
+  const parent = createEntity("entity-anchor-parent");
+  const child = createEntity("entity-anchor-child");
+  child.parentId = parent.id;
+
+  assert(shouldDrawAnchorLineForEntity(child, new Set([child.id])), "selected child should show anchor line");
+  assert(!shouldDrawAnchorLineForEntity(child, new Set([parent.id])), "selected parent should not show child anchor line");
+  assert(!shouldDrawAnchorLineForEntity(parent, new Set([parent.id])), "parent without parentId should not show anchor line");
+  assert(shouldDrawPresentationAnchorLineForEntity(parent, parent.id, "presentation"), "selected presentation should show body-to-presentation anchor line");
+  assert(!shouldDrawPresentationAnchorLineForEntity(parent, parent.id, "body"), "selected body should not show presentation anchor line");
 });
 
 run("multi-body move snaps group edge to a nearby entity edge", () => {

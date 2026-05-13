@@ -6,6 +6,17 @@ import { clamp, computeMultiSelectionBounds, fromLocal, toLocal } from "./render
 
 export type Bounds = { center: Vec2; width: number; height: number };
 
+export type ParentChildMoveEntry = {
+  entityId: EntityId;
+  originalTransform: Transform2D;
+};
+
+export type ParentChildMoveState = {
+  parentId: EntityId;
+  originalParentTransform: Transform2D;
+  entries: ParentChildMoveEntry[];
+};
+
 export type CanvasDragState =
   | {
       kind: "move";
@@ -192,6 +203,41 @@ export function applyCanvasDragState(
     return;
   }
   applyOneSidedScale(entity, drag, point);
+}
+
+export function createParentChildMoveState(parent: Entity, descendants: Entity[]): ParentChildMoveState | undefined {
+  const entries = descendants
+    .filter((entity) => entity.id !== parent.id)
+    .map((entity) => ({
+      entityId: entity.id,
+      originalTransform: cloneTransform(entity.transform),
+    }));
+  if (entries.length === 0) return undefined;
+  return {
+    parentId: parent.id,
+    originalParentTransform: cloneTransform(parent.transform),
+    entries,
+  };
+}
+
+export function applyParentChildMoveState(entities: Entity[], drag: ParentChildMoveState, parent: Entity): void {
+  const delta = parentChildMoveDelta(drag, parent);
+  const entityMap = new Map(entities.map((entity) => [entity.id, entity]));
+  for (const entry of drag.entries) {
+    const entity = entityMap.get(entry.entityId);
+    if (!entity) continue;
+    entity.transform.position = {
+      x: entry.originalTransform.position.x + delta.x,
+      y: entry.originalTransform.position.y + delta.y,
+    };
+  }
+}
+
+export function parentChildMoveDelta(drag: ParentChildMoveState, parent: Entity): Vec2 {
+  return {
+    x: parent.transform.position.x - drag.originalParentTransform.position.x,
+    y: parent.transform.position.y - drag.originalParentTransform.position.y,
+  };
 }
 
 function snapMoveCenter(params: {

@@ -191,6 +191,15 @@ export class V2Renderer {
       this.drawEntity(world, entity, selectedPart, showBodyMaterial, showEditorDecorations, resources, options.animationTimeMs || 0);
     }
     if (showEditorDecorations) {
+      if (selectedIds) {
+        for (const entity of entities) {
+          if (shouldDrawPresentationAnchorLineForEntity(entity, options.selectedId, options.selectedPart, isMultiSelect)) {
+            this.drawPresentationAnchorLine(entity);
+          } else if (shouldDrawAnchorLineForEntity(entity, selectedIds)) {
+            this.drawEntityAnchorLine(world, entity);
+          }
+        }
+      }
       if (isMultiSelect) {
         const selectedEntities = entities.filter((e) => selectedIds!.has(e.id));
         this.drawMultiSelection(selectedEntities);
@@ -420,7 +429,6 @@ export class V2Renderer {
       resources,
       presentationAnimationTimeMs(entity, world, animationTimeMs),
     );
-    if (showEditorDecorations && entity.parentId) this.drawCoreLink(world, entity);
     if (showEditorDecorations && selectedPart) this.drawSelection(entity, selectedPart);
   }
 
@@ -672,17 +680,29 @@ export class V2Renderer {
     this.worldLayer.addChild(label);
   }
 
-  private drawCoreLink(world: RuntimeWorld, entity: Entity): void {
+  private drawEntityAnchorLine(world: RuntimeWorld, entity: Entity): void {
     const parent = world.entityById(entity.parentId);
     if (!parent) return;
-    const from = parent.transform.position;
-    const to = entity.transform.position;
+    this.drawAnchorSegment(parent.transform.position, entity.transform.position);
+  }
+
+  private drawPresentationAnchorLine(entity: Entity): void {
+    this.drawAnchorSegment(entity.transform.position, targetGeometry(entity, "presentation").center);
+  }
+
+  private drawAnchorSegment(from: Vec2, to: Vec2): void {
     if (Math.abs(from.x - to.x) + Math.abs(from.y - to.y) < 2) return;
     const link = this.takeGraphics();
-    link.setStrokeStyle({ width: 1, color: 0xd7a84a, alpha: 0.72 });
+    link.setStrokeStyle({ width: 2, color: 0xd7a84a, alpha: 0.88 });
     link.moveTo(from.x, from.y);
     link.lineTo(to.x, to.y);
     link.stroke();
+    link.circle(from.x, from.y, 3.5);
+    link.fill({ color: 0x101211, alpha: 1 });
+    link.setStrokeStyle({ width: 1.5, color: 0xd7a84a, alpha: 0.92 });
+    link.stroke();
+    link.circle(to.x, to.y, 5);
+    link.fill({ color: 0xd7a84a, alpha: 0.96 });
     this.overlayLayer.addChild(link);
   }
 
@@ -1157,6 +1177,19 @@ export function computeMultiSelectionBounds(entities: Entity[]): { center: Vec2;
     width: Math.max(width, 4),
     height: Math.max(height, 4),
   };
+}
+
+export function shouldDrawAnchorLineForEntity(entity: Entity, selectedIds: ReadonlySet<string> | undefined): boolean {
+  return Boolean(entity.parentId && selectedIds?.has(entity.id));
+}
+
+export function shouldDrawPresentationAnchorLineForEntity(
+  entity: Entity,
+  selectedId: string | undefined,
+  selectedPart: CanvasTargetPart | undefined,
+  isMultiSelect = false,
+): boolean {
+  return Boolean(!isMultiSelect && entity.render && selectedId === entity.id && selectedPart === "presentation");
 }
 
 function normalizeRect(rect: { x: number; y: number; w: number; h: number }): { x: number; y: number; w: number; h: number } {

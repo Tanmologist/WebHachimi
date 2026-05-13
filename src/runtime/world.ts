@@ -107,6 +107,7 @@ export class RuntimeWorld {
 
   stepFixed(): void {
     const dt = this.clock.fixedStepMs / 1000;
+    const beforeMovementPositions = this.captureEntityPositions();
     this.beginFixedStep();
     const all = this.allEntities();
     for (const entity of all) {
@@ -122,7 +123,10 @@ export class RuntimeWorld {
       entity.transform.position.x += entity.body.velocity.x * dt;
       entity.transform.position.y += entity.body.velocity.y * dt;
     }
+    this.propagateChildTranslationFromParentDelta(beforeMovementPositions);
+    const beforeCollisionPositions = this.captureEntityPositions();
     this.resolveSimpleCollisions();
+    this.propagateChildTranslationFromParentDelta(beforeCollisionPositions);
     this.resolveCombatEvents();
     this.updateCombatPresentationStates();
     this.cleanupExpiredTransients();
@@ -383,6 +387,53 @@ export class RuntimeWorld {
         patrolDirection: flags.patrolDirection,
       };
     }
+  }
+
+  private captureEntityPositions(): Map<string, Vec2> {
+    return new Map(this.allEntities().map((entity) => [entity.id, { ...entity.transform.position }]));
+  }
+
+  private propagateChildTranslationFromParentDelta(previousPositions: ReadonlyMap<string, Vec2>): void {
+    const entities = this.allEntities();
+    const byParent = new Map<string, Entity[]>();
+    const byId = new Map<string, Entity>();
+    for (const entity of entities) {
+      byId.set(entity.id, entity);
+      if (!entity.parentId) continue;
+      const children = byParent.get(entity.parentId) || [];
+      children.push(entity);
+      byParent.set(entity.parentId, children);
+    }
+
+    const visited = new Set<string>();
+    const visiting = new Set<string>();
+    const visit = (entity: Entity) => {
+      if (visited.has(entity.id) || visiting.has(entity.id)) return;
+      visiting.add(entity.id);
+      const previous = previousPositions.get(entity.id);
+      const delta = previous
+        ? {
+            x: entity.transform.position.x - previous.x,
+            y: entity.transform.position.y - previous.y,
+          }
+        : { x: 0, y: 0 };
+
+      for (const child of byParent.get(entity.id) || []) {
+        if (child.id === entity.id) continue;
+        if (Math.abs(delta.x) >= 0.001 || Math.abs(delta.y) >= 0.001) {
+          child.transform.position.x += delta.x;
+          child.transform.position.y += delta.y;
+        }
+        visit(child);
+      }
+      visiting.delete(entity.id);
+      visited.add(entity.id);
+    };
+
+    for (const entity of entities) {
+      if (!entity.parentId || !byId.has(entity.parentId)) visit(entity);
+    }
+    for (const entity of entities) visit(entity);
   }
 
   private applyBuiltinBehavior(entity: Entity): void {

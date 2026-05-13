@@ -216,6 +216,9 @@ runSmoke("combat slice lets player attack damage enemy", () => {
   const touchBoxes = world.allEntities().filter((entity) => !entity.persistent && entity.tags.includes("touch"));
   assert(touchBoxes.length > 0, "player attack should spawn a runtime touch box");
   assert(touchBoxes.every(isGameplayDebugEntity), "runtime touch boxes should be hidden by gameplay renderers");
+  assert(touchBoxes.every((box) => box.parentId === player.id), "runtime touch boxes should be anchored to the attacking parent");
+  assert(touchBoxes.every((box) => box.collider?.trigger === true && box.collider.solid === false), "runtime touch boxes should touch but not collide");
+  assert(touchBoxes.every((box) => box.body?.mode === "none"), "runtime touch boxes should not participate as physics bodies");
   assert(touch.data?.phase === "active" && touch.data?.window === "hitbox", "attack touch event should describe the active hitbox window");
   assert(
     !world.combatEvents.some((event) => event.type === "hit" && touchBoxes.some((box) => event.defenderId === box.id)),
