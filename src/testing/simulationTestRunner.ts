@@ -184,7 +184,7 @@ export class SimulationTestRunner {
         channel: "combat",
         level: "info",
         frame: event.frame,
-        timeMs: event.frame * options.world.clock.fixedStepMs,
+        timeMs: event.timeMs,
         taskId: options.taskId,
         transactionId: options.transactionId,
         message: event.message,

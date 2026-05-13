@@ -21,6 +21,8 @@ type CombatActionBuildOptions = {
   chargeStage?: number;
 };
 
+const LEGACY_COMBAT_FRAME_MS = 10;
+
 export function combatActionIdForAttackKind(kind: CombatAttackKind): CombatActionId {
   if (kind === "charged") return "chargeAttack";
   if (kind === "superParry") return "superParryExecution";
@@ -55,33 +57,33 @@ export function combatAttackStatsForEntity(
   return {
     kind,
     action,
-    startup: combatPhaseFrames(action, "startup"),
-    active: combatPhaseFrames(action, "active"),
-    recovery: combatPhaseFrames(action, "recovery"),
+    startupMs: combatPhaseDurationMs(action, "startup"),
+    activeMs: combatPhaseDurationMs(action, "active"),
+    recoveryMs: combatPhaseDurationMs(action, "recovery"),
     damage: actionNumber(action, "damage", 1),
-    hitStun: actionNumber(action, "hitStunFrames", 0),
+    hitStunMs: actionNumber(action, "hitStunMs", 0),
     controlLevel: actionNumber(action, "controlLevel", 1),
     armorLevel: actionNumber(action, "armorLevel", 0),
     chargeStage: typeof action.data?.chargeStage === "number" ? action.data.chargeStage : undefined,
   };
 }
 
-export function buildCombatActionRuntime(action: CombatActionDef, startedFrame: number): CombatActionRuntime {
+export function buildCombatActionRuntime(action: CombatActionDef, startedMs: number): CombatActionRuntime {
   const phases: CombatRuntimePhase[] = [];
-  let cursor = startedFrame;
+  let cursor = startedMs;
   for (const phase of action.phases) {
-    const frames = Math.max(0, Math.floor(phase.frames));
-    if (frames <= 0) continue;
+    const durationMs = Math.max(0, phase.durationMs);
+    if (durationMs <= 0) continue;
     phases.push({
       id: phase.id,
       label: phase.label,
-      startsAtFrame: cursor,
-      untilFrame: cursor + frames - 1,
+      startsAtMs: cursor,
+      untilMs: cursor + durationMs,
     });
-    cursor += frames;
+    cursor += durationMs;
   }
-  const firstFrame = phases[0]?.startsAtFrame ?? startedFrame;
-  const lastFrame = phases[phases.length - 1]?.untilFrame ?? startedFrame;
+  const firstMs = phases[0]?.startsAtMs ?? startedMs;
+  const lastMs = phases[phases.length - 1]?.untilMs ?? startedMs;
   const windows: CombatRuntimeWindow[] = [];
   for (const window of action.windows) {
     const phase = window.phase === "all" ? undefined : phases.find((item) => item.id === window.phase);
@@ -90,8 +92,8 @@ export function buildCombatActionRuntime(action: CombatActionDef, startedFrame: 
       id: window.id,
       type: window.type,
       label: window.label,
-      startsAtFrame: phase?.startsAtFrame ?? firstFrame,
-      untilFrame: phase?.untilFrame ?? lastFrame,
+      startsAtMs: phase?.startsAtMs ?? firstMs,
+      untilMs: phase?.untilMs ?? lastMs,
       level: window.level,
       controlLevel: window.controlLevel,
       armorLevel: window.armorLevel,
@@ -101,18 +103,26 @@ export function buildCombatActionRuntime(action: CombatActionDef, startedFrame: 
   return {
     actionId: action.id,
     label: action.label,
-    startedFrame,
+    startedMs,
     phases,
     windows,
   };
 }
 
+export function combatPhaseDurationMs(action: CombatActionDef, phaseId: CombatPhaseId): number {
+  return action.phases.find((phase) => phase.id === phaseId)?.durationMs ?? 0;
+}
+
+export function combatActionTotalDurationMs(action: CombatActionDef): number {
+  return action.phases.reduce((total, phase) => total + Math.max(0, phase.durationMs), 0);
+}
+
 export function combatPhaseFrames(action: CombatActionDef, phaseId: CombatPhaseId): number {
-  return action.phases.find((phase) => phase.id === phaseId)?.frames ?? 0;
+  return Math.round(combatPhaseDurationMs(action, phaseId) / LEGACY_COMBAT_FRAME_MS);
 }
 
 export function combatActionTotalFrames(action: CombatActionDef): number {
-  return action.phases.reduce((total, phase) => total + Math.max(0, Math.floor(phase.frames)), 0);
+  return Math.round(combatActionTotalDurationMs(action) / LEGACY_COMBAT_FRAME_MS);
 }
 
 export function combatAttackRectForEntity(entity: Entity): Rect {
@@ -127,14 +137,14 @@ export function combatAttackRectForEntity(entity: Entity): Rect {
 export function combatWindowIsOpen(
   runtime: CombatActionRuntime | undefined,
   type: CombatWindowType,
-  frame: number,
+  timeMs: number,
 ): CombatRuntimeWindow | undefined {
-  return runtime?.windows.find((window) => window.type === type && frame >= window.startsAtFrame && frame <= window.untilFrame);
+  return runtime?.windows.find((window) => window.type === type && timeMs >= window.startsAtMs && timeMs < window.untilMs);
 }
 
 function attackActionDef(entity: Entity, kind: CombatAttackKind, options: CombatActionBuildOptions): CombatActionDef {
   const stats = attackNumbers(entity, kind, options.chargeStage);
-  const phases = attackPhases(stats.startup, stats.active, stats.recovery);
+  const phases = attackPhases(stats.startupMs, stats.activeMs, stats.recoveryMs);
   const windows: CombatWindowDef[] = [
     {
       id: `${combatActionIdForAttackKind(kind)}-hitbox`,
@@ -162,7 +172,7 @@ function attackActionDef(entity: Entity, kind: CombatAttackKind, options: Combat
   const data: Record<string, number | string | boolean> = {
     attackKind: kind,
     damage: stats.damage,
-    hitStunFrames: stats.hitStun,
+    hitStunMs: stats.hitStunMs,
     controlLevel: stats.controlLevel,
     armorLevel: stats.armorLevel,
   };
@@ -178,10 +188,10 @@ function attackActionDef(entity: Entity, kind: CombatAttackKind, options: Combat
 }
 
 function parryActionDef(entity: Entity): CombatActionDef {
-  const active = frameParam(entity, ["parryWindowFrames"], 20, 1);
-  const recovery = frameParam(entity, ["parryRecoveryFrames", "parryCooldownFrames"], 30, 0);
-  const armorLevel = frameParam(entity, ["parryArmorLevel"], 3, 0);
-  const controlLevel = frameParam(entity, ["parryControlLevel"], 3, 1);
+  const active = durationParam(entity, ["parryWindowMs"], ["parryWindowFrames"], 200, 1);
+  const recovery = durationParam(entity, ["parryRecoveryMs", "parryCooldownMs"], ["parryRecoveryFrames", "parryCooldownFrames"], 300, 0);
+  const armorLevel = integerParam(entity, ["parryArmorLevel"], 3, 0);
+  const controlLevel = integerParam(entity, ["parryControlLevel"], 3, 1);
   return {
     id: "parry",
     label: "振刀",
@@ -215,8 +225,8 @@ function parryActionDef(entity: Entity): CombatActionDef {
       },
     ],
     data: {
-      windowFrames: active,
-      recoveryFrames: recovery,
+      windowMs: active,
+      recoveryMs: recovery,
       controlLevel,
       armorLevel,
     },
@@ -224,8 +234,8 @@ function parryActionDef(entity: Entity): CombatActionDef {
 }
 
 function dodgeActionDef(entity: Entity): CombatActionDef {
-  const evade = frameParam(entity, ["dodgeInvulnerableFrames", "dodgeActiveFrames"], 18, 1);
-  const recovery = frameParam(entity, ["dodgeRecoveryFrames", "dodgeCooldownFrames"], 12, 0);
+  const evade = durationParam(entity, ["dodgeInvulnerableMs", "dodgeActiveMs"], ["dodgeInvulnerableFrames", "dodgeActiveFrames"], 180, 1);
+  const recovery = durationParam(entity, ["dodgeRecoveryMs", "dodgeCooldownMs"], ["dodgeRecoveryFrames", "dodgeCooldownFrames"], 120, 0);
   const distance = numberParam(entity, "dodgeDistance") ?? 86;
   const speed = numberParam(entity, "dodgeSpeed") ?? 650;
   return {
@@ -257,8 +267,8 @@ function dodgeActionDef(entity: Entity): CombatActionDef {
       },
     ],
     data: {
-      evadeFrames: evade,
-      recoveryFrames: recovery,
+      evadeMs: evade,
+      recoveryMs: recovery,
       distance,
       speed,
     },
@@ -272,13 +282,19 @@ function attackNumbers(entity: Entity, kind: CombatAttackKind, chargeStageInput?
     const growth = Math.max(1, numberParam(entity, "chargedAttackDamageGrowth") ?? 1.2);
     const storedDamage = entity.runtime?.chargeStoredDamage ?? 0;
     return {
-      startup: frameParam(entity, ["chargedAttackStartupFrames"], 20, 0),
-      active: frameParam(entity, ["chargedAttackActiveFrames"], 50, 1),
-      recovery: frameParam(entity, ["chargedAttackRecoveryFrames", "chargedAttackCooldownFrames"], 30, 0),
+      startupMs: durationParam(entity, ["chargedAttackStartupMs"], ["chargedAttackStartupFrames"], 200, 0),
+      activeMs: durationParam(entity, ["chargedAttackActiveMs"], ["chargedAttackActiveFrames"], 500, 1),
+      recoveryMs: durationParam(
+        entity,
+        ["chargedAttackRecoveryMs", "chargedAttackCooldownMs"],
+        ["chargedAttackRecoveryFrames", "chargedAttackCooldownFrames"],
+        300,
+        0,
+      ),
       damage: roundDamage(baseDamage * Math.pow(growth, chargeStage - 1) + storedDamage),
-      hitStun: frameParam(entity, ["chargedAttackHitStunFrames"], 80, 0),
-      controlLevel: frameParam(entity, ["chargedAttackControlLevel"], 3, 1),
-      armorLevel: frameParam(entity, ["chargedAttackArmorLevel"], 3, 0),
+      hitStunMs: durationParam(entity, ["chargedAttackHitStunMs"], ["chargedAttackHitStunFrames"], 800, 0),
+      controlLevel: integerParam(entity, ["chargedAttackControlLevel"], 3, 1),
+      armorLevel: integerParam(entity, ["chargedAttackArmorLevel"], 3, 0),
       chargeStage,
     };
   }
@@ -286,31 +302,37 @@ function attackNumbers(entity: Entity, kind: CombatAttackKind, chargeStageInput?
     const baseDamage = Math.max(1, numberParam(entity, "attackDamage") ?? 1);
     const multiplier = Math.max(1, numberParam(entity, "superParryAttackBaseDamageMultiplier") ?? 3);
     return {
-      startup: frameParam(entity, ["superParryAttackStartupFrames"], 4, 0),
-      active: frameParam(entity, ["superParryAttackActiveFrames"], 12, 1),
-      recovery: frameParam(entity, ["superParryAttackRecoveryFrames", "superParryAttackCooldownFrames"], 22, 0),
+      startupMs: durationParam(entity, ["superParryAttackStartupMs"], ["superParryAttackStartupFrames"], 40, 0),
+      activeMs: durationParam(entity, ["superParryAttackActiveMs"], ["superParryAttackActiveFrames"], 120, 1),
+      recoveryMs: durationParam(
+        entity,
+        ["superParryAttackRecoveryMs", "superParryAttackCooldownMs"],
+        ["superParryAttackRecoveryFrames", "superParryAttackCooldownFrames"],
+        220,
+        0,
+      ),
       damage: roundDamage(baseDamage * multiplier + (entity.runtime?.superParryBonusDamage ?? 0)),
-      hitStun: frameParam(entity, ["superParryAttackHitStunFrames"], 60, 0),
-      controlLevel: frameParam(entity, ["superParryAttackControlLevel"], 4, 1),
-      armorLevel: frameParam(entity, ["superParryAttackArmorLevel"], 4, 0),
+      hitStunMs: durationParam(entity, ["superParryAttackHitStunMs"], ["superParryAttackHitStunFrames"], 600, 0),
+      controlLevel: integerParam(entity, ["superParryAttackControlLevel"], 4, 1),
+      armorLevel: integerParam(entity, ["superParryAttackArmorLevel"], 4, 0),
     };
   }
   return {
-    startup: frameParam(entity, ["attackStartupFrames"], 10, 0),
-    active: frameParam(entity, ["attackActiveFrames"], 30, 1),
-    recovery: frameParam(entity, ["attackRecoveryFrames", "attackCooldownFrames"], 20, 0),
+    startupMs: durationParam(entity, ["attackStartupMs"], ["attackStartupFrames"], 100, 0),
+    activeMs: durationParam(entity, ["attackActiveMs"], ["attackActiveFrames"], 300, 1),
+    recoveryMs: durationParam(entity, ["attackRecoveryMs", "attackCooldownMs"], ["attackRecoveryFrames", "attackCooldownFrames"], 200, 0),
     damage: Math.max(1, numberParam(entity, "attackDamage") ?? 1),
-    hitStun: frameParam(entity, ["attackHitStunFrames"], 100, 0),
-    controlLevel: frameParam(entity, ["attackControlLevel"], 1, 1),
-    armorLevel: frameParam(entity, ["attackArmorLevel"], 1, 0),
+    hitStunMs: durationParam(entity, ["attackHitStunMs"], ["attackHitStunFrames"], 1000, 0),
+    controlLevel: integerParam(entity, ["attackControlLevel"], 1, 1),
+    armorLevel: integerParam(entity, ["attackArmorLevel"], 1, 0),
   };
 }
 
-function attackPhases(startup: number, active: number, recovery: number): CombatPhaseDef[] {
+function attackPhases(startupMs: number, activeMs: number, recoveryMs: number): CombatPhaseDef[] {
   return [
-    phase("startup", "前摇", startup),
-    phase("active", "有效", active),
-    phase("recovery", "后摇", recovery),
+    phase("startup", "前摇", startupMs),
+    phase("active", "有效", activeMs),
+    phase("recovery", "后摇", recoveryMs),
   ];
 }
 
@@ -338,8 +360,8 @@ function rectForForwardBox(entity: Entity, shape: CombatWindowShape): Rect {
   };
 }
 
-function phase(id: CombatPhaseId, label: string, frames: number): CombatPhaseDef {
-  return { id, label, frames: Math.max(0, Math.floor(frames)) };
+function phase(id: CombatPhaseId, label: string, durationMs: number): CombatPhaseDef {
+  return { id, label, durationMs: Math.max(0, durationMs) };
 }
 
 function actionNumber(action: CombatActionDef, key: string, fallback: number): number {
@@ -347,7 +369,19 @@ function actionNumber(action: CombatActionDef, key: string, fallback: number): n
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
 }
 
-function frameParam(entity: Entity, keys: string[], fallback: number, min: number): number {
+function durationParam(entity: Entity, msKeys: string[], legacyFrameKeys: string[], fallbackMs: number, minMs: number): number {
+  for (const key of msKeys) {
+    const value = numberParam(entity, key);
+    if (value !== undefined) return Math.max(minMs, value);
+  }
+  for (const key of legacyFrameKeys) {
+    const value = numberParam(entity, key);
+    if (value !== undefined) return Math.max(minMs, value * LEGACY_COMBAT_FRAME_MS);
+  }
+  return Math.max(minMs, fallbackMs);
+}
+
+function integerParam(entity: Entity, keys: string[], fallback: number, min: number): number {
   for (const key of keys) {
     const value = numberParam(entity, key);
     if (value !== undefined) return Math.max(min, Math.floor(value));

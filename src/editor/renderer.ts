@@ -208,7 +208,7 @@ export class V2Renderer {
       this.drawTaskPreview(world, options.liveBrush, true);
       this.drawShapeDraft(options.shapeDraft);
     } else {
-      entities.forEach((entity) => this.drawGameplayHealthBar(entity, world.clock.frame));
+      entities.forEach((entity) => this.drawGameplayHealthBar(entity, world));
     }
     this.stats.visibleObjects = this.worldLayer.children.length + this.overlayLayer.children.length;
     this.stats.renderedAt = performance.now();
@@ -530,14 +530,14 @@ export class V2Renderer {
   }
 
   private drawGameplayAttackTelegraphs(world: RuntimeWorld): void {
-    const frame = world.clock.frame;
+    const timeMs = world.clock.timeMs;
     for (const entity of world.allEntities()) {
       if (entity.runtime?.defeated || !entity.collider) continue;
-      const start = entity.runtime?.attackStartFrame;
-      const activeUntil = entity.runtime?.attackActiveUntilFrame;
-      const cooldownUntil = entity.runtime?.attackCooldownUntilFrame;
-      if (start === undefined || activeUntil === undefined || cooldownUntil === undefined || frame >= cooldownUntil) continue;
-      if (frame > activeUntil) {
+      const start = entity.runtime?.attackStartMs;
+      const activeUntil = entity.runtime?.attackActiveUntilMs;
+      const cooldownUntil = entity.runtime?.attackCooldownUntilMs;
+      if (start === undefined || activeUntil === undefined || cooldownUntil === undefined || timeMs >= cooldownUntil) continue;
+      if (timeMs >= activeUntil) {
         const bounds = boundsFor(entity);
         const graphics = this.takeGraphics();
         graphics.roundRect(bounds.x - 5, bounds.y - 5, bounds.w + 10, bounds.h + 10, 8);
@@ -550,7 +550,7 @@ export class V2Renderer {
       const rect = gameplayAttackRect(entity);
       const graphics = this.takeGraphics();
       graphics.rect(rect.x, rect.y, rect.w, rect.h);
-      if (frame < start) {
+      if (timeMs < start) {
         graphics.fill({ color: 0xffd166, alpha: 0.18 });
         graphics.setStrokeStyle({ width: 2, color: 0xffd166, alpha: 0.68 });
       } else {
@@ -559,16 +559,17 @@ export class V2Renderer {
       }
       graphics.stroke();
       this.worldLayer.addChild(graphics);
-      this.drawCombatRectLabel(rect, frame < start ? "WINDUP" : "ACTIVE");
+      this.drawCombatRectLabel(rect, timeMs < start ? "WINDUP" : "ACTIVE");
     }
   }
 
   private drawGameplayChargeStates(world: RuntimeWorld): void {
     const frame = world.clock.frame;
+    const timeMs = world.clock.timeMs;
     for (const entity of world.allEntities()) {
       if (entity.runtime?.defeated || !entity.collider) continue;
-      const charging = (entity.runtime?.chargeHeldFrames ?? 0) > 0;
-      const superReady = frame <= (entity.runtime?.superParryUntilFrame ?? -1);
+      const charging = (entity.runtime?.chargeHeldMs ?? 0) > 0;
+      const superReady = timeMs < (entity.runtime?.superParryUntilMs ?? -1);
       if (!charging && !superReady) continue;
       const bounds = boundsFor(entity);
       const graphics = this.takeGraphics();
@@ -585,7 +586,7 @@ export class V2Renderer {
     }
   }
 
-  private drawGameplayHealthBar(entity: Entity, frame: number): void {
+  private drawGameplayHealthBar(entity: Entity, world: RuntimeWorld): void {
     const maxHealth = readNumberParam(entity, "health");
     const health = entity.runtime?.health ?? maxHealth;
     if (maxHealth === undefined || health === undefined) return;
@@ -600,7 +601,7 @@ export class V2Renderer {
     bar.roundRect(x, y, width, height, 3);
     bar.fill({ color: 0x111817, alpha: 0.78 });
     bar.roundRect(x + 1, y + 1, Math.max(0, (width - 2) * ratio), height - 2, 2);
-    bar.fill({ color: entity.runtime?.defeated ? 0x6f756c : frame <= (entity.runtime?.hitFlashUntilFrame ?? -1) ? 0xf2d16b : 0x79d6ba, alpha: 0.95 });
+    bar.fill({ color: entity.runtime?.defeated ? 0x6f756c : world.clock.timeMs < (entity.runtime?.hitFlashUntilMs ?? -1) ? 0xf2d16b : 0x79d6ba, alpha: 0.95 });
     this.worldLayer.addChild(bar);
   }
 
@@ -1297,9 +1298,9 @@ function presentationResource(entity: Entity, resources: Record<string, Resource
 function presentationAnimationTimeMs(entity: Entity, world: RuntimeWorld, fallbackTimeMs: number): number {
   const isParrySlot = entity.render?.slot === "parry" || entity.render?.state === "parry";
   const isAttackSlot = entity.render?.slot === "attack" || entity.render?.state === "attack";
-  const startedFrame = isParrySlot ? entity.runtime?.parryStartedFrame : isAttackSlot ? entity.runtime?.attackStartFrame : undefined;
-  if (typeof startedFrame === "number") {
-    return Math.max(0, (world.clock.frame - startedFrame) * world.clock.fixedStepMs);
+  const startedMs = isParrySlot ? entity.runtime?.parryStartedMs : isAttackSlot ? entity.runtime?.attackStartMs : undefined;
+  if (typeof startedMs === "number") {
+    return Math.max(0, world.clock.timeMs - startedMs);
   }
   return fallbackTimeMs;
 }
@@ -1307,28 +1308,28 @@ function presentationAnimationTimeMs(entity: Entity, world: RuntimeWorld, fallba
 function resourceEffectActiveInContext(resource: Resource, entity: Entity, world: RuntimeWorld, showEditorDecorations: boolean): boolean {
   if (!resource.effect) return false;
   if (showEditorDecorations || resource.effect.loop) return true;
-  if (resource.effect.preset === "deathFade") return entity.runtime?.defeated === true && typeof entity.runtime.defeatFrame === "number";
-  if (resource.effect.preset === "hitFlash") return typeof entity.runtime?.hitFlashUntilFrame === "number" && world.clock.frame <= entity.runtime.hitFlashUntilFrame;
+  if (resource.effect.preset === "deathFade") return entity.runtime?.defeated === true && typeof entity.runtime.defeatTimeMs === "number";
+  if (resource.effect.preset === "hitFlash") return typeof entity.runtime?.hitFlashUntilMs === "number" && world.clock.timeMs < entity.runtime.hitFlashUntilMs;
   if (resource.effect.preset === "impactPulse") {
-    const start = entity.runtime?.attackStartFrame;
-    const activeUntil = entity.runtime?.attackActiveUntilFrame;
-    return typeof start === "number" && world.clock.frame >= start && world.clock.frame <= (activeUntil ?? start);
+    const start = entity.runtime?.attackStartMs;
+    const activeUntil = entity.runtime?.attackActiveUntilMs;
+    return typeof start === "number" && world.clock.timeMs >= start && world.clock.timeMs < (activeUntil ?? start);
   }
   return true;
 }
 
 function resourceEffectTimeMs(resource: Resource, entity: Entity, world: RuntimeWorld, fallbackTimeMs: number): number {
   if (!resource.effect) return fallbackTimeMs;
-  if (resource.effect.preset === "deathFade" && typeof entity.runtime?.defeatFrame === "number") {
-    return Math.max(0, (world.clock.frame - entity.runtime.defeatFrame) * world.clock.fixedStepMs);
+  if (resource.effect.preset === "deathFade" && typeof entity.runtime?.defeatTimeMs === "number") {
+    return Math.max(0, world.clock.timeMs - entity.runtime.defeatTimeMs);
   }
-  if (resource.effect.preset === "hitFlash" && typeof entity.runtime?.hitFlashUntilFrame === "number") {
+  if (resource.effect.preset === "hitFlash" && typeof entity.runtime?.hitFlashUntilMs === "number") {
     const duration = Math.max(60, resource.effect.durationMs || 320);
-    const remaining = Math.max(0, entity.runtime.hitFlashUntilFrame - world.clock.frame) * world.clock.fixedStepMs;
+    const remaining = Math.max(0, entity.runtime.hitFlashUntilMs - world.clock.timeMs);
     return Math.max(0, duration - remaining);
   }
-  if (resource.effect.preset === "impactPulse" && typeof entity.runtime?.attackStartFrame === "number") {
-    return Math.max(0, (world.clock.frame - entity.runtime.attackStartFrame) * world.clock.fixedStepMs);
+  if (resource.effect.preset === "impactPulse" && typeof entity.runtime?.attackStartMs === "number") {
+    return Math.max(0, world.clock.timeMs - entity.runtime.attackStartMs);
   }
   return fallbackTimeMs;
 }

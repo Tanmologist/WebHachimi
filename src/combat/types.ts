@@ -36,7 +36,7 @@ export type CombatWindowShape =
 export type CombatPhaseDef = {
   id: CombatPhaseId;
   label: string;
-  frames: number;
+  durationMs: number;
 };
 
 export type CombatWindowDef = {
@@ -62,16 +62,16 @@ export type CombatActionDef = {
 export type CombatRuntimePhase = {
   id: CombatPhaseId;
   label: string;
-  startsAtFrame: number;
-  untilFrame: number;
+  startsAtMs: number;
+  untilMs: number;
 };
 
 export type CombatRuntimeWindow = {
   id: string;
   type: CombatWindowType;
   label: string;
-  startsAtFrame: number;
-  untilFrame: number;
+  startsAtMs: number;
+  untilMs: number;
   level?: number;
   controlLevel?: number;
   armorLevel?: number;
@@ -81,7 +81,7 @@ export type CombatRuntimeWindow = {
 export type CombatActionRuntime = {
   actionId: CombatActionId;
   label: string;
-  startedFrame: number;
+  startedMs: number;
   phases: CombatRuntimePhase[];
   windows: CombatRuntimeWindow[];
 };
@@ -89,11 +89,11 @@ export type CombatActionRuntime = {
 export type CombatAttackStats = {
   kind: CombatAttackKind;
   action: CombatActionDef;
-  startup: number;
-  active: number;
-  recovery: number;
+  startupMs: number;
+  activeMs: number;
+  recoveryMs: number;
   damage: number;
-  hitStun: number;
+  hitStunMs: number;
   controlLevel: number;
   armorLevel: number;
   chargeStage?: number;

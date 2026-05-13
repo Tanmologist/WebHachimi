@@ -143,9 +143,14 @@ export type RuntimeComponent = {
   facing?: -1 | 1;
   health?: number;
   defeated?: boolean;
+  hitFlashUntilMs?: number;
+  defeatTimeMs?: number;
   hitFlashUntilFrame?: number;
   defeatFrame?: number;
   combatAction?: CombatActionRuntime;
+  attackStartMs?: number;
+  attackActiveUntilMs?: number;
+  attackCooldownUntilMs?: number;
   attackStartFrame?: number;
   attackActiveUntilFrame?: number;
   attackCooldownUntilFrame?: number;
@@ -160,21 +165,34 @@ export type RuntimeComponent = {
   attackConsumedUntilRelease?: boolean;
   parryInputDown?: boolean;
   dodgeInputDown?: boolean;
+  dodgeStartedMs?: number;
+  dodgeUntilMs?: number;
+  dodgeRecoveryUntilMs?: number;
   dodgeStartedFrame?: number;
   dodgeUntilFrame?: number;
   dodgeRecoveryUntilFrame?: number;
+  chargeStartedMs?: number;
+  chargeHeldMs?: number;
   chargeStartedFrame?: number;
   chargeHeldFrames?: number;
   chargeStage?: number;
   chargeStoredDamage?: number;
+  parryStartedMs?: number;
+  parryAnimationUntilMs?: number;
+  parryUntilMs?: number;
+  parryRecoveryUntilMs?: number;
+  parryCooldownUntilMs?: number;
   parryStartedFrame?: number;
   parryAnimationUntilFrame?: number;
   parryUntilFrame?: number;
   parryRecoveryUntilFrame?: number;
   parryCooldownUntilFrame?: number;
+  superParryUntilMs?: number;
+  superParryLockUntilMs?: number;
   superParryUntilFrame?: number;
   superParryLockUntilFrame?: number;
   superParryBonusDamage?: number;
+  hitStunUntilMs?: number;
   hitStunUntilFrame?: number;
 };
 
@@ -475,6 +493,7 @@ export type RuntimeEntityState = {
 export type CombatEvent = {
   id: string;
   frame: number;
+  timeMs: number;
   type:
     | "chargeStarted"
     | "chargeReleased"

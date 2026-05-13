@@ -9,10 +9,10 @@ import {
   buildCombatActionRuntime,
   combatActionDefForEntity,
   combatActionIdForAttackKind,
-  combatActionTotalFrames,
+  combatActionTotalDurationMs,
   combatAttackRectForEntity,
   combatAttackStatsForEntity,
-  combatPhaseFrames,
+  combatPhaseDurationMs,
   combatWindowIsOpen,
 } from "../combat/actions";
 import type { CombatActionId, CombatActionRuntime } from "../combat/types";
@@ -41,11 +41,11 @@ type AttackConfig = {
   kind: AttackKind;
   actionId: CombatActionId;
   actionRuntime: CombatActionRuntime;
-  startup: number;
-  active: number;
-  recovery: number;
+  startupMs: number;
+  activeMs: number;
+  recoveryMs: number;
   damage: number;
-  hitStun: number;
+  hitStunMs: number;
   controlLevel: number;
   armorLevel: number;
   chargeStage?: number;
@@ -200,9 +200,14 @@ export class RuntimeWorld {
           facing: entity.runtime?.facing,
           health: entity.runtime?.health,
           defeated: entity.runtime?.defeated,
+          hitFlashUntilMs: entity.runtime?.hitFlashUntilMs,
+          defeatTimeMs: entity.runtime?.defeatTimeMs,
           hitFlashUntilFrame: entity.runtime?.hitFlashUntilFrame,
           defeatFrame: entity.runtime?.defeatFrame,
           combatAction: entity.runtime?.combatAction,
+          attackStartMs: entity.runtime?.attackStartMs,
+          attackActiveUntilMs: entity.runtime?.attackActiveUntilMs,
+          attackCooldownUntilMs: entity.runtime?.attackCooldownUntilMs,
           attackStartFrame: entity.runtime?.attackStartFrame,
           attackActiveUntilFrame: entity.runtime?.attackActiveUntilFrame,
           attackCooldownUntilFrame: entity.runtime?.attackCooldownUntilFrame,
@@ -217,21 +222,34 @@ export class RuntimeWorld {
           attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease,
           parryInputDown: entity.runtime?.parryInputDown,
           dodgeInputDown: entity.runtime?.dodgeInputDown,
+          dodgeStartedMs: entity.runtime?.dodgeStartedMs,
+          dodgeUntilMs: entity.runtime?.dodgeUntilMs,
+          dodgeRecoveryUntilMs: entity.runtime?.dodgeRecoveryUntilMs,
           dodgeStartedFrame: entity.runtime?.dodgeStartedFrame,
           dodgeUntilFrame: entity.runtime?.dodgeUntilFrame,
           dodgeRecoveryUntilFrame: entity.runtime?.dodgeRecoveryUntilFrame,
+          chargeStartedMs: entity.runtime?.chargeStartedMs,
+          chargeHeldMs: entity.runtime?.chargeHeldMs,
           chargeStartedFrame: entity.runtime?.chargeStartedFrame,
           chargeHeldFrames: entity.runtime?.chargeHeldFrames,
           chargeStage: entity.runtime?.chargeStage,
           chargeStoredDamage: entity.runtime?.chargeStoredDamage,
+          parryStartedMs: entity.runtime?.parryStartedMs,
+          parryAnimationUntilMs: entity.runtime?.parryAnimationUntilMs,
+          parryUntilMs: entity.runtime?.parryUntilMs,
+          parryRecoveryUntilMs: entity.runtime?.parryRecoveryUntilMs,
+          parryCooldownUntilMs: entity.runtime?.parryCooldownUntilMs,
           parryStartedFrame: entity.runtime?.parryStartedFrame,
           parryAnimationUntilFrame: entity.runtime?.parryAnimationUntilFrame,
           parryUntilFrame: entity.runtime?.parryUntilFrame,
           parryRecoveryUntilFrame: entity.runtime?.parryRecoveryUntilFrame,
           parryCooldownUntilFrame: entity.runtime?.parryCooldownUntilFrame,
+          superParryUntilMs: entity.runtime?.superParryUntilMs,
+          superParryLockUntilMs: entity.runtime?.superParryLockUntilMs,
           superParryUntilFrame: entity.runtime?.superParryUntilFrame,
           superParryLockUntilFrame: entity.runtime?.superParryLockUntilFrame,
           superParryBonusDamage: entity.runtime?.superParryBonusDamage,
+          hitStunUntilMs: entity.runtime?.hitStunUntilMs,
           hitStunUntilFrame: entity.runtime?.hitStunUntilFrame,
         },
       };
@@ -279,9 +297,14 @@ export class RuntimeWorld {
         facing: state.state.facing === -1 ? -1 : 1,
         health: typeof state.state.health === "number" ? state.state.health : entity.runtime?.health,
         defeated: state.state.defeated === true,
+        hitFlashUntilMs: runtimeStateMs(state.state, "hitFlashUntilMs", "hitFlashUntilFrame"),
+        defeatTimeMs: runtimeStateMs(state.state, "defeatTimeMs", "defeatFrame"),
         hitFlashUntilFrame: typeof state.state.hitFlashUntilFrame === "number" ? state.state.hitFlashUntilFrame : undefined,
         defeatFrame: typeof state.state.defeatFrame === "number" ? state.state.defeatFrame : undefined,
         combatAction: combatActionRuntimeFromValue(state.state.combatAction),
+        attackStartMs: runtimeStateMs(state.state, "attackStartMs", "attackStartFrame"),
+        attackActiveUntilMs: runtimeStateMs(state.state, "attackActiveUntilMs", "attackActiveUntilFrame"),
+        attackCooldownUntilMs: runtimeStateMs(state.state, "attackCooldownUntilMs", "attackCooldownUntilFrame"),
         attackStartFrame: typeof state.state.attackStartFrame === "number" ? state.state.attackStartFrame : undefined,
         attackActiveUntilFrame:
           typeof state.state.attackActiveUntilFrame === "number" ? state.state.attackActiveUntilFrame : undefined,
@@ -298,14 +321,24 @@ export class RuntimeWorld {
         attackConsumedUntilRelease: state.state.attackConsumedUntilRelease === true,
         parryInputDown: state.state.parryInputDown === true,
         dodgeInputDown: state.state.dodgeInputDown === true,
+        dodgeStartedMs: runtimeStateMs(state.state, "dodgeStartedMs", "dodgeStartedFrame"),
+        dodgeUntilMs: runtimeStateMs(state.state, "dodgeUntilMs", "dodgeUntilFrame"),
+        dodgeRecoveryUntilMs: runtimeStateMs(state.state, "dodgeRecoveryUntilMs", "dodgeRecoveryUntilFrame"),
         dodgeStartedFrame: typeof state.state.dodgeStartedFrame === "number" ? state.state.dodgeStartedFrame : undefined,
         dodgeUntilFrame: typeof state.state.dodgeUntilFrame === "number" ? state.state.dodgeUntilFrame : undefined,
         dodgeRecoveryUntilFrame:
           typeof state.state.dodgeRecoveryUntilFrame === "number" ? state.state.dodgeRecoveryUntilFrame : undefined,
+        chargeStartedMs: runtimeStateMs(state.state, "chargeStartedMs", "chargeStartedFrame"),
+        chargeHeldMs: runtimeStateMs(state.state, "chargeHeldMs", "chargeHeldFrames"),
         chargeStartedFrame: typeof state.state.chargeStartedFrame === "number" ? state.state.chargeStartedFrame : undefined,
         chargeHeldFrames: typeof state.state.chargeHeldFrames === "number" ? state.state.chargeHeldFrames : undefined,
         chargeStage: typeof state.state.chargeStage === "number" ? state.state.chargeStage : undefined,
         chargeStoredDamage: typeof state.state.chargeStoredDamage === "number" ? state.state.chargeStoredDamage : undefined,
+        parryStartedMs: runtimeStateMs(state.state, "parryStartedMs", "parryStartedFrame"),
+        parryAnimationUntilMs: runtimeStateMs(state.state, "parryAnimationUntilMs", "parryAnimationUntilFrame"),
+        parryUntilMs: runtimeStateMs(state.state, "parryUntilMs", "parryUntilFrame"),
+        parryRecoveryUntilMs: runtimeStateMs(state.state, "parryRecoveryUntilMs", "parryRecoveryUntilFrame"),
+        parryCooldownUntilMs: runtimeStateMs(state.state, "parryCooldownUntilMs", "parryCooldownUntilFrame"),
         parryStartedFrame: typeof state.state.parryStartedFrame === "number" ? state.state.parryStartedFrame : undefined,
         parryAnimationUntilFrame:
           typeof state.state.parryAnimationUntilFrame === "number" ? state.state.parryAnimationUntilFrame : undefined,
@@ -314,9 +347,12 @@ export class RuntimeWorld {
           typeof state.state.parryRecoveryUntilFrame === "number" ? state.state.parryRecoveryUntilFrame : undefined,
         parryCooldownUntilFrame:
           typeof state.state.parryCooldownUntilFrame === "number" ? state.state.parryCooldownUntilFrame : undefined,
+        superParryUntilMs: runtimeStateMs(state.state, "superParryUntilMs", "superParryUntilFrame"),
+        superParryLockUntilMs: runtimeStateMs(state.state, "superParryLockUntilMs", "superParryLockUntilFrame"),
         superParryUntilFrame: typeof state.state.superParryUntilFrame === "number" ? state.state.superParryUntilFrame : undefined,
         superParryLockUntilFrame: typeof state.state.superParryLockUntilFrame === "number" ? state.state.superParryLockUntilFrame : undefined,
         superParryBonusDamage: typeof state.state.superParryBonusDamage === "number" ? state.state.superParryBonusDamage : undefined,
+        hitStunUntilMs: runtimeStateMs(state.state, "hitStunUntilMs", "hitStunUntilFrame"),
         hitStunUntilFrame: typeof state.state.hitStunUntilFrame === "number" ? state.state.hitStunUntilFrame : undefined,
       };
     }
@@ -438,7 +474,7 @@ export class RuntimeWorld {
 
   private applyBuiltinBehavior(entity: Entity): void {
     if (!entity.body) return;
-    const frame = this.clock.frame;
+    const timeMs = this.clock.timeMs;
     if (entity.runtime?.defeated) {
       this.stopEntity(entity);
       this.clearActiveAttack(entity);
@@ -446,7 +482,7 @@ export class RuntimeWorld {
       this.clearDodge(entity);
       return;
     }
-    if (this.isHitStunned(entity, frame)) {
+    if (this.isHitStunned(entity, timeMs)) {
       this.stopEntity(entity);
       this.clearActiveAttack(entity);
       this.clearCharge(entity);
@@ -531,7 +567,7 @@ export class RuntimeWorld {
 
   private applyCombatInput(entity: Entity): void {
     if (!entity.collider) return;
-    const frame = this.clock.frame;
+    const timeMs = this.clock.timeMs;
     const attackDown = this.isInputDown(entity, "attack");
     const parryDown = this.isInputDown(entity, "parry");
     const dodgeDown = this.isInputDown(entity, "dodge", "shift");
@@ -566,7 +602,7 @@ export class RuntimeWorld {
       return;
     }
 
-    if (this.isCombatActionLocked(entity, frame)) {
+    if (this.isCombatActionLocked(entity, timeMs)) {
       entity.runtime = {
         ...entity.runtime,
         attackInputDown: attackDown,
@@ -578,7 +614,7 @@ export class RuntimeWorld {
     }
 
     if (parryPressed) {
-      const fromCharge = attackDown && (entity.runtime?.chargeHeldFrames ?? 0) > 0;
+      const fromCharge = attackDown && (entity.runtime?.chargeHeldMs ?? 0) > 0;
       if (fromCharge) {
         this.clearCharge(entity);
         entity.runtime = {
@@ -597,7 +633,7 @@ export class RuntimeWorld {
       return;
     }
 
-    if (attackPressed && this.hasSuperParryReady(entity, frame)) {
+    if (attackPressed && this.hasSuperParryReady(entity, timeMs)) {
       this.tryStartAttack(entity, { kind: "superParry" });
       entity.runtime = {
         ...entity.runtime,
@@ -628,24 +664,24 @@ export class RuntimeWorld {
     return baseGravityScale;
   }
 
-  private chargeThresholdFrames(entity: Entity): number {
-    return Math.max(1, Math.floor(numberParam(entity, "chargeThresholdFrames") ?? 60));
+  private chargeThresholdMs(entity: Entity): number {
+    return Math.max(1, numberParam(entity, "chargeThresholdMs") ?? legacyFramesToMs(numberParam(entity, "chargeThresholdFrames") ?? 60));
   }
 
-  private chargeStageFrames(entity: Entity): number {
-    return Math.max(1, Math.floor(numberParam(entity, "chargeStageFrames") ?? this.chargeThresholdFrames(entity)));
+  private chargeStageMs(entity: Entity): number {
+    return Math.max(1, numberParam(entity, "chargeStageMs") ?? legacyFramesToMs(numberParam(entity, "chargeStageFrames")) ?? this.chargeThresholdMs(entity));
   }
 
-  private hasSuperParryReady(entity: Entity, frame = this.clock.frame): boolean {
-    return frame <= (entity.runtime?.superParryUntilFrame ?? -1);
+  private hasSuperParryReady(entity: Entity, timeMs = this.clock.timeMs): boolean {
+    return timeMs < (entity.runtime?.superParryUntilMs ?? -1);
   }
 
-  private isSuperParryMoveLocked(entity: Entity, frame = this.clock.frame): boolean {
-    return frame <= (entity.runtime?.superParryLockUntilFrame ?? -1);
+  private isSuperParryMoveLocked(entity: Entity, timeMs = this.clock.timeMs): boolean {
+    return timeMs < (entity.runtime?.superParryLockUntilMs ?? -1);
   }
 
-  private applyDodgeMovement(entity: Entity, frame = this.clock.frame): boolean {
-    if (!entity.body || frame > (entity.runtime?.dodgeUntilFrame ?? -1)) return false;
+  private applyDodgeMovement(entity: Entity, timeMs = this.clock.timeMs): boolean {
+    if (!entity.body || timeMs >= (entity.runtime?.dodgeUntilMs ?? -1)) return false;
     const direction = entity.runtime?.facing === -1 ? -1 : 1;
     entity.body.velocity.x = this.dodgeSpeed(entity) * direction;
     if (entity.body.mode === "kinematic") entity.body.velocity.y = 0;
@@ -657,28 +693,28 @@ export class RuntimeWorld {
     return typeof value === "number" && Number.isFinite(value) ? value : numberParam(entity, "dodgeSpeed") ?? 650;
   }
 
-  private isAttackActionLocked(entity: Entity, frame = this.clock.frame): boolean {
-    return frame < (entity.runtime?.attackCooldownUntilFrame ?? -1);
+  private isAttackActionLocked(entity: Entity, timeMs = this.clock.timeMs): boolean {
+    return timeMs < (entity.runtime?.attackCooldownUntilMs ?? -1);
   }
 
-  private isParryActionLocked(entity: Entity, frame = this.clock.frame): boolean {
-    return frame < (entity.runtime?.parryRecoveryUntilFrame ?? -1);
+  private isParryActionLocked(entity: Entity, timeMs = this.clock.timeMs): boolean {
+    return timeMs < (entity.runtime?.parryRecoveryUntilMs ?? -1);
   }
 
-  private isDodgeActionLocked(entity: Entity, frame = this.clock.frame): boolean {
-    return frame < (entity.runtime?.dodgeRecoveryUntilFrame ?? -1);
+  private isDodgeActionLocked(entity: Entity, timeMs = this.clock.timeMs): boolean {
+    return timeMs < (entity.runtime?.dodgeRecoveryUntilMs ?? -1);
   }
 
-  private isDodgeInvulnerable(entity: Entity, frame = this.clock.frame): boolean {
-    return Boolean(combatWindowIsOpen(entity.runtime?.combatAction, "invulnerable", frame)) || frame <= (entity.runtime?.dodgeUntilFrame ?? -1);
+  private isDodgeInvulnerable(entity: Entity, timeMs = this.clock.timeMs): boolean {
+    return Boolean(combatWindowIsOpen(entity.runtime?.combatAction, "invulnerable", timeMs)) || timeMs < (entity.runtime?.dodgeUntilMs ?? -1);
   }
 
-  private isCombatActionLocked(entity: Entity, frame = this.clock.frame): boolean {
-    return this.isAttackActionLocked(entity, frame) || this.isParryActionLocked(entity, frame) || this.isDodgeActionLocked(entity, frame);
+  private isCombatActionLocked(entity: Entity, timeMs = this.clock.timeMs): boolean {
+    return this.isAttackActionLocked(entity, timeMs) || this.isParryActionLocked(entity, timeMs) || this.isDodgeActionLocked(entity, timeMs);
   }
 
-  private isCombatMovementLocked(entity: Entity, frame = this.clock.frame): boolean {
-    return this.isAttackActionLocked(entity, frame) || this.isParryActionLocked(entity, frame);
+  private isCombatMovementLocked(entity: Entity, timeMs = this.clock.timeMs): boolean {
+    return this.isAttackActionLocked(entity, timeMs) || this.isParryActionLocked(entity, timeMs);
   }
 
   private attackConfig(entity: Entity, kind: AttackKind, chargeStageInput?: number): AttackConfig {
@@ -686,12 +722,12 @@ export class RuntimeWorld {
     return {
       kind: stats.kind,
       actionId: stats.action.id,
-      actionRuntime: buildCombatActionRuntime(stats.action, this.clock.frame),
-      startup: stats.startup,
-      active: stats.active,
-      recovery: stats.recovery,
+      actionRuntime: buildCombatActionRuntime(stats.action, this.clock.timeMs),
+      startupMs: stats.startupMs,
+      activeMs: stats.activeMs,
+      recoveryMs: stats.recoveryMs,
       damage: stats.damage,
-      hitStun: stats.hitStun,
+      hitStunMs: stats.hitStunMs,
       controlLevel: stats.controlLevel,
       armorLevel: stats.armorLevel,
       chargeStage: stats.chargeStage,
@@ -705,7 +741,7 @@ export class RuntimeWorld {
   }
 
   private attackHitStun(entity: Entity): number {
-    return this.attackConfig(entity, entity.runtime?.attackKind || "normal", entity.runtime?.attackChargeStage).hitStun;
+    return this.attackConfig(entity, entity.runtime?.attackKind || "normal", entity.runtime?.attackChargeStage).hitStunMs;
   }
 
   private attackControlLevel(entity: Entity): number {
@@ -713,19 +749,19 @@ export class RuntimeWorld {
   }
 
   private currentArmorLevel(entity: Entity): number {
-    const frame = this.clock.frame;
-    const armorWindow = combatWindowIsOpen(entity.runtime?.combatAction, "armor", frame);
+    const timeMs = this.clock.timeMs;
+    const armorWindow = combatWindowIsOpen(entity.runtime?.combatAction, "armor", timeMs);
     if (armorWindow) return Math.max(0, Math.floor(armorWindow.armorLevel ?? armorWindow.level ?? 0));
-    if (frame <= (entity.runtime?.parryUntilFrame ?? -1)) return Math.max(0, Math.floor(numberParam(entity, "parryArmorLevel") ?? 3));
-    if (frame <= (entity.runtime?.attackActiveUntilFrame ?? -1) || frame < (entity.runtime?.attackStartFrame ?? -1)) {
+    if (timeMs < (entity.runtime?.parryUntilMs ?? -1)) return Math.max(0, Math.floor(numberParam(entity, "parryArmorLevel") ?? 3));
+    if (timeMs < (entity.runtime?.attackActiveUntilMs ?? -1) || timeMs < (entity.runtime?.attackStartMs ?? -1)) {
       return Math.max(0, Math.floor(entity.runtime?.attackArmorLevel ?? 0));
     }
-    const heldFrames = entity.runtime?.chargeHeldFrames ?? 0;
-    if (heldFrames > 0) {
-      const threshold = this.chargeThresholdFrames(entity);
-      const firstArmorFrames = Math.max(0, Math.floor(numberParam(entity, "chargeNoArmorFrames") ?? Math.floor(threshold / 2)));
-      if (heldFrames < firstArmorFrames) return 0;
-      return heldFrames < threshold ? 1 : 2;
+    const heldMs = entity.runtime?.chargeHeldMs ?? 0;
+    if (heldMs > 0) {
+      const threshold = this.chargeThresholdMs(entity);
+      const firstArmorMs = Math.max(0, numberParam(entity, "chargeNoArmorMs") ?? legacyFramesToMs(numberParam(entity, "chargeNoArmorFrames")) ?? threshold / 2);
+      if (heldMs < firstArmorMs) return 0;
+      return heldMs < threshold ? 1 : 2;
     }
     return 0;
   }
@@ -739,10 +775,12 @@ export class RuntimeWorld {
   }
 
   private beginCharge(entity: Entity): void {
-    const frame = this.clock.frame;
+    const timeMs = this.clock.timeMs;
     entity.runtime = {
       ...entity.runtime,
-      chargeStartedFrame: frame,
+      chargeStartedMs: timeMs,
+      chargeHeldMs: 0,
+      chargeStartedFrame: this.msToFrame(timeMs),
       chargeHeldFrames: 0,
       chargeStage: 0,
       chargeStoredDamage: entity.runtime?.chargeStoredDamage ?? 0,
@@ -752,25 +790,27 @@ export class RuntimeWorld {
       attackerId: entity.id,
       sourceId: entity.id,
       message: `${entity.displayName} began charging attack.`,
-      data: { thresholdFrames: this.chargeThresholdFrames(entity), stageFrames: this.chargeStageFrames(entity) },
+      data: { thresholdMs: this.chargeThresholdMs(entity), stageMs: this.chargeStageMs(entity) },
     });
   }
 
   private updateCharge(entity: Entity, wasAttackDown: boolean): void {
-    const previousHeld = wasAttackDown ? entity.runtime?.chargeHeldFrames ?? 0 : 0;
-    const heldFrames = previousHeld + 1;
-    const stage = heldFrames >= this.chargeThresholdFrames(entity) ? Math.max(1, Math.floor(heldFrames / this.chargeStageFrames(entity))) : 0;
+    const previousHeld = wasAttackDown ? entity.runtime?.chargeHeldMs ?? 0 : 0;
+    const heldMs = previousHeld + this.clock.fixedStepMs;
+    const stage = heldMs >= this.chargeThresholdMs(entity) ? Math.max(1, Math.floor(heldMs / this.chargeStageMs(entity))) : 0;
     entity.runtime = {
       ...entity.runtime,
-      chargeHeldFrames: heldFrames,
+      chargeHeldMs: heldMs,
+      chargeHeldFrames: this.msToFrame(heldMs),
       chargeStage: stage,
+      chargeStartedMs: entity.runtime?.chargeStartedMs ?? this.clock.timeMs,
       chargeStartedFrame: entity.runtime?.chargeStartedFrame ?? this.clock.frame,
     };
   }
 
   private releaseChargeAttack(entity: Entity): void {
-    const heldFrames = entity.runtime?.chargeHeldFrames ?? 0;
-    const chargeStage = heldFrames >= this.chargeThresholdFrames(entity) ? Math.max(1, Math.floor(heldFrames / this.chargeStageFrames(entity))) : 0;
+    const heldMs = entity.runtime?.chargeHeldMs ?? 0;
+    const chargeStage = heldMs >= this.chargeThresholdMs(entity) ? Math.max(1, Math.floor(heldMs / this.chargeStageMs(entity))) : 0;
     const storedDamage = entity.runtime?.chargeStoredDamage ?? 0;
     const kind: AttackKind = chargeStage > 0 ? "charged" : "normal";
     const started = this.tryStartAttack(entity, { kind, chargeStage });
@@ -781,24 +821,26 @@ export class RuntimeWorld {
         attackerId: entity.id,
         sourceId: entity.id,
         message: `${entity.displayName} released ${attackKindLabel(kind)}.`,
-        data: { kind, heldFrames, chargeStage, storedDamage },
+        data: { kind, heldMs, chargeStage, storedDamage },
       });
     }
   }
 
   private tryStartAttack(entity: Entity, options: { kind?: AttackKind; chargeStage?: number } = {}): boolean {
-    const frame = this.clock.frame;
-    if (entity.runtime?.defeated || this.isHitStunned(entity, frame)) return false;
-    const attackCooldownUntil = entity.runtime?.attackCooldownUntilFrame ?? -1;
-    const attackActiveUntil = entity.runtime?.attackActiveUntilFrame ?? -1;
-    if (frame < attackCooldownUntil || frame <= attackActiveUntil) return false;
+    const timeMs = this.clock.timeMs;
+    if (entity.runtime?.defeated || this.isHitStunned(entity, timeMs)) return false;
+    const attackCooldownUntil = entity.runtime?.attackCooldownUntilMs ?? -1;
+    const attackActiveUntil = entity.runtime?.attackActiveUntilMs ?? -1;
+    if (timeMs < attackCooldownUntil || timeMs < attackActiveUntil) return false;
     const config = this.attackConfig(entity, options.kind || "normal", options.chargeStage);
-    const activeStartFrame = frame + config.startup;
-    const activeUntilFrame = activeStartFrame + config.active - 1;
-    const cooldownUntilFrame = frame + config.startup + config.active + config.recovery;
+    const activeStartMs = timeMs + config.startupMs;
+    const activeUntilMs = activeStartMs + config.activeMs;
+    const cooldownUntilMs = timeMs + config.startupMs + config.activeMs + config.recoveryMs;
     if (config.kind === "superParry") {
       entity.runtime = {
         ...entity.runtime,
+        superParryUntilMs: undefined,
+        superParryLockUntilMs: undefined,
         superParryUntilFrame: undefined,
         superParryLockUntilFrame: undefined,
         superParryBonusDamage: undefined,
@@ -806,9 +848,12 @@ export class RuntimeWorld {
     }
     entity.runtime = {
       ...entity.runtime,
-      attackStartFrame: activeStartFrame,
-      attackActiveUntilFrame: activeUntilFrame,
-      attackCooldownUntilFrame: cooldownUntilFrame,
+      attackStartMs: activeStartMs,
+      attackActiveUntilMs: activeUntilMs,
+      attackCooldownUntilMs: cooldownUntilMs,
+      attackStartFrame: this.msToFrame(activeStartMs),
+      attackActiveUntilFrame: this.msToFrame(activeUntilMs - this.clock.fixedStepMs),
+      attackCooldownUntilFrame: this.msToFrame(cooldownUntilMs),
       attackHitIds: [],
       attackTouchEntityId: undefined,
       attackKind: config.kind,
@@ -826,15 +871,23 @@ export class RuntimeWorld {
       data: {
         actionId: config.actionId,
         kind: config.kind,
-        startup: config.startup,
-        active: config.active,
-        recovery: config.recovery,
-        cooldown: config.startup + config.active + config.recovery,
-        activeStartFrame,
-        activeUntilFrame,
-        cooldownUntilFrame,
+        startupMs: config.startupMs,
+        activeMs: config.activeMs,
+        recoveryMs: config.recoveryMs,
+        cooldownMs: config.startupMs + config.activeMs + config.recoveryMs,
+        activeStartMs,
+        activeUntilMs,
+        cooldownUntilMs,
+        startup: this.msToFrame(config.startupMs),
+        active: this.msToFrame(config.activeMs),
+        recovery: this.msToFrame(config.recoveryMs),
+        cooldown: this.msToFrame(config.startupMs + config.activeMs + config.recoveryMs),
+        activeStartFrame: this.msToFrame(activeStartMs),
+        activeUntilFrame: this.msToFrame(activeUntilMs - this.clock.fixedStepMs),
+        cooldownUntilFrame: this.msToFrame(cooldownUntilMs),
         damage: config.damage,
-        hitStun: config.hitStun,
+        hitStunMs: config.hitStunMs,
+        hitStun: this.msToFrame(config.hitStunMs),
         controlLevel: config.controlLevel,
         armorLevel: config.armorLevel,
         chargeStage: config.chargeStage,
@@ -846,23 +899,26 @@ export class RuntimeWorld {
   }
 
   private tryStartDodge(entity: Entity): boolean {
-    const frame = this.clock.frame;
-    if (entity.runtime?.defeated || this.isHitStunned(entity, frame)) return false;
-    if (this.isCombatActionLocked(entity, frame)) return false;
+    const timeMs = this.clock.timeMs;
+    if (entity.runtime?.defeated || this.isHitStunned(entity, timeMs)) return false;
+    if (this.isCombatActionLocked(entity, timeMs)) return false;
     const action = combatActionDefForEntity(entity, "dodge");
-    const actionRuntime = buildCombatActionRuntime(action, frame);
-    const evadeFrames = Math.max(1, combatPhaseFrames(action, "evade"));
-    const recoveryFrames = Math.max(0, combatPhaseFrames(action, "recovery"));
-    const cooldown = combatActionTotalFrames(action);
+    const actionRuntime = buildCombatActionRuntime(action, timeMs);
+    const evadeMs = Math.max(1, combatPhaseDurationMs(action, "evade"));
+    const recoveryMs = Math.max(0, combatPhaseDurationMs(action, "recovery"));
+    const cooldownMs = combatActionTotalDurationMs(action);
     const speed = this.dodgeSpeed(entity, action);
     const direction = entity.runtime?.facing === -1 ? -1 : 1;
     if (entity.body) entity.body.velocity.x = speed * direction;
     entity.runtime = {
       ...entity.runtime,
       combatAction: actionRuntime,
-      dodgeStartedFrame: frame,
-      dodgeUntilFrame: frame + evadeFrames - 1,
-      dodgeRecoveryUntilFrame: frame + cooldown,
+      dodgeStartedMs: timeMs,
+      dodgeUntilMs: timeMs + evadeMs,
+      dodgeRecoveryUntilMs: timeMs + cooldownMs,
+      dodgeStartedFrame: this.msToFrame(timeMs),
+      dodgeUntilFrame: this.msToFrame(timeMs + evadeMs - this.clock.fixedStepMs),
+      dodgeRecoveryUntilFrame: this.msToFrame(timeMs + cooldownMs),
       attackTouchEntityId: undefined,
     };
     this.emitCombatEvent({
@@ -872,9 +928,12 @@ export class RuntimeWorld {
       message: `${entity.displayName} started dodge.`,
       data: {
         actionId: action.id,
-        evadeFrames,
-        recoveryFrames,
-        cooldown,
+        evadeMs,
+        recoveryMs,
+        cooldownMs,
+        evadeFrames: this.msToFrame(evadeMs),
+        recoveryFrames: this.msToFrame(recoveryMs),
+        cooldown: this.msToFrame(cooldownMs),
         speed,
         direction,
         phases: cloneJson(actionRuntime.phases),
@@ -885,26 +944,31 @@ export class RuntimeWorld {
   }
 
   private tryStartParry(entity: Entity, options: { fromCharge?: boolean } = {}): boolean {
-    const frame = this.clock.frame;
-    if (entity.runtime?.defeated || this.isHitStunned(entity, frame)) return false;
-    if (!options.fromCharge && this.isAttackActionLocked(entity, frame)) return false;
-    if (this.isParryActionLocked(entity, frame)) return false;
-    const parryCooldownUntil = entity.runtime?.parryCooldownUntilFrame ?? -1;
-    if (frame < parryCooldownUntil) return false;
+    const timeMs = this.clock.timeMs;
+    if (entity.runtime?.defeated || this.isHitStunned(entity, timeMs)) return false;
+    if (!options.fromCharge && this.isAttackActionLocked(entity, timeMs)) return false;
+    if (this.isParryActionLocked(entity, timeMs)) return false;
+    const parryCooldownUntil = entity.runtime?.parryCooldownUntilMs ?? -1;
+    if (timeMs < parryCooldownUntil) return false;
     const action = combatActionDefForEntity(entity, "parry");
-    const actionRuntime = buildCombatActionRuntime(action, frame);
-    const windowFrames = Math.max(1, combatPhaseFrames(action, "active"));
-    const recoveryFrames = Math.max(0, combatPhaseFrames(action, "recovery"));
-    const cooldown = windowFrames + recoveryFrames;
-    const animationFrames = Math.max(1, Math.floor(numberParam(entity, "parryAnimationFrames") ?? cooldown));
+    const actionRuntime = buildCombatActionRuntime(action, timeMs);
+    const windowMs = Math.max(1, combatPhaseDurationMs(action, "active"));
+    const recoveryMs = Math.max(0, combatPhaseDurationMs(action, "recovery"));
+    const cooldownMs = windowMs + recoveryMs;
+    const animationMs = Math.max(1, numberParam(entity, "parryAnimationMs") ?? legacyFramesToMs(numberParam(entity, "parryAnimationFrames")) ?? cooldownMs);
     entity.runtime = {
       ...entity.runtime,
       combatAction: actionRuntime,
-      parryStartedFrame: frame,
-      parryAnimationUntilFrame: frame + animationFrames - 1,
-      parryUntilFrame: frame + windowFrames - 1,
-      parryRecoveryUntilFrame: frame + cooldown,
-      parryCooldownUntilFrame: frame + cooldown,
+      parryStartedMs: timeMs,
+      parryAnimationUntilMs: timeMs + animationMs,
+      parryUntilMs: timeMs + windowMs,
+      parryRecoveryUntilMs: timeMs + cooldownMs,
+      parryCooldownUntilMs: timeMs + cooldownMs,
+      parryStartedFrame: this.msToFrame(timeMs),
+      parryAnimationUntilFrame: this.msToFrame(timeMs + animationMs - this.clock.fixedStepMs),
+      parryUntilFrame: this.msToFrame(timeMs + windowMs - this.clock.fixedStepMs),
+      parryRecoveryUntilFrame: this.msToFrame(timeMs + cooldownMs),
+      parryCooldownUntilFrame: this.msToFrame(timeMs + cooldownMs),
     };
     this.emitCombatEvent({
       type: "parryStarted",
@@ -913,10 +977,14 @@ export class RuntimeWorld {
       message: `${entity.displayName} opened shock parry window.`,
       data: {
         actionId: action.id,
-        windowFrames,
-        recoveryFrames,
-        cooldown,
-        animationFrames,
+        windowMs,
+        recoveryMs,
+        cooldownMs,
+        animationMs,
+        windowFrames: this.msToFrame(windowMs),
+        recoveryFrames: this.msToFrame(recoveryMs),
+        cooldown: this.msToFrame(cooldownMs),
+        animationFrames: this.msToFrame(animationMs),
         fromCharge: options.fromCharge === true,
         armorLevel: numberParam(entity, "parryArmorLevel") ?? 3,
         controlLevel: numberParam(entity, "parryControlLevel") ?? 3,
@@ -928,21 +996,21 @@ export class RuntimeWorld {
   }
 
   private resolveCombatEvents(): void {
-    const frame = this.clock.frame;
+    const timeMs = this.clock.timeMs;
     const entities = this.allEntities();
     for (const attacker of entities) {
       if (!this.canUseAttackTouch(attacker)) continue;
-      if (attacker.runtime?.defeated || this.isHitStunned(attacker, frame)) continue;
-      const activeFrom = attacker.runtime?.attackStartFrame ?? Number.POSITIVE_INFINITY;
-      const activeUntil = attacker.runtime?.attackActiveUntilFrame ?? -1;
-      if (frame < activeFrom || frame > activeUntil) continue;
+      if (attacker.runtime?.defeated || this.isHitStunned(attacker, timeMs)) continue;
+      const activeFrom = attacker.runtime?.attackStartMs ?? Number.POSITIVE_INFINITY;
+      const activeUntil = attacker.runtime?.attackActiveUntilMs ?? -1;
+      if (timeMs < activeFrom || timeMs >= activeUntil) continue;
 
       const hitIds = new Set(attacker.runtime?.attackHitIds || []);
       const attackArea = this.attackTouchBounds(attacker);
       const attackKind = attacker.runtime?.attackKind || "normal";
       const rawDamage = this.attackDamage(attacker);
       const controlLevel = this.attackControlLevel(attacker);
-      const hitStunFrames = this.attackHitStun(attacker);
+      const hitStunMs = this.attackHitStun(attacker);
       this.syncAttackTouchEntity(attacker, attackArea);
       for (const defender of entities) {
         if (hitIds.has(defender.id) || !this.canReceiveAttackTouch(attacker, defender)) continue;
@@ -965,16 +1033,16 @@ export class RuntimeWorld {
             controlLevel,
           },
         });
-        const parryUntil = defender.runtime?.parryUntilFrame ?? -1;
+        const parryUntil = defender.runtime?.parryUntilMs ?? -1;
         const parryControlLevel = numberParam(defender, "parryControlLevel") ?? 3;
-        if (frame <= parryUntil && controlLevel <= parryControlLevel) {
+        if (timeMs < parryUntil && controlLevel <= parryControlLevel) {
           this.resolveParrySuccess(attacker, defender, hitIds, { attackKind, rawDamage, controlLevel });
           continue;
         }
 
         const armorLevel = this.currentArmorLevel(defender);
         const damageResult = this.damageAfterArmor(rawDamage, controlLevel, armorLevel, defender);
-        if (damageResult.resistedDamage > 0 && (defender.runtime?.chargeHeldFrames ?? 0) > 0) {
+        if (damageResult.resistedDamage > 0 && (defender.runtime?.chargeHeldMs ?? 0) > 0) {
           defender.runtime = {
             ...defender.runtime,
             chargeStoredDamage: (defender.runtime?.chargeStoredDamage ?? 0) + damageResult.resistedDamage,
@@ -982,12 +1050,14 @@ export class RuntimeWorld {
         }
         const currentHealth = defender.runtime?.health ?? numberParam(defender, "health") ?? 1;
         const nextHealth = Math.max(0, currentHealth - damageResult.damage);
-        const stunned = damageResult.damage > 0 && controlLevel > armorLevel && hitStunFrames > 0;
+        const stunned = damageResult.damage > 0 && controlLevel > armorLevel && hitStunMs > 0;
         defender.runtime = {
           ...defender.runtime,
           health: nextHealth,
-          hitFlashUntilFrame: frame + (numberParam(defender, "hitFlashFrames") ?? 8),
-          hitStunUntilFrame: stunned ? Math.max(defender.runtime?.hitStunUntilFrame ?? -1, frame + hitStunFrames) : defender.runtime?.hitStunUntilFrame,
+          hitFlashUntilMs: timeMs + (numberParam(defender, "hitFlashMs") ?? legacyFramesToMs(numberParam(defender, "hitFlashFrames")) ?? 80),
+          hitFlashUntilFrame: this.msToFrame(timeMs + (numberParam(defender, "hitFlashMs") ?? legacyFramesToMs(numberParam(defender, "hitFlashFrames")) ?? 80)),
+          hitStunUntilMs: stunned ? Math.max(defender.runtime?.hitStunUntilMs ?? -1, timeMs + hitStunMs) : defender.runtime?.hitStunUntilMs,
+          hitStunUntilFrame: stunned ? this.msToFrame(Math.max(defender.runtime?.hitStunUntilMs ?? -1, timeMs + hitStunMs)) : defender.runtime?.hitStunUntilFrame,
         };
         if (stunned) {
           this.stopEntity(defender);
@@ -1012,7 +1082,8 @@ export class RuntimeWorld {
             controlLevel,
             armorLevel,
             stunned,
-            hitStunFrames: stunned ? hitStunFrames : 0,
+            hitStunMs: stunned ? hitStunMs : 0,
+            hitStunFrames: stunned ? this.msToFrame(hitStunMs) : 0,
             chargeStage: attacker.runtime?.attackChargeStage,
           },
         });
@@ -1028,20 +1099,25 @@ export class RuntimeWorld {
     hitIds: Set<EntityId>,
     attack: { attackKind: AttackKind; rawDamage: number; controlLevel: number },
   ): void {
-    const frame = this.clock.frame;
+    const timeMs = this.clock.timeMs;
     const charged = attack.attackKind === "charged";
-    const stunFrames = charged
-      ? numberParam(attacker, "chargedParryStunFrames") ?? numberParam(defender, "chargedParryStunFrames") ?? 120
-      : numberParam(attacker, "parryShockStunFrames") ?? numberParam(attacker, "parryStunFrames") ?? 14;
-    const superFrames = numberParam(defender, "superParryFrames") ?? 200;
-    const lockFrames = numberParam(defender, "superParryLockFrames") ?? 50;
+    const stunMs = charged
+      ? numberParam(attacker, "chargedParryStunMs") ?? numberParam(defender, "chargedParryStunMs") ?? legacyFramesToMs(numberParam(attacker, "chargedParryStunFrames") ?? numberParam(defender, "chargedParryStunFrames") ?? 120)
+      : numberParam(attacker, "parryShockStunMs") ?? numberParam(attacker, "parryStunMs") ?? legacyFramesToMs(numberParam(attacker, "parryShockStunFrames") ?? numberParam(attacker, "parryStunFrames") ?? 14);
+    const superMs = numberParam(defender, "superParryMs") ?? legacyFramesToMs(numberParam(defender, "superParryFrames") ?? 200);
+    const lockMs = numberParam(defender, "superParryLockMs") ?? legacyFramesToMs(numberParam(defender, "superParryLockFrames") ?? 50);
     const bonusMultiplier = numberParam(defender, "superParryDamageMultiplier") ?? 2;
     const bonusDamage = roundDamage(attack.rawDamage * bonusMultiplier);
 
     attacker.runtime = {
       ...attacker.runtime,
-      hitStunUntilFrame: frame + stunFrames,
-      hitFlashUntilFrame: frame + Math.max(3, Math.floor(stunFrames / 2)),
+      hitStunUntilMs: timeMs + stunMs,
+      hitFlashUntilMs: timeMs + Math.max(30, stunMs / 2),
+      hitStunUntilFrame: this.msToFrame(timeMs + stunMs),
+      hitFlashUntilFrame: this.msToFrame(timeMs + Math.max(30, stunMs / 2)),
+      attackStartMs: undefined,
+      attackActiveUntilMs: undefined,
+      attackCooldownUntilMs: undefined,
       attackStartFrame: undefined,
       attackActiveUntilFrame: undefined,
       attackHitIds: [...hitIds],
@@ -1056,12 +1132,17 @@ export class RuntimeWorld {
     defender.runtime = {
       ...defender.runtime,
       combatAction: undefined,
+      parryUntilMs: undefined,
+      parryRecoveryUntilMs: undefined,
       parryUntilFrame: undefined,
       parryRecoveryUntilFrame: undefined,
-      superParryUntilFrame: frame + superFrames,
-      superParryLockUntilFrame: frame + lockFrames,
+      superParryUntilMs: timeMs + superMs,
+      superParryLockUntilMs: timeMs + lockMs,
+      superParryUntilFrame: this.msToFrame(timeMs + superMs),
+      superParryLockUntilFrame: this.msToFrame(timeMs + lockMs),
       superParryBonusDamage: bonusDamage,
-      hitFlashUntilFrame: frame + Math.max(4, Math.floor(lockFrames / 4)),
+      hitFlashUntilMs: timeMs + Math.max(40, lockMs / 4),
+      hitFlashUntilFrame: this.msToFrame(timeMs + Math.max(40, lockMs / 4)),
     };
     this.emitCombatEvent({
       type: "parrySuccess",
@@ -1070,7 +1151,7 @@ export class RuntimeWorld {
       sourceId: defender.id,
       targetId: attacker.id,
       message: `${defender.displayName} shocked ${attacker.displayName}'s ${attackKindLabel(attack.attackKind)} aside.`,
-      data: { stunFrames, kind: attack.attackKind, controlLevel: attack.controlLevel, charged, bonusDamage },
+      data: { stunMs, stunFrames: this.msToFrame(stunMs), kind: attack.attackKind, controlLevel: attack.controlLevel, charged, bonusDamage },
     });
     this.emitCombatEvent({
       type: "superParryReady",
@@ -1079,7 +1160,7 @@ export class RuntimeWorld {
       sourceId: defender.id,
       targetId: attacker.id,
       message: `${defender.displayName} entered super parry counter window.`,
-      data: { superFrames, lockFrames, bonusDamage },
+      data: { superMs, lockMs, superFrames: this.msToFrame(superMs), lockFrames: this.msToFrame(lockMs), bonusDamage },
     });
   }
 
@@ -1172,24 +1253,24 @@ export class RuntimeWorld {
   }
 
   private updateCombatPresentationStates(): void {
-    const frame = this.clock.frame;
+    const timeMs = this.clock.timeMs;
     for (const entity of this.allEntities()) {
       if (!entity.render) continue;
       const slot = entity.runtime?.defeated
         ? "death"
-        : frame <= (entity.runtime?.parryAnimationUntilFrame ?? -1)
+        : timeMs < (entity.runtime?.parryAnimationUntilMs ?? -1)
           ? "parry"
-          : this.isAttackAnimating(entity, frame)
+          : this.isAttackAnimating(entity, timeMs)
             ? "attack"
             : "current";
       this.applyPresentationSlot(entity, slot);
     }
   }
 
-  private isAttackAnimating(entity: Entity, frame: number): boolean {
-    const start = entity.runtime?.attackStartFrame;
-    const cooldownUntil = entity.runtime?.attackCooldownUntilFrame;
-    return typeof start === "number" && typeof cooldownUntil === "number" && frame >= start && frame < cooldownUntil;
+  private isAttackAnimating(entity: Entity, timeMs: number): boolean {
+    const start = entity.runtime?.attackStartMs;
+    const cooldownUntil = entity.runtime?.attackCooldownUntilMs;
+    return typeof start === "number" && typeof cooldownUntil === "number" && timeMs >= start && timeMs < cooldownUntil;
   }
 
   private applyPresentationSlot(entity: Entity, slot: string): void {
@@ -1207,11 +1288,12 @@ export class RuntimeWorld {
     };
   }
 
-  private emitCombatEvent(event: Omit<CombatEvent, "id" | "frame">): CombatEvent {
+  private emitCombatEvent(event: Omit<CombatEvent, "id" | "frame" | "timeMs">): CombatEvent {
     const next: CombatEvent = {
       ...event,
       id: `combat-${this.combatEvents.length + 1}-${Date.now().toString(36)}`,
       frame: this.clock.frame,
+      timeMs: this.clock.timeMs,
     };
     this.combatEvents.push(next);
     return next;
@@ -1219,13 +1301,15 @@ export class RuntimeWorld {
 
   private defeatEntity(entity: Entity, source: Entity): void {
     if (entity.runtime?.defeated) return;
-    const frame = this.clock.frame;
+    const timeMs = this.clock.timeMs;
     entity.runtime = {
       ...entity.runtime,
       defeated: true,
-      defeatFrame: frame,
+      defeatTimeMs: timeMs,
+      defeatFrame: this.clock.frame,
       health: 0,
-      hitFlashUntilFrame: frame + 12,
+      hitFlashUntilMs: timeMs + 120,
+      hitFlashUntilFrame: this.msToFrame(timeMs + 120),
     };
     this.stopEntity(entity);
     this.clearActiveAttack(entity);
@@ -1251,8 +1335,12 @@ export class RuntimeWorld {
   private clearActiveAttack(entity: Entity): void {
     entity.runtime = {
       ...entity.runtime,
+      attackStartMs: undefined,
+      attackActiveUntilMs: undefined,
+      attackCooldownUntilMs: undefined,
       attackStartFrame: undefined,
       attackActiveUntilFrame: undefined,
+      attackCooldownUntilFrame: undefined,
       attackHitIds: entity.runtime?.attackHitIds || [],
       attackTouchEntityId: undefined,
       attackKind: undefined,
@@ -1267,6 +1355,8 @@ export class RuntimeWorld {
   private clearCharge(entity: Entity): void {
     entity.runtime = {
       ...entity.runtime,
+      chargeStartedMs: undefined,
+      chargeHeldMs: undefined,
       chargeStartedFrame: undefined,
       chargeHeldFrames: undefined,
       chargeStage: undefined,
@@ -1277,6 +1367,9 @@ export class RuntimeWorld {
   private clearDodge(entity: Entity): void {
     entity.runtime = {
       ...entity.runtime,
+      dodgeStartedMs: undefined,
+      dodgeUntilMs: undefined,
+      dodgeRecoveryUntilMs: undefined,
       dodgeStartedFrame: undefined,
       dodgeUntilFrame: undefined,
       dodgeRecoveryUntilFrame: undefined,
@@ -1284,8 +1377,12 @@ export class RuntimeWorld {
     };
   }
 
-  private isHitStunned(entity: Entity, frame: number): boolean {
-    return frame <= (entity.runtime?.hitStunUntilFrame ?? -1);
+  private isHitStunned(entity: Entity, timeMs: number): boolean {
+    return timeMs < (entity.runtime?.hitStunUntilMs ?? -1);
+  }
+
+  private msToFrame(timeMs: number): number {
+    return Math.max(0, Math.round(timeMs / this.clock.fixedStepMs));
   }
 
   private findEntityByInternalName(internalName: string): Entity | undefined {
@@ -1323,20 +1420,38 @@ export class RuntimeWorld {
       facing: entity.runtime?.facing ?? initialDirection,
       health: entity.runtime?.health ?? numberParam(entity, "health"),
       defeated: entity.runtime?.defeated ?? false,
+      hitFlashUntilMs: entity.runtime?.hitFlashUntilMs ?? legacyFramesToMs(entity.runtime?.hitFlashUntilFrame),
+      defeatTimeMs: entity.runtime?.defeatTimeMs ?? legacyFramesToMs(entity.runtime?.defeatFrame),
       hitFlashUntilFrame: entity.runtime?.hitFlashUntilFrame,
       defeatFrame: entity.runtime?.defeatFrame,
       combatAction: combatActionRuntimeFromValue(entity.runtime?.combatAction),
+      attackStartMs: entity.runtime?.attackStartMs ?? legacyFramesToMs(entity.runtime?.attackStartFrame),
+      attackActiveUntilMs: entity.runtime?.attackActiveUntilMs ?? legacyFramesToMs(entity.runtime?.attackActiveUntilFrame),
+      attackCooldownUntilMs: entity.runtime?.attackCooldownUntilMs ?? legacyFramesToMs(entity.runtime?.attackCooldownUntilFrame),
       attackKind: attackKindFromValue(entity.runtime?.attackKind),
       attackInputDown: entity.runtime?.attackInputDown ?? false,
       attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease ?? false,
       parryInputDown: entity.runtime?.parryInputDown ?? false,
       dodgeInputDown: entity.runtime?.dodgeInputDown ?? false,
+      dodgeStartedMs: entity.runtime?.dodgeStartedMs ?? legacyFramesToMs(entity.runtime?.dodgeStartedFrame),
+      dodgeUntilMs: entity.runtime?.dodgeUntilMs ?? legacyFramesToMs(entity.runtime?.dodgeUntilFrame),
+      dodgeRecoveryUntilMs: entity.runtime?.dodgeRecoveryUntilMs ?? legacyFramesToMs(entity.runtime?.dodgeRecoveryUntilFrame),
       dodgeStartedFrame: entity.runtime?.dodgeStartedFrame,
       dodgeUntilFrame: entity.runtime?.dodgeUntilFrame,
       dodgeRecoveryUntilFrame: entity.runtime?.dodgeRecoveryUntilFrame,
+      chargeStartedMs: entity.runtime?.chargeStartedMs ?? legacyFramesToMs(entity.runtime?.chargeStartedFrame),
+      chargeHeldMs: entity.runtime?.chargeHeldMs ?? legacyFramesToMs(entity.runtime?.chargeHeldFrames),
+      parryStartedMs: entity.runtime?.parryStartedMs ?? legacyFramesToMs(entity.runtime?.parryStartedFrame),
+      parryAnimationUntilMs: entity.runtime?.parryAnimationUntilMs ?? legacyFramesToMs(entity.runtime?.parryAnimationUntilFrame),
+      parryUntilMs: entity.runtime?.parryUntilMs ?? legacyFramesToMs(entity.runtime?.parryUntilFrame),
+      parryRecoveryUntilMs: entity.runtime?.parryRecoveryUntilMs ?? legacyFramesToMs(entity.runtime?.parryRecoveryUntilFrame),
+      parryCooldownUntilMs: entity.runtime?.parryCooldownUntilMs ?? legacyFramesToMs(entity.runtime?.parryCooldownUntilFrame),
       parryStartedFrame: entity.runtime?.parryStartedFrame,
       parryAnimationUntilFrame: entity.runtime?.parryAnimationUntilFrame,
       parryRecoveryUntilFrame: entity.runtime?.parryRecoveryUntilFrame,
+      superParryUntilMs: entity.runtime?.superParryUntilMs ?? legacyFramesToMs(entity.runtime?.superParryUntilFrame),
+      superParryLockUntilMs: entity.runtime?.superParryLockUntilMs ?? legacyFramesToMs(entity.runtime?.superParryLockUntilFrame),
+      hitStunUntilMs: entity.runtime?.hitStunUntilMs ?? legacyFramesToMs(entity.runtime?.hitStunUntilFrame),
     };
   }
 
@@ -1366,6 +1481,19 @@ function numberParam(entity: Entity, key: string): number | undefined {
   return undefined;
 }
 
+function legacyFramesToMs(frames: number): number;
+function legacyFramesToMs(frames: number | undefined): number | undefined;
+function legacyFramesToMs(frames: number | undefined): number | undefined {
+  return typeof frames === "number" && Number.isFinite(frames) ? frames * 10 : undefined;
+}
+
+function runtimeStateMs(state: Record<string, unknown>, msKey: string, legacyFrameKey: string): number | undefined {
+  const ms = state[msKey];
+  if (typeof ms === "number" && Number.isFinite(ms)) return ms;
+  const frames = state[legacyFrameKey];
+  return typeof frames === "number" && Number.isFinite(frames) ? legacyFramesToMs(frames) : undefined;
+}
+
 function attackKindFromValue(value: unknown): AttackKind | undefined {
   return value === "normal" || value === "charged" || value === "superParry" ? value : undefined;
 }
@@ -1374,9 +1502,44 @@ function combatActionRuntimeFromValue(value: unknown): CombatActionRuntime | und
   if (!value || typeof value !== "object") return undefined;
   const candidate = value as Partial<CombatActionRuntime>;
   if (!isCombatActionId(candidate.actionId)) return undefined;
-  if (typeof candidate.startedFrame !== "number" || !Number.isFinite(candidate.startedFrame)) return undefined;
   if (!Array.isArray(candidate.phases) || !Array.isArray(candidate.windows)) return undefined;
-  return cloneJson(candidate) as CombatActionRuntime;
+  const legacy = value as {
+    startedFrame?: unknown;
+    phases?: Array<{ startsAtFrame?: unknown; untilFrame?: unknown }>;
+    windows?: Array<{ startsAtFrame?: unknown; untilFrame?: unknown }>;
+  };
+  const startedMs =
+    typeof candidate.startedMs === "number" && Number.isFinite(candidate.startedMs)
+      ? candidate.startedMs
+      : typeof legacy.startedFrame === "number" && Number.isFinite(legacy.startedFrame)
+        ? legacyFramesToMs(legacy.startedFrame)
+        : undefined;
+  if (startedMs === undefined) return undefined;
+  const next = cloneJson(candidate) as CombatActionRuntime;
+  next.startedMs = startedMs;
+  next.phases = next.phases.map((phase, index) => ({
+    ...phase,
+    startsAtMs:
+      typeof phase.startsAtMs === "number" && Number.isFinite(phase.startsAtMs)
+        ? phase.startsAtMs
+        : legacyFramesToMs(legacy.phases?.[index]?.startsAtFrame as number | undefined) ?? startedMs,
+    untilMs:
+      typeof phase.untilMs === "number" && Number.isFinite(phase.untilMs)
+        ? phase.untilMs
+        : legacyFramesToMs(legacy.phases?.[index]?.untilFrame as number | undefined) ?? startedMs,
+  }));
+  next.windows = next.windows.map((window, index) => ({
+    ...window,
+    startsAtMs:
+      typeof window.startsAtMs === "number" && Number.isFinite(window.startsAtMs)
+        ? window.startsAtMs
+        : legacyFramesToMs(legacy.windows?.[index]?.startsAtFrame as number | undefined) ?? startedMs,
+    untilMs:
+      typeof window.untilMs === "number" && Number.isFinite(window.untilMs)
+        ? window.untilMs
+        : legacyFramesToMs(legacy.windows?.[index]?.untilFrame as number | undefined) ?? startedMs,
+  }));
+  return next;
 }
 
 function isCombatActionId(value: unknown): value is CombatActionId {

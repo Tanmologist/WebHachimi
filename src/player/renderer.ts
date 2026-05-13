@@ -95,7 +95,7 @@ export class PlayerRenderer {
     this.drawAttackTelegraphs(world);
     this.drawChargeStates(world);
     world.allEntities().forEach((entity) => this.drawEntity(entity, world));
-    world.allEntities().forEach((entity) => this.drawHealthBar(entity, world.clock.frame));
+    world.allEntities().forEach((entity) => this.drawHealthBar(entity, world));
     this.drawHud(world, player);
   }
 
@@ -138,7 +138,6 @@ export class PlayerRenderer {
   private drawEntity(entity: Entity, world: RuntimeWorld): void {
     if (isGameplayDebugEntity(entity)) return;
     if (entity.render && !entity.render.visible) return;
-    const frame = world.clock.frame;
     const attackTouch = isAttackTouchEntity(entity);
     const useActionResource =
       entity.render?.slot === "parry" ||
@@ -152,7 +151,7 @@ export class PlayerRenderer {
     }
     const graphics = this.takeGraphics();
     const size = entity.collider?.size || { x: 56, y: 56 };
-    const flashed = frame <= (entity.runtime?.hitFlashUntilFrame ?? -1);
+    const flashed = world.clock.timeMs < (entity.runtime?.hitFlashUntilMs ?? -1);
     const defeated = entity.runtime?.defeated === true;
     const color = attackTouch ? 0xff4d5d : flashed ? 0xf4fff7 : parseColor(entity.render?.color || "#74a8bd");
     const baseAlpha = entity.persistent ? entity.render?.opacity ?? 1 : Math.min(entity.render?.opacity ?? 1, 0.45);
@@ -257,14 +256,14 @@ export class PlayerRenderer {
   }
 
   private drawAttackTelegraphs(world: RuntimeWorld): void {
-    const frame = world.clock.frame;
+    const timeMs = world.clock.timeMs;
     for (const entity of world.allEntities()) {
       if (entity.runtime?.defeated || !entity.collider) continue;
-      const start = entity.runtime?.attackStartFrame;
-      const activeUntil = entity.runtime?.attackActiveUntilFrame;
-      const cooldownUntil = entity.runtime?.attackCooldownUntilFrame;
-      if (start === undefined || activeUntil === undefined || cooldownUntil === undefined || frame >= cooldownUntil) continue;
-      if (frame > activeUntil) {
+      const start = entity.runtime?.attackStartMs;
+      const activeUntil = entity.runtime?.attackActiveUntilMs;
+      const cooldownUntil = entity.runtime?.attackCooldownUntilMs;
+      if (start === undefined || activeUntil === undefined || cooldownUntil === undefined || timeMs >= cooldownUntil) continue;
+      if (timeMs >= activeUntil) {
         const bounds = boundsFor(entity);
         const graphics = this.takeGraphics();
         graphics.roundRect(bounds.x - 5, bounds.y - 5, bounds.w + 10, bounds.h + 10, 8);
@@ -276,7 +275,7 @@ export class PlayerRenderer {
       }
       const rect = attackRect(entity);
       const graphics = this.takeGraphics();
-      if (frame < start) {
+      if (timeMs < start) {
         graphics.rect(rect.x, rect.y, rect.w, rect.h);
         graphics.fill({ color: 0xffd166, alpha: 0.18 });
         graphics.setStrokeStyle({ width: 2, color: 0xffd166, alpha: 0.68 });
@@ -288,16 +287,17 @@ export class PlayerRenderer {
         graphics.stroke();
       }
       this.worldLayer.addChild(graphics);
-      this.drawWorldLabel(frame < start ? "WINDUP" : "ACTIVE", rect.x + rect.w / 2, rect.y - 4, frame < start ? "#ffe9a9" : "#ffd9de");
+      this.drawWorldLabel(timeMs < start ? "WINDUP" : "ACTIVE", rect.x + rect.w / 2, rect.y - 4, timeMs < start ? "#ffe9a9" : "#ffd9de");
     }
   }
 
   private drawChargeStates(world: RuntimeWorld): void {
     const frame = world.clock.frame;
+    const timeMs = world.clock.timeMs;
     for (const entity of world.allEntities()) {
       if (entity.runtime?.defeated || !entity.collider) continue;
-      const charging = (entity.runtime?.chargeHeldFrames ?? 0) > 0;
-      const superReady = frame <= (entity.runtime?.superParryUntilFrame ?? -1);
+      const charging = (entity.runtime?.chargeHeldMs ?? 0) > 0;
+      const superReady = timeMs < (entity.runtime?.superParryUntilMs ?? -1);
       if (!charging && !superReady) continue;
       const bounds = boundsFor(entity);
       const graphics = this.takeGraphics();
@@ -327,7 +327,7 @@ export class PlayerRenderer {
     this.worldLayer.addChild(label);
   }
 
-  private drawHealthBar(entity: Entity, frame: number): void {
+  private drawHealthBar(entity: Entity, world: RuntimeWorld): void {
     const maxHealth = readNumberParam(entity, "health");
     const health = entity.runtime?.health ?? maxHealth;
     if (maxHealth === undefined || health === undefined) return;
@@ -342,7 +342,7 @@ export class PlayerRenderer {
     bar.roundRect(x, y, width, height, 3);
     bar.fill({ color: 0x111817, alpha: 0.78 });
     bar.roundRect(x + 1, y + 1, Math.max(0, (width - 2) * ratio), height - 2, 2);
-    bar.fill({ color: entity.runtime?.defeated ? 0x6f756c : frame <= (entity.runtime?.hitFlashUntilFrame ?? -1) ? 0xf2d16b : 0x79d6ba, alpha: 0.95 });
+    bar.fill({ color: entity.runtime?.defeated ? 0x6f756c : world.clock.timeMs < (entity.runtime?.hitFlashUntilMs ?? -1) ? 0xf2d16b : 0x79d6ba, alpha: 0.95 });
     this.worldLayer.addChild(bar);
   }
 
@@ -436,9 +436,9 @@ function presentationResource(entity: Entity, resources: Record<string, Resource
 function presentationAnimationTimeMs(entity: Entity, world: RuntimeWorld): number {
   const isParrySlot = entity.render?.slot === "parry" || entity.render?.state === "parry";
   const isAttackSlot = entity.render?.slot === "attack" || entity.render?.state === "attack";
-  const startedFrame = isParrySlot ? entity.runtime?.parryStartedFrame : isAttackSlot ? entity.runtime?.attackStartFrame : undefined;
-  if (typeof startedFrame === "number") {
-    return Math.max(0, (world.clock.frame - startedFrame) * world.clock.fixedStepMs);
+  const startedMs = isParrySlot ? entity.runtime?.parryStartedMs : isAttackSlot ? entity.runtime?.attackStartMs : undefined;
+  if (typeof startedMs === "number") {
+    return Math.max(0, world.clock.timeMs - startedMs);
   }
   return world.clock.timeMs;
 }

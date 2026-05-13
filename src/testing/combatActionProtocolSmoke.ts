@@ -1,4 +1,4 @@
-import { combatActionDefForEntity, combatAttackRectForEntity, combatPhaseFrames } from "../combat/actions";
+import { combatActionDefForEntity, combatAttackRectForEntity, combatPhaseDurationMs } from "../combat/actions";
 import { planMovedAttackTouchOffsets } from "../combat/hitboxEdit";
 import type { CombatEvent, Entity, Project, Scene } from "../project/schema";
 import { createStarterProject } from "../editor/starterProject";
@@ -13,6 +13,7 @@ assertActionDefinitions(player);
 assertRelativeHitboxEditing(player);
 assertRuntimeActionContext(scene, player);
 assertDodgeWindow(scene, player, enemy);
+assertTickRateIndependentTiming(scene, player);
 
 console.log("combat action protocol smoke passed");
 
@@ -22,21 +23,21 @@ function assertActionDefinitions(entity: Entity): void {
   const parry = combatActionDefForEntity(entity, "parry");
   const dodge = combatActionDefForEntity(entity, "dodge");
 
-  assert(combatPhaseFrames(normal, "startup") === 10, "normal attack startup should follow the doc table");
-  assert(combatPhaseFrames(normal, "active") === 30, "normal attack active window should follow the doc table");
-  assert(combatPhaseFrames(normal, "recovery") === 20, "normal attack recovery should follow the doc table");
+  assert(combatPhaseDurationMs(normal, "startup") === 100, "normal attack startup should follow the time table");
+  assert(combatPhaseDurationMs(normal, "active") === 300, "normal attack active window should follow the time table");
+  assert(combatPhaseDurationMs(normal, "recovery") === 200, "normal attack recovery should follow the time table");
   assert(normal.windows.some((window) => window.type === "hitbox" && window.phase === "active"), "normal attack needs an active hitbox window");
   assert(normal.windows.some((window) => window.type === "armor" && window.armorLevel === 1), "normal attack should carry level 1 armor");
 
-  assert(combatPhaseFrames(charged, "startup") === 20, "charged attack startup should follow the doc table");
-  assert(combatPhaseFrames(charged, "active") === 50, "charged attack active window should follow the doc table");
+  assert(combatPhaseDurationMs(charged, "startup") === 200, "charged attack startup should follow the time table");
+  assert(combatPhaseDurationMs(charged, "active") === 500, "charged attack active window should follow the time table");
   assert(charged.data?.chargeStage === 2, "charged action should preserve charge stage");
   assert(charged.windows.some((window) => window.type === "hitbox" && window.controlLevel === 3), "charged hitbox should carry level 3 control");
 
-  assert(combatPhaseFrames(parry, "active") === 20, "parry active window should be 0.2s / 20 frames");
+  assert(combatPhaseDurationMs(parry, "active") === 200, "parry active window should be 200ms");
   assert(parry.windows.some((window) => window.type === "parry" && window.controlLevel === 3), "parry should counter control level 3 and below");
 
-  assert(combatPhaseFrames(dodge, "evade") === 18, "dodge should expose an invulnerable evade phase");
+  assert(combatPhaseDurationMs(dodge, "evade") === 180, "dodge should expose an invulnerable evade phase");
   assert(dodge.windows.some((window) => window.type === "invulnerable"), "dodge should have an invulnerable window");
 }
 
@@ -115,8 +116,32 @@ function assertDodgeWindow(sourceScene: Scene, sourcePlayer: Entity, sourceEnemy
 
   const dodgeStarted = mustEvent(world, { type: "dodgeStarted", sourceId: sourcePlayer.id });
   assert(dodgeStarted.data?.actionId === "dodge", "dodge should report its action id");
-  assert(requireEntity(world, sourcePlayer.id).runtime?.dodgeUntilFrame !== undefined, "dodge should write an invulnerable runtime window");
+  assert(requireEntity(world, sourcePlayer.id).runtime?.dodgeUntilMs !== undefined, "dodge should write an invulnerable runtime window");
   assert(!world.combatEvents.some((event) => event.type === "hit" && event.defenderId === sourcePlayer.id), "player should not be hit during the dodge invulnerable window");
+}
+
+function assertTickRateIndependentTiming(sourceScene: Scene, sourcePlayer: Entity): void {
+  const slowScene = cloneJson(sourceScene);
+  slowScene.settings.tickRate = 50;
+  slowScene.settings.fixedStepMs = 20;
+
+  const world = new RuntimeWorld({ scene: slowScene });
+  const attackKey = scopedKey(sourcePlayer, "attack");
+  world.setInput(attackKey, true);
+  world.runFixedFrame();
+  world.setInput(attackKey, false);
+  world.runFixedFrame();
+  const normalStarted = mustEvent(world, { type: "attackStarted", attackerId: sourcePlayer.id });
+  assert(normalStarted.data?.startupMs === 100, "normal attack startup should stay 100ms at 50Hz");
+  assert(normalStarted.data?.activeStartMs === normalStarted.timeMs + 100, "active start should be time-based, not tick-count based");
+
+  const chargedWorld = new RuntimeWorld({ scene: slowScene });
+  chargedWorld.setInput(attackKey, true);
+  chargedWorld.runFixedFrames(31);
+  chargedWorld.setInput(attackKey, false);
+  chargedWorld.runFixedFrame();
+  const chargedStarted = mustEvent(chargedWorld, { type: "attackStarted", attackerId: sourcePlayer.id, "data.kind": "charged" });
+  assert(chargedStarted.data?.actionId === "chargeAttack", "600ms charge threshold should still trigger at 50Hz");
 }
 
 function activeScene(sourceProject: Project): Scene {
@@ -163,6 +188,10 @@ function readPath(source: unknown, path: string): unknown {
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
+}
+
+function cloneJson<T>(value: T): T {
+  return JSON.parse(JSON.stringify(value)) as T;
 }
 
 function round(value: number): number {
