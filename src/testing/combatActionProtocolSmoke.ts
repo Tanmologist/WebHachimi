@@ -87,8 +87,12 @@ function assertRuntimeActionContext(sourceScene: Scene, sourcePlayer: Entity): v
   assert(normalStarted.data?.moveOffsetX === 36 && normalStarted.data?.moveDurationMs === 100, "runtime normal attack should report lunge data");
   const livePlayer = requireEntity(world, sourcePlayer.id);
   assert(livePlayer.runtime?.combatAction?.actionId === "normalAttack", "runtime should store the current action context");
+  assert(livePlayer.runtime.attackArmorLevel === 1 && livePlayer.runtime.attackControlLevel === 1, "runtime should expose normal armor and control levels");
   assert(livePlayer.runtime.combatAction.windows.some((window) => window.type === "hitbox"), "runtime action context should include hitbox windows");
   assert(livePlayer.runtime.combatAction.windows.some((window) => window.type === "movement"), "runtime action context should include movement windows");
+  world.runFixedFrames(12);
+  const touch = world.allEntities().find((entity) => entity.tags.includes("touch") && entity.parentId === sourcePlayer.id);
+  assert(touch?.runtime?.attackControlLevel === 1, "runtime attack touch should carry its control level for editor labels");
 
   const chargedWorld = new RuntimeWorld({ scene: sourceScene });
   chargedWorld.setInput(attackKey, true);

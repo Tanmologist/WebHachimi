@@ -430,6 +430,7 @@ export class V2Renderer {
       resources,
       presentationAnimationTimeMs(entity, world, animationTimeMs),
     );
+    this.drawCombatActorArmorLevel(world, entity);
     if (showEditorDecorations && selectedPart) this.drawSelection(entity, selectedPart);
   }
 
@@ -475,7 +476,7 @@ export class V2Renderer {
       presentation.stroke();
     }
     this.worldLayer.addChild(presentation);
-    if (attackTouch) this.drawCombatDebugLabel(entity, "TOUCH BOX");
+    if (attackTouch) this.drawCombatDebugLabel(entity, combatTouchLabel(world, entity));
     if (movementTarget) {
       this.drawCombatMovementLine(world, entity);
       this.drawCombatDebugLabel(entity, "MOVE");
@@ -565,7 +566,7 @@ export class V2Renderer {
       }
       graphics.stroke();
       this.worldLayer.addChild(graphics);
-      this.drawCombatRectLabel(rect, timeMs < start ? "WINDUP" : "ACTIVE");
+      this.drawCombatRectLabel(rect, timeMs < start ? windupControlLabel(entity) : activeControlLabel(entity));
     }
   }
 
@@ -609,6 +610,21 @@ export class V2Renderer {
     bar.roundRect(x + 1, y + 1, Math.max(0, (width - 2) * ratio), height - 2, 2);
     bar.fill({ color: entity.runtime?.defeated ? 0x6f756c : world.clock.timeMs < (entity.runtime?.hitFlashUntilMs ?? -1) ? 0xf2d16b : 0x79d6ba, alpha: 0.95 });
     this.worldLayer.addChild(bar);
+  }
+
+  private drawCombatActorArmorLevel(world: RuntimeWorld, entity: Entity): void {
+    const level = combatArmorLevelForEntity(entity, world.clock.timeMs);
+    if (level === undefined) return;
+    const bounds = boundsFor(entity);
+    this.drawCombatLevelBadge(
+      { x: bounds.x + bounds.w / 2, y: bounds.y - 30 },
+      `霸体 Lv.${level}`,
+      {
+        fill: "#e8fff3",
+        background: 0x123327,
+        border: 0x74e5aa,
+      },
+    );
   }
 
   private loadImageTexture(imagePath: string): void {
@@ -694,7 +710,7 @@ export class V2Renderer {
     const label = new Text({
       text,
       style: {
-        fill: text === "ACTIVE" ? "#ffd9de" : "#ffe9a9",
+        fill: text.startsWith("ACTIVE") ? "#ffd9de" : "#ffe9a9",
         fontFamily: "Inter, Microsoft YaHei, sans-serif",
         fontSize: 11,
         fontWeight: "800",
@@ -702,6 +718,35 @@ export class V2Renderer {
     });
     label.anchor.set(0.5, 1);
     label.position.set(rect.x + rect.w / 2, rect.y - 4);
+    this.worldLayer.addChild(label);
+  }
+
+  private drawCombatLevelBadge(
+    point: Vec2,
+    text: string,
+    style: { fill: string; background: number; border: number },
+  ): void {
+    const label = new Text({
+      text,
+      style: {
+        fill: style.fill,
+        fontFamily: "Inter, Microsoft YaHei, sans-serif",
+        fontSize: 11,
+        fontWeight: "900",
+      },
+    });
+    label.anchor.set(0.5, 1);
+    label.position.set(point.x, point.y);
+    const padX = 6;
+    const padY = 3;
+    const badge = this.takeGraphics();
+    const width = Math.max(48, label.width + padX * 2);
+    const height = label.height + padY * 2;
+    badge.roundRect(point.x - width / 2, point.y - height, width, height, 5);
+    badge.fill({ color: style.background, alpha: 0.82 });
+    badge.setStrokeStyle({ width: 1.5, color: style.border, alpha: 0.88 });
+    badge.stroke();
+    this.worldLayer.addChild(badge);
     this.worldLayer.addChild(label);
   }
 
@@ -1461,6 +1506,54 @@ export function clamp(value: number, min: number, max: number): number {
 
 function gameplayAttackRect(entity: Entity): { x: number; y: number; w: number; h: number } {
   return combatAttackRectForEntity(entity);
+}
+
+function combatTouchLabel(world: RuntimeWorld, touch: Entity): string {
+  const level = combatControlLevelForTouch(world, touch);
+  return level === undefined ? "TOUCH BOX" : `TOUCH BOX\n控制 Lv.${level}`;
+}
+
+function windupControlLabel(entity: Entity): string {
+  const level = combatControlLevelForEntity(entity);
+  return level === undefined ? "WINDUP" : `WINDUP C${level}`;
+}
+
+function activeControlLabel(entity: Entity): string {
+  const level = combatControlLevelForEntity(entity);
+  return level === undefined ? "ACTIVE" : `ACTIVE C${level}`;
+}
+
+function combatControlLevelForTouch(world: RuntimeWorld, touch: Entity): number | undefined {
+  const ownLevel = normalizedLevel(touch.runtime?.attackControlLevel);
+  if (ownLevel !== undefined) return ownLevel;
+  const parent = touch.parentId ? world.entityById(touch.parentId) : undefined;
+  return parent ? combatControlLevelForEntity(parent) : undefined;
+}
+
+function combatControlLevelForEntity(entity: Entity): number | undefined {
+  const runtimeLevel = normalizedLevel(entity.runtime?.attackControlLevel);
+  if (runtimeLevel !== undefined) return runtimeLevel;
+  const hitboxWindow = entity.runtime?.combatAction?.windows.find((window) => window.type === "hitbox");
+  return normalizedLevel(hitboxWindow?.controlLevel ?? hitboxWindow?.level);
+}
+
+function combatArmorLevelForEntity(entity: Entity, timeMs: number): number | undefined {
+  if (entity.kind !== "entity") return undefined;
+  const actionId = entity.runtime?.combatAction?.actionId;
+  const isAttackAction = actionId === "normalAttack" || actionId === "chargeAttack" || actionId === "superParryExecution";
+  const openArmorWindow = entity.runtime?.combatAction?.windows.find(
+    (window) => window.type === "armor" && timeMs >= window.startsAtMs && timeMs < window.untilMs,
+  );
+  const windowLevel = normalizedLevel(openArmorWindow?.armorLevel ?? openArmorWindow?.level);
+  if (windowLevel !== undefined) return windowLevel;
+  if (isAttackAction && timeMs < (entity.runtime?.attackCooldownUntilMs ?? -1)) {
+    return normalizedLevel(entity.runtime?.attackArmorLevel) ?? 0;
+  }
+  return undefined;
+}
+
+function normalizedLevel(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : undefined;
 }
 
 function readNumberParam(entity: Entity, key: string): number | undefined {

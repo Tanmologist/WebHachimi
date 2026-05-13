@@ -1262,6 +1262,8 @@ export class RuntimeWorld {
         ageMs: 0,
         lifetimeMs,
         attackKind: attacker.runtime?.attackKind,
+        attackControlLevel: attacker.runtime?.attackControlLevel,
+        attackArmorLevel: attacker.runtime?.attackArmorLevel,
         combatAction: attacker.runtime?.combatAction,
       };
       return;
@@ -1310,6 +1312,8 @@ export class RuntimeWorld {
         ageMs: 0,
         lifetimeMs,
         attackKind: attacker.runtime?.attackKind,
+        attackControlLevel: attacker.runtime?.attackControlLevel,
+        attackArmorLevel: attacker.runtime?.attackArmorLevel,
         combatAction: attacker.runtime?.combatAction,
       },
     };
