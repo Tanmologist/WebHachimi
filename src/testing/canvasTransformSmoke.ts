@@ -135,8 +135,13 @@ run("anchor line appears only for selected child entities", () => {
   const parent = createEntity("entity-anchor-parent");
   const child = createEntity("entity-anchor-child");
   child.parentId = parent.id;
+  const projectile = createEntity("entity-anchor-projectile");
+  projectile.parentId = parent.id;
+  projectile.behavior = { builtin: "projectile", description: "shot bullet", params: {} };
+  projectile.tags = ["bullet"];
 
   assert(shouldDrawAnchorLineForEntity(child, new Set([child.id])), "selected child should show anchor line");
+  assert(!shouldDrawAnchorLineForEntity(projectile, new Set([projectile.id])), "selected projectile should not show anchor line");
   assert(!shouldDrawAnchorLineForEntity(child, new Set([parent.id])), "selected parent should not show child anchor line");
   assert(!shouldDrawAnchorLineForEntity(parent, new Set([parent.id])), "parent without parentId should not show anchor line");
   assert(shouldDrawPresentationAnchorLineForEntity(parent, parent.id, "presentation"), "selected presentation should show body-to-presentation anchor line");

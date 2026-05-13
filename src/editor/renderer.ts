@@ -4,6 +4,7 @@ import type { BrushContext, Entity, Resource, Task } from "../project/schema";
 import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
+import { entityUsesAnchorLink } from "../project/entityHierarchy";
 import { entityHasVisiblePresentation, isAttackTouchEntity, isGameplayDebugEntity } from "../project/entityVisibility";
 import { isVisualResource, resourceEffectFrameAtTime, resourceFrameAtTime, type ResourceFrameRect } from "./resourceAnimation";
 import {
@@ -1181,7 +1182,7 @@ export function computeMultiSelectionBounds(entities: Entity[]): { center: Vec2;
 }
 
 export function shouldDrawAnchorLineForEntity(entity: Entity, selectedIds: ReadonlySet<string> | undefined): boolean {
-  return Boolean(entity.parentId && selectedIds?.has(entity.id));
+  return Boolean(entityUsesAnchorLink(entity) && selectedIds?.has(entity.id));
 }
 
 export function shouldDrawPresentationAnchorLineForEntity(

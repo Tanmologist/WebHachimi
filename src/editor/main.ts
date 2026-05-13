@@ -1,6 +1,7 @@
 import "./styles.css";
 import type { AiTaskExecutionResult, AiTaskExecutor } from "../ai/taskExecutor";
 import { attackTouchKindForEntities, planMovedAttackTouchOffsets } from "../combat/hitboxEdit";
+import { entityFollowsParentTransform } from "../project/entityHierarchy";
 import { createTask } from "../project/tasks";
 import { normalizeProjectDefaults, normalizeSceneTimeScale, type BrushContext, type BrushVisualEvidence, type BrushVisualFrame, type Entity, type Project, type ProjectPatch, type Scene } from "../project/schema";
 import { consumeEditorHandoff } from "../project/editorHandoff";
@@ -1126,10 +1127,11 @@ function sceneTreeEntities(): Entity[] {
 function childEntitiesForParent(parentId: EntityId): Entity[] {
   const byParent = new Map<string, Entity[]>();
   for (const entity of world.allEntities()) {
-    if (!entity.parentId) continue;
-    const list = byParent.get(entity.parentId) || [];
+    const parentId = entity.parentId;
+    if (!parentId || !entityFollowsParentTransform(entity)) continue;
+    const list = byParent.get(parentId) || [];
     list.push(entity);
-    byParent.set(entity.parentId, list);
+    byParent.set(parentId, list);
   }
 
   const descendants: Entity[] = [];

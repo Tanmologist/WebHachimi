@@ -47,6 +47,7 @@ const parentFollowScene = {
     parent: parentFollowEntity("parent" as EntityId, undefined, 100, 100, { x: 100, y: 0 }, "dynamic"),
     child: parentFollowEntity("child" as EntityId, "parent" as EntityId, 132, 92, { x: 0, y: 0 }, "none"),
     grandchild: parentFollowEntity("grandchild" as EntityId, "child" as EntityId, 145, 94, { x: 0, y: 0 }, "none"),
+    projectile: projectileEntity("projectile" as EntityId, "parent" as EntityId, 180, 100),
   },
 };
 const parentFollowWorld = new RuntimeWorld({ scene: parentFollowScene });
@@ -55,9 +56,11 @@ parentFollowWorld.runFixedFrame();
 const liveParent = requireEntity(parentFollowWorld, "parent");
 const liveChild = requireEntity(parentFollowWorld, "child");
 const liveGrandchild = requireEntity(parentFollowWorld, "grandchild");
+const liveProjectile = requireEntity(parentFollowWorld, "projectile");
 assert(round(liveChild.transform.position.x - liveParent.transform.position.x) === 32, "child should keep x offset after parent movement");
 assert(round(liveChild.transform.position.y - liveParent.transform.position.y) === -8, "child should keep y offset after parent movement");
 assert(round(liveGrandchild.transform.position.x - liveChild.transform.position.x) === 13, "grandchild should keep x offset after parent movement");
+assert(round(liveProjectile.transform.position.x) === 180, "projectile source parent should not make the shot follow parent movement");
 
 console.log(
   JSON.stringify(
@@ -73,6 +76,7 @@ console.log(
       parentFollow: {
         parentX: round(liveParent.transform.position.x),
         childX: round(liveChild.transform.position.x),
+        projectileX: round(liveProjectile.transform.position.x),
       },
       aiPatchCount: plan.value.patches.length,
     },
@@ -121,6 +125,21 @@ function parentFollowEntity(
     },
     resources: [],
     tags: [],
+  };
+}
+
+function projectileEntity(id: EntityId, parentId: EntityId, x: number, y: number): Entity {
+  return {
+    ...parentFollowEntity(id, parentId, x, y, { x: 0, y: 0 }, "none"),
+    kind: "entity",
+    internalName: "Bullet",
+    displayName: "Bullet",
+    behavior: {
+      builtin: "projectile",
+      description: "shot bullet",
+      params: {},
+    },
+    tags: ["projectile", "bullet"],
   };
 }
 

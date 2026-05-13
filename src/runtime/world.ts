@@ -17,6 +17,7 @@ import {
 } from "../combat/actions";
 import type { CombatActionId, CombatActionRuntime } from "../combat/types";
 import { normalizeEntityDefaults, normalizeSceneSettings, normalizeSceneTimeScale } from "../project/schema";
+import { entityFollowsParentTransform } from "../project/entityHierarchy";
 import { cloneJson, makeId } from "../shared/types";
 import type { EntityId, RuntimeMode, SnapshotId } from "../shared/types";
 import type { Rect, SceneId, Vec2 } from "../shared/types";
@@ -435,10 +436,11 @@ export class RuntimeWorld {
     const byId = new Map<string, Entity>();
     for (const entity of entities) {
       byId.set(entity.id, entity);
-      if (!entity.parentId) continue;
-      const children = byParent.get(entity.parentId) || [];
+      const parentId = entity.parentId;
+      if (!parentId || !entityFollowsParentTransform(entity)) continue;
+      const children = byParent.get(parentId) || [];
       children.push(entity);
-      byParent.set(entity.parentId, children);
+      byParent.set(parentId, children);
     }
 
     const visited = new Set<string>();
