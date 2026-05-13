@@ -64,6 +64,9 @@ export function combatAttackStatsForEntity(
     hitStunMs: actionNumber(action, "hitStunMs", 0),
     controlLevel: actionNumber(action, "controlLevel", 1),
     armorLevel: actionNumber(action, "armorLevel", 0),
+    moveOffsetX: actionNumber(action, "moveOffsetX", 0),
+    moveOffsetY: actionNumber(action, "moveOffsetY", 0),
+    moveDurationMs: actionNumber(action, "moveDurationMs", 0),
     chargeStage: typeof action.data?.chargeStage === "number" ? action.data.chargeStage : undefined,
   };
 }
@@ -154,6 +157,16 @@ function attackActionDef(entity: Entity, kind: CombatAttackKind, options: Combat
       controlLevel: stats.controlLevel,
       shape: attackHitboxShape(entity, kind),
     },
+    ...(stats.moveDurationMs > 0 && (Math.abs(stats.moveOffsetX) > 0.001 || Math.abs(stats.moveOffsetY) > 0.001)
+      ? [
+          {
+            id: `${combatActionIdForAttackKind(kind)}-movement`,
+            type: "movement" as const,
+            phase: "startup" as const,
+            label: "动作位移",
+          },
+        ]
+      : []),
     {
       id: `${combatActionIdForAttackKind(kind)}-armor`,
       type: "armor",
@@ -175,6 +188,9 @@ function attackActionDef(entity: Entity, kind: CombatAttackKind, options: Combat
     hitStunMs: stats.hitStunMs,
     controlLevel: stats.controlLevel,
     armorLevel: stats.armorLevel,
+    moveOffsetX: stats.moveOffsetX,
+    moveOffsetY: stats.moveOffsetY,
+    moveDurationMs: stats.moveDurationMs,
   };
   if (typeof stats.chargeStage === "number") data.chargeStage = stats.chargeStage;
   return {
@@ -295,6 +311,9 @@ function attackNumbers(entity: Entity, kind: CombatAttackKind, chargeStageInput?
       hitStunMs: durationParam(entity, ["chargedAttackHitStunMs"], ["chargedAttackHitStunFrames"], 800, 0),
       controlLevel: integerParam(entity, ["chargedAttackControlLevel"], 3, 1),
       armorLevel: integerParam(entity, ["chargedAttackArmorLevel"], 3, 0),
+      moveOffsetX: numberParam(entity, "chargedAttackMoveOffsetX") ?? 0,
+      moveOffsetY: numberParam(entity, "chargedAttackMoveOffsetY") ?? 0,
+      moveDurationMs: durationParam(entity, ["chargedAttackMoveDurationMs"], ["chargedAttackMoveDurationFrames"], 200, 0),
       chargeStage,
     };
   }
@@ -315,6 +334,9 @@ function attackNumbers(entity: Entity, kind: CombatAttackKind, chargeStageInput?
       hitStunMs: durationParam(entity, ["superParryAttackHitStunMs"], ["superParryAttackHitStunFrames"], 600, 0),
       controlLevel: integerParam(entity, ["superParryAttackControlLevel"], 4, 1),
       armorLevel: integerParam(entity, ["superParryAttackArmorLevel"], 4, 0),
+      moveOffsetX: numberParam(entity, "superParryAttackMoveOffsetX") ?? 0,
+      moveOffsetY: numberParam(entity, "superParryAttackMoveOffsetY") ?? 0,
+      moveDurationMs: durationParam(entity, ["superParryAttackMoveDurationMs"], ["superParryAttackMoveDurationFrames"], 120, 0),
     };
   }
   return {
@@ -325,6 +347,9 @@ function attackNumbers(entity: Entity, kind: CombatAttackKind, chargeStageInput?
     hitStunMs: durationParam(entity, ["attackHitStunMs"], ["attackHitStunFrames"], 1000, 0),
     controlLevel: integerParam(entity, ["attackControlLevel"], 1, 1),
     armorLevel: integerParam(entity, ["attackArmorLevel"], 1, 0),
+    moveOffsetX: numberParam(entity, "attackMoveOffsetX") ?? 36,
+    moveOffsetY: numberParam(entity, "attackMoveOffsetY") ?? 0,
+    moveDurationMs: durationParam(entity, ["attackMoveDurationMs"], ["attackMoveDurationFrames"], 100, 0),
   };
 }
 

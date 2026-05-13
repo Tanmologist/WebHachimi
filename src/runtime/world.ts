@@ -49,6 +49,9 @@ type AttackConfig = {
   hitStunMs: number;
   controlLevel: number;
   armorLevel: number;
+  moveOffsetX: number;
+  moveOffsetY: number;
+  moveDurationMs: number;
   chargeStage?: number;
 };
 
@@ -214,6 +217,13 @@ export class RuntimeWorld {
           attackCooldownUntilFrame: entity.runtime?.attackCooldownUntilFrame,
           attackHitIds: entity.runtime?.attackHitIds,
           attackTouchEntityId: entity.runtime?.attackTouchEntityId,
+          attackMovementTargetEntityId: entity.runtime?.attackMovementTargetEntityId,
+          attackMoveStartedMs: entity.runtime?.attackMoveStartedMs,
+          attackMoveUntilMs: entity.runtime?.attackMoveUntilMs,
+          attackMoveOffsetX: entity.runtime?.attackMoveOffsetX,
+          attackMoveOffsetY: entity.runtime?.attackMoveOffsetY,
+          attackMoveTargetX: entity.runtime?.attackMoveTargetX,
+          attackMoveTargetY: entity.runtime?.attackMoveTargetY,
           attackKind: entity.runtime?.attackKind,
           attackDamage: entity.runtime?.attackDamage,
           attackControlLevel: entity.runtime?.attackControlLevel,
@@ -313,6 +323,14 @@ export class RuntimeWorld {
           typeof state.state.attackCooldownUntilFrame === "number" ? state.state.attackCooldownUntilFrame : undefined,
         attackHitIds: Array.isArray(state.state.attackHitIds) ? cloneJson(state.state.attackHitIds) : [],
         attackTouchEntityId: typeof state.state.attackTouchEntityId === "string" ? state.state.attackTouchEntityId as EntityId : undefined,
+        attackMovementTargetEntityId:
+          typeof state.state.attackMovementTargetEntityId === "string" ? state.state.attackMovementTargetEntityId as EntityId : undefined,
+        attackMoveStartedMs: typeof state.state.attackMoveStartedMs === "number" ? state.state.attackMoveStartedMs : undefined,
+        attackMoveUntilMs: typeof state.state.attackMoveUntilMs === "number" ? state.state.attackMoveUntilMs : undefined,
+        attackMoveOffsetX: typeof state.state.attackMoveOffsetX === "number" ? state.state.attackMoveOffsetX : undefined,
+        attackMoveOffsetY: typeof state.state.attackMoveOffsetY === "number" ? state.state.attackMoveOffsetY : undefined,
+        attackMoveTargetX: typeof state.state.attackMoveTargetX === "number" ? state.state.attackMoveTargetX : undefined,
+        attackMoveTargetY: typeof state.state.attackMoveTargetY === "number" ? state.state.attackMoveTargetY : undefined,
         attackKind: attackKindFromValue(state.state.attackKind),
         attackDamage: typeof state.state.attackDamage === "number" ? state.state.attackDamage : undefined,
         attackControlLevel: typeof state.state.attackControlLevel === "number" ? state.state.attackControlLevel : undefined,
@@ -511,6 +529,7 @@ export class RuntimeWorld {
       return;
     }
     if (this.applyDodgeMovement(entity)) return;
+    if (this.applyAttackMovement(entity)) return;
     if (this.isCombatMovementLocked(entity)) {
       entity.body.velocity.x = 0;
       return;
@@ -529,6 +548,7 @@ export class RuntimeWorld {
   private applyEnemyPatrol(entity: Entity): void {
     if (!entity.body) return;
     if (this.applyDodgeMovement(entity)) return;
+    if (this.applyAttackMovement(entity)) return;
     if (this.isCombatMovementLocked(entity)) {
       entity.body.velocity.x = 0;
       if (entity.body.mode === "kinematic") entity.body.velocity.y = 0;
@@ -690,6 +710,21 @@ export class RuntimeWorld {
     return true;
   }
 
+  private applyAttackMovement(entity: Entity, timeMs = this.clock.timeMs): boolean {
+    if (!entity.body || timeMs >= (entity.runtime?.attackMoveUntilMs ?? -1)) return false;
+    const targetX = entity.runtime?.attackMoveTargetX;
+    const targetY = entity.runtime?.attackMoveTargetY;
+    if (typeof targetX !== "number" || typeof targetY !== "number") return false;
+    const remainingMs = Math.max(this.clock.fixedStepMs, (entity.runtime?.attackMoveUntilMs ?? timeMs) - timeMs);
+    const remainingSeconds = remainingMs / 1000;
+    entity.body.velocity.x = (targetX - entity.transform.position.x) / remainingSeconds;
+    if (Math.abs(entity.runtime?.attackMoveOffsetY ?? 0) > 0.001 || entity.body.mode === "kinematic") {
+      entity.body.velocity.y = (targetY - entity.transform.position.y) / remainingSeconds;
+    }
+    this.syncAttackMovementTargetEntity(entity);
+    return true;
+  }
+
   private dodgeSpeed(entity: Entity, action = combatActionDefForEntity(entity, "dodge")): number {
     const value = action.data?.speed;
     return typeof value === "number" && Number.isFinite(value) ? value : numberParam(entity, "dodgeSpeed") ?? 650;
@@ -732,6 +767,9 @@ export class RuntimeWorld {
       hitStunMs: stats.hitStunMs,
       controlLevel: stats.controlLevel,
       armorLevel: stats.armorLevel,
+      moveOffsetX: stats.moveOffsetX,
+      moveOffsetY: stats.moveOffsetY,
+      moveDurationMs: stats.moveDurationMs,
       chargeStage: stats.chargeStage,
     };
   }
@@ -848,6 +886,11 @@ export class RuntimeWorld {
         superParryBonusDamage: undefined,
       };
     }
+    const direction = entity.runtime?.facing === -1 ? -1 : 1;
+    const hasMove = config.moveDurationMs > 0 && (Math.abs(config.moveOffsetX) > 0.001 || Math.abs(config.moveOffsetY) > 0.001);
+    const moveUntilMs = hasMove ? timeMs + config.moveDurationMs : undefined;
+    const moveTargetX = hasMove ? entity.transform.position.x + direction * config.moveOffsetX : undefined;
+    const moveTargetY = hasMove ? entity.transform.position.y + config.moveOffsetY : undefined;
     entity.runtime = {
       ...entity.runtime,
       attackStartMs: activeStartMs,
@@ -858,6 +901,13 @@ export class RuntimeWorld {
       attackCooldownUntilFrame: this.msToFrame(cooldownUntilMs),
       attackHitIds: [],
       attackTouchEntityId: undefined,
+      attackMoveStartedMs: hasMove ? timeMs : undefined,
+      attackMoveUntilMs: moveUntilMs,
+      attackMoveOffsetX: hasMove ? config.moveOffsetX : undefined,
+      attackMoveOffsetY: hasMove ? config.moveOffsetY : undefined,
+      attackMoveTargetX: moveTargetX,
+      attackMoveTargetY: moveTargetY,
+      attackMovementTargetEntityId: undefined,
       attackKind: config.kind,
       attackDamage: config.damage,
       attackControlLevel: config.controlLevel,
@@ -892,11 +942,17 @@ export class RuntimeWorld {
         hitStun: this.msToFrame(config.hitStunMs),
         controlLevel: config.controlLevel,
         armorLevel: config.armorLevel,
+        moveOffsetX: config.moveOffsetX,
+        moveOffsetY: config.moveOffsetY,
+        moveDurationMs: config.moveDurationMs,
+        moveTargetX,
+        moveTargetY,
         chargeStage: config.chargeStage,
         phases: cloneJson(config.actionRuntime.phases),
         windows: cloneJson(config.actionRuntime.windows),
       },
     });
+    if (hasMove) this.applyAttackMovement(entity, timeMs);
     return true;
   }
 
@@ -1120,6 +1176,13 @@ export class RuntimeWorld {
       attackStartMs: undefined,
       attackActiveUntilMs: undefined,
       attackCooldownUntilMs: undefined,
+      attackMoveStartedMs: undefined,
+      attackMoveUntilMs: undefined,
+      attackMoveOffsetX: undefined,
+      attackMoveOffsetY: undefined,
+      attackMoveTargetX: undefined,
+      attackMoveTargetY: undefined,
+      attackMovementTargetEntityId: undefined,
       attackStartFrame: undefined,
       attackActiveUntilFrame: undefined,
       attackHitIds: [...hitIds],
@@ -1254,6 +1317,76 @@ export class RuntimeWorld {
     attacker.runtime = { ...attacker.runtime, attackTouchEntityId: touchId };
   }
 
+  private syncAttackMovementTargetEntity(attacker: Entity): void {
+    const targetX = attacker.runtime?.attackMoveTargetX;
+    const targetY = attacker.runtime?.attackMoveTargetY;
+    if (typeof targetX !== "number" || typeof targetY !== "number") return;
+    const existingId = attacker.runtime?.attackMovementTargetEntityId;
+    const existing = existingId ? this.transientEntities.get(existingId) : undefined;
+    const lifetimeMs = Math.max(this.clock.fixedStepMs * 2, numberParam(attacker, "attackMovementTargetVisibleMs") ?? 520);
+    if (existing) {
+      existing.transform.position = { x: targetX, y: targetY };
+      existing.runtime = {
+        ...existing.runtime,
+        ageMs: 0,
+        lifetimeMs,
+        attackKind: attacker.runtime?.attackKind,
+        combatAction: attacker.runtime?.combatAction,
+      };
+      return;
+    }
+
+    const markerSize = Math.max(10, numberParam(attacker, "attackMovementTargetSize") ?? 16);
+    const targetEntity: Entity = {
+      id: makeId<"EntityId">("move-target") as EntityId,
+      internalName: "Attack_Movement_Target",
+      displayName: "普通攻击位移目标",
+      kind: "effect",
+      persistent: false,
+      parentId: attacker.id,
+      folderId: "runtime",
+      transform: {
+        position: { x: targetX, y: targetY },
+        rotation: 0,
+        scale: { x: 1, y: 1 },
+      },
+      render: {
+        visible: true,
+        color: "#54d87b",
+        opacity: 0.92,
+        layerId: attacker.render?.layerId || "world",
+        size: { x: markerSize, y: markerSize },
+        offset: { x: 0, y: 0 },
+        rotation: 0,
+        scale: { x: 1, y: 1 },
+      },
+      body: {
+        mode: "none",
+        velocity: { x: 0, y: 0 },
+        gravityScale: 0,
+        friction: 0,
+        bounce: 0,
+      },
+      collider: {
+        shape: "box",
+        size: { x: markerSize, y: markerSize },
+        solid: false,
+        trigger: true,
+        layerMask: ["combat-movement"],
+      },
+      resources: [],
+      tags: ["runtime", "attack", "movement-target"],
+      runtime: {
+        ageMs: 0,
+        lifetimeMs,
+        attackKind: attacker.runtime?.attackKind,
+        combatAction: attacker.runtime?.combatAction,
+      },
+    };
+    const targetId = this.spawnTransient(targetEntity, lifetimeMs);
+    attacker.runtime = { ...attacker.runtime, attackMovementTargetEntityId: targetId };
+  }
+
   private updateCombatPresentationStates(): void {
     const timeMs = this.clock.timeMs;
     for (const entity of this.allEntities()) {
@@ -1340,6 +1473,13 @@ export class RuntimeWorld {
       attackStartMs: undefined,
       attackActiveUntilMs: undefined,
       attackCooldownUntilMs: undefined,
+      attackMoveStartedMs: undefined,
+      attackMoveUntilMs: undefined,
+      attackMoveOffsetX: undefined,
+      attackMoveOffsetY: undefined,
+      attackMoveTargetX: undefined,
+      attackMoveTargetY: undefined,
+      attackMovementTargetEntityId: undefined,
       attackStartFrame: undefined,
       attackActiveUntilFrame: undefined,
       attackCooldownUntilFrame: undefined,
@@ -1430,6 +1570,13 @@ export class RuntimeWorld {
       attackStartMs: entity.runtime?.attackStartMs ?? legacyFramesToMs(entity.runtime?.attackStartFrame),
       attackActiveUntilMs: entity.runtime?.attackActiveUntilMs ?? legacyFramesToMs(entity.runtime?.attackActiveUntilFrame),
       attackCooldownUntilMs: entity.runtime?.attackCooldownUntilMs ?? legacyFramesToMs(entity.runtime?.attackCooldownUntilFrame),
+      attackMovementTargetEntityId: entity.runtime?.attackMovementTargetEntityId,
+      attackMoveStartedMs: entity.runtime?.attackMoveStartedMs,
+      attackMoveUntilMs: entity.runtime?.attackMoveUntilMs,
+      attackMoveOffsetX: entity.runtime?.attackMoveOffsetX,
+      attackMoveOffsetY: entity.runtime?.attackMoveOffsetY,
+      attackMoveTargetX: entity.runtime?.attackMoveTargetX,
+      attackMoveTargetY: entity.runtime?.attackMoveTargetY,
       attackKind: attackKindFromValue(entity.runtime?.attackKind),
       attackInputDown: entity.runtime?.attackInputDown ?? false,
       attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease ?? false,

@@ -156,6 +156,13 @@ export type RuntimeComponent = {
   attackCooldownUntilFrame?: number;
   attackHitIds?: EntityId[];
   attackTouchEntityId?: EntityId;
+  attackMovementTargetEntityId?: EntityId;
+  attackMoveStartedMs?: number;
+  attackMoveUntilMs?: number;
+  attackMoveOffsetX?: number;
+  attackMoveOffsetY?: number;
+  attackMoveTargetX?: number;
+  attackMoveTargetY?: number;
   attackKind?: "normal" | "charged" | "superParry";
   attackDamage?: number;
   attackControlLevel?: number;

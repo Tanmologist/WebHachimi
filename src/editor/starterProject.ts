@@ -67,6 +67,9 @@ export function createStarterProject(): Project {
       attackTouchOffsetX: 0,
       attackTouchOffsetY: 0,
       attackTouchVisibleMs: 220,
+      attackMoveOffsetX: 36,
+      attackMoveOffsetY: 0,
+      attackMoveDurationMs: 100,
       attackControlLevel: 1,
       attackArmorLevel: 1,
       attackHitStunFrames: 100,
@@ -162,6 +165,9 @@ export function createStarterProject(): Project {
       attackTouchOffsetX: 0,
       attackTouchOffsetY: 0,
       attackTouchVisibleMs: 220,
+      attackMoveOffsetX: 28,
+      attackMoveOffsetY: 0,
+      attackMoveDurationMs: 100,
       attackControlLevel: 1,
       attackArmorLevel: 1,
       attackHitStunFrames: 100,
@@ -471,6 +477,9 @@ function repairKnownCombatTouchTuning(entity: Entity): void {
     setNumberDefault(params, "attackTouchOffsetX", 0);
     setNumberDefault(params, "attackTouchOffsetY", 0);
     setNumberDefault(params, "attackTouchVisibleMs", 220);
+    setNumberDefault(params, "attackMoveOffsetX", entity.internalName === "Enemy_Patrol" ? 28 : 36);
+    setNumberDefault(params, "attackMoveOffsetY", 0);
+    setNumberDefault(params, "attackMoveDurationMs", 100);
     setNumberDefault(params, "dodgeInvulnerableFrames", 18);
     setNumberDefault(params, "dodgeRecoveryFrames", 12);
     setNumberDefault(params, "dodgeSpeed", 650);
@@ -514,6 +523,9 @@ function repairKnownCombatTouchTuning(entity: Entity): void {
     setNumberDefault(params, "attackTouchOffsetX", 0);
     setNumberDefault(params, "attackTouchOffsetY", 0);
     setNumberDefault(params, "attackTouchVisibleMs", 180);
+    setNumberDefault(params, "attackMoveOffsetX", 36);
+    setNumberDefault(params, "attackMoveOffsetY", 0);
+    setNumberDefault(params, "attackMoveDurationMs", 100);
     setNumberDefault(params, "dodgeInvulnerableFrames", 18);
     setNumberDefault(params, "dodgeRecoveryFrames", 12);
     setNumberDefault(params, "dodgeSpeed", 650);
@@ -672,6 +684,9 @@ function makeBox(input: BoxInput): Entity {
                   attackTouchOffsetX: 0,
                   attackTouchOffsetY: 0,
                   attackTouchVisibleMs: 180,
+                  attackMoveOffsetX: 36,
+                  attackMoveOffsetY: 0,
+                  attackMoveDurationMs: 100,
                   attackControlLevel: 1,
                   attackArmorLevel: 1,
                   attackHitStunFrames: 100,
@@ -701,6 +716,9 @@ function makeBox(input: BoxInput): Entity {
                   attackTouchOffsetX: 0,
                   attackTouchOffsetY: 0,
                   attackTouchVisibleMs: 180,
+                  attackMoveOffsetX: 28,
+                  attackMoveOffsetY: 0,
+                  attackMoveDurationMs: 100,
                   attackControlLevel: 1,
                   attackArmorLevel: 1,
                   attackHitStunFrames: 100,

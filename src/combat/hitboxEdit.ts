@@ -12,6 +12,16 @@ export type AttackTouchOffsetEdit = {
   nextY: number;
 };
 
+export type AttackMovementOffsetEdit = {
+  kind: CombatAttackKind;
+  offsetXKey: string;
+  offsetYKey: string;
+  previousX: number;
+  previousY: number;
+  nextX: number;
+  nextY: number;
+};
+
 export function attackTouchKindForEntities(touch: Entity, owner: Entity): CombatAttackKind {
   return combatAttackKindFromValue(touch.runtime?.attackKind) || combatAttackKindFromValue(owner.runtime?.attackKind) || "normal";
 }
@@ -20,6 +30,12 @@ export function attackTouchOffsetKeysForKind(kind: CombatAttackKind): { x: strin
   if (kind === "charged") return { x: "chargedAttackTouchOffsetX", y: "chargedAttackTouchOffsetY" };
   if (kind === "superParry") return { x: "superParryAttackTouchOffsetX", y: "superParryAttackTouchOffsetY" };
   return { x: "attackTouchOffsetX", y: "attackTouchOffsetY" };
+}
+
+export function attackMovementOffsetKeysForKind(kind: CombatAttackKind): { x: string; y: string } {
+  if (kind === "charged") return { x: "chargedAttackMoveOffsetX", y: "chargedAttackMoveOffsetY" };
+  if (kind === "superParry") return { x: "superParryAttackMoveOffsetX", y: "superParryAttackMoveOffsetY" };
+  return { x: "attackMoveOffsetX", y: "attackMoveOffsetY" };
 }
 
 export function planMovedAttackTouchOffsets(
@@ -31,6 +47,28 @@ export function planMovedAttackTouchOffsets(
   const keys = attackTouchOffsetKeysForKind(kind);
   const fallbackX = kind === "normal" ? 0 : numberParamValue(params.attackTouchOffsetX) ?? 0;
   const fallbackY = kind === "normal" ? 0 : numberParamValue(params.attackTouchOffsetY) ?? 0;
+  const previousX = numberParamValue(params[keys.x]) ?? fallbackX;
+  const previousY = numberParamValue(params[keys.y]) ?? fallbackY;
+  return {
+    kind,
+    offsetXKey: keys.x,
+    offsetYKey: keys.y,
+    previousX,
+    previousY,
+    nextX: roundCombatParam(previousX + delta.x * facingDirection),
+    nextY: roundCombatParam(previousY + delta.y),
+  };
+}
+
+export function planMovedAttackMovementOffsets(
+  params: Record<string, number | string | boolean>,
+  kind: CombatAttackKind,
+  facingDirection: -1 | 1,
+  delta: Vec2,
+): AttackMovementOffsetEdit {
+  const keys = attackMovementOffsetKeysForKind(kind);
+  const fallbackX = kind === "normal" ? 36 : 0;
+  const fallbackY = 0;
   const previousX = numberParamValue(params[keys.x]) ?? fallbackX;
   const previousY = numberParamValue(params[keys.y]) ?? fallbackY;
   return {

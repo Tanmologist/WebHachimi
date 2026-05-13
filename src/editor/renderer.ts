@@ -5,7 +5,7 @@ import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
 import { entityUsesAnchorLink } from "../project/entityHierarchy";
-import { entityHasVisiblePresentation, isAttackTouchEntity, isGameplayDebugEntity } from "../project/entityVisibility";
+import { entityHasVisiblePresentation, isAttackMovementTargetEntity, isAttackTouchEntity, isGameplayDebugEntity } from "../project/entityVisibility";
 import { isVisualResource, resourceEffectFrameAtTime, resourceFrameAtTime, type ResourceFrameRect } from "./resourceAnimation";
 import {
   centerViewportOnWorldPoint,
@@ -459,22 +459,27 @@ export class V2Renderer {
       return;
     }
     const attackTouch = isAttackTouchEntity(entity);
+    const movementTarget = isAttackMovementTargetEntity(entity);
     const presentation = this.takeGraphics();
     drawPresentationShape(presentation, entity);
     presentation.fill({
-      color: attackTouch ? 0xff4d5d : parseColor(entity.render.color || "#74a8bd"),
-      alpha: attackTouch ? Math.max(entity.render.opacity ?? 0, 0.48) : entity.render.opacity ?? 1,
+      color: attackTouch ? 0xff4d5d : movementTarget ? 0x54d87b : parseColor(entity.render.color || "#74a8bd"),
+      alpha: attackTouch || movementTarget ? Math.max(entity.render.opacity ?? 0, 0.6) : entity.render.opacity ?? 1,
     });
-    if (showEditorDecorations || selected || attackTouch) {
+    if (showEditorDecorations || selected || attackTouch || movementTarget) {
       presentation.setStrokeStyle({
-        width: attackTouch ? 3 : selected ? 2 : 1,
-        color: attackTouch ? 0xfff1a8 : selected ? 0x77b8df : 0x101211,
-        alpha: attackTouch ? 0.98 : selected ? 0.95 : 0.72,
+        width: attackTouch || movementTarget ? 3 : selected ? 2 : 1,
+        color: attackTouch ? 0xfff1a8 : movementTarget ? 0xc9ffdc : selected ? 0x77b8df : 0x101211,
+        alpha: attackTouch || movementTarget ? 0.98 : selected ? 0.95 : 0.72,
       });
       presentation.stroke();
     }
     this.worldLayer.addChild(presentation);
     if (attackTouch) this.drawCombatDebugLabel(entity, "TOUCH BOX");
+    if (movementTarget) {
+      this.drawCombatMovementLine(world, entity);
+      this.drawCombatDebugLabel(entity, "MOVE");
+    }
     if (showEditorDecorations) this.drawPresentationLabel(entity, selected);
   }
 
@@ -665,6 +670,24 @@ export class V2Renderer {
     label.anchor.set(0.5, 1);
     label.position.set(geometry.center.x, geometry.center.y - geometry.height / 2 - 4);
     this.worldLayer.addChild(label);
+  }
+
+  private drawCombatMovementLine(world: RuntimeWorld, target: Entity): void {
+    const parent = target.parentId ? world.entityById(target.parentId) : undefined;
+    if (!parent) return;
+    const from = parent.transform.position;
+    const to = target.transform.position;
+    if (Math.abs(from.x - to.x) + Math.abs(from.y - to.y) < 2) return;
+    const line = this.takeGraphics();
+    line.setStrokeStyle({ width: 3, color: 0x54d87b, alpha: 0.82 });
+    line.moveTo(from.x, from.y);
+    line.lineTo(to.x, to.y);
+    line.stroke();
+    line.circle(from.x, from.y, 3);
+    line.fill({ color: 0x10381e, alpha: 0.95 });
+    line.circle(to.x, to.y, 6);
+    line.fill({ color: 0x54d87b, alpha: 0.95 });
+    this.overlayLayer.addChild(line);
   }
 
   private drawCombatRectLabel(rect: { x: number; y: number; w: number; h: number }, text: string): void {

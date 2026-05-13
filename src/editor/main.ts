@@ -1,6 +1,6 @@
 import "./styles.css";
 import type { AiTaskExecutionResult, AiTaskExecutor } from "../ai/taskExecutor";
-import { attackTouchKindForEntities, planMovedAttackTouchOffsets } from "../combat/hitboxEdit";
+import { attackTouchKindForEntities, planMovedAttackMovementOffsets, planMovedAttackTouchOffsets } from "../combat/hitboxEdit";
 import { entityFollowsParentTransform } from "../project/entityHierarchy";
 import { createTask } from "../project/tasks";
 import { normalizeProjectDefaults, normalizeSceneTimeScale, type BrushContext, type BrushVisualEvidence, type BrushVisualFrame, type Entity, type Project, type ProjectPatch, type Scene } from "../project/schema";
@@ -1071,6 +1071,16 @@ function startCanvasTransform(event: PointerEvent, entityId: string, part: Canva
     notice = "正在移动 TOUCH BOX；松开后会按当前攻击动作写入父角色的相对偏移。";
     return;
   }
+  if (isAttackMovementTargetDebugEntity(entity)) {
+    if (handle !== "core") {
+      notice = "MOVE 目标点目前只支持移动；拖动小点会写回这类攻击的动作位移。";
+      return;
+    }
+    renderer.canvas().setPointerCapture(event.pointerId);
+    canvasDrag = createCanvasDragState(event.pointerId, entity, "body", "core", point);
+    notice = "正在移动 MOVE 目标点；松开后会写入父角色当前攻击动作的位移距离。";
+    return;
+  }
   if (!entity.persistent || !scene.entities[entity.id]) return;
   renderer.canvas().setPointerCapture(event.pointerId);
   canvasDrag = createCanvasDragState(event.pointerId, entity, part, handle, point);
@@ -1156,7 +1166,7 @@ function canvasTransformEntity(entityId: string): Entity | undefined {
   const entity = editableEntity(entityId);
   if (entity) return entity;
   const runtimeEntity = world.entityById(entityId as EntityId);
-  return runtimeEntity && isAttackTouchDebugEntity(runtimeEntity) ? runtimeEntity : undefined;
+  return runtimeEntity && (isAttackTouchDebugEntity(runtimeEntity) || isAttackMovementTargetDebugEntity(runtimeEntity)) ? runtimeEntity : undefined;
 }
 
 function isAttackTouchDebugEntity(entity: Entity | undefined): boolean {
@@ -1169,11 +1179,22 @@ function isAttackTouchDebugEntity(entity: Entity | undefined): boolean {
   );
 }
 
+function isAttackMovementTargetDebugEntity(entity: Entity | undefined): boolean {
+  return Boolean(
+    entity &&
+      !entity.persistent &&
+      entity.parentId &&
+      entity.tags.includes("attack") &&
+      entity.tags.includes("movement-target"),
+  );
+}
+
 function commitCanvasTransform(drag: CanvasDragState, parentChildMove?: ParentChildMoveState): string | undefined {
   const entity = editableEntity(drag.entityId);
   if (!entity) {
     const runtimeEntity = world.entityById(drag.entityId as EntityId);
     if (runtimeEntity && isAttackTouchDebugEntity(runtimeEntity)) return commitAttackTouchDebugTransform(runtimeEntity, drag);
+    if (runtimeEntity && isAttackMovementTargetDebugEntity(runtimeEntity)) return commitAttackMovementTargetTransform(runtimeEntity, drag);
     syncWorldFromStore();
     return "对象状态已刷新，未提交本次变换";
   }
@@ -1281,6 +1302,54 @@ function commitAttackTouchDebugTransform(touch: Entity, drag: CanvasDragState): 
   selectedIds = [touch.id as EntityId];
   selectionArea = undefined;
   return `已写入 ${storedOwner.displayName} 的${attackTouchKindLabel(kind)} TOUCH BOX 偏移：前向 ${edit.nextX}，上下 ${edit.nextY}。`;
+}
+
+function commitAttackMovementTargetTransform(target: Entity, drag: CanvasDragState): string | undefined {
+  if (drag.kind !== "move") {
+    target.transform = cloneJson(drag.originalTransform);
+    target.collider = drag.originalCollider ? cloneJson(drag.originalCollider) : undefined;
+    target.render = drag.originalRender ? cloneJson(drag.originalRender) : undefined;
+    return "MOVE 目标点目前只支持移动。";
+  }
+  const ownerId = target.parentId;
+  const owner = ownerId ? editableEntity(ownerId) : undefined;
+  const storedOwner = ownerId ? scene.entities[ownerId] : undefined;
+  const params = storedOwner?.behavior?.params;
+  if (!owner || !storedOwner || !params) {
+    syncWorldFromStore();
+    return "MOVE 目标点的父角色已刷新，本次移动未提交。";
+  }
+
+  const direction = owner.runtime?.facing === -1 ? -1 : 1;
+  const dx = target.transform.position.x - drag.originalTransform.position.x;
+  const dy = target.transform.position.y - drag.originalTransform.position.y;
+  const kind = attackTouchKindForEntities(target, owner);
+  const edit = planMovedAttackMovementOffsets(params, kind, direction, { x: dx, y: dy });
+  const previousRawX = params[edit.offsetXKey];
+  const previousRawY = params[edit.offsetYKey];
+
+  if (Math.abs(edit.nextX - edit.previousX) < 0.001 && Math.abs(edit.nextY - edit.previousY) < 0.001) {
+    return "已选中 MOVE 目标点；拖动可调整动作位移。";
+  }
+
+  const patches: ProjectPatch[] = [];
+  const inversePatches: ProjectPatch[] = [];
+  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, edit.offsetXKey, edit.nextX, previousRawX, hasOwnParam(params, edit.offsetXKey));
+  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, edit.offsetYKey, edit.nextY, previousRawY, hasOwnParam(params, edit.offsetYKey));
+
+  const result = editorTransactions.apply({
+    actor: "user",
+    patches,
+    inversePatches,
+    diffSummary: `调整 ${storedOwner.displayName} ${attackTouchKindLabel(kind)} 动作位移。`,
+    dirtyReason: `已调整 ${storedOwner.displayName} ${attackTouchKindLabel(kind)} 动作位移`,
+  });
+  if (!result.ok) return `${attackTouchKindLabel(kind)} 动作位移未提交：${result.error}`;
+  selectedId = target.id;
+  selectedPart = "body";
+  selectedIds = [target.id as EntityId];
+  selectionArea = undefined;
+  return `已写入 ${storedOwner.displayName} 的${attackTouchKindLabel(kind)}动作位移：前向 ${edit.nextX}，上下 ${edit.nextY}。`;
 }
 
 function commitMultiCanvasTransform(drag: MultiCanvasDragState): string | undefined {

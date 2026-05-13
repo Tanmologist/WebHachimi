@@ -96,6 +96,9 @@ export type CombatAttackStats = {
   hitStunMs: number;
   controlLevel: number;
   armorLevel: number;
+  moveOffsetX: number;
+  moveOffsetY: number;
+  moveDurationMs: number;
   chargeStage?: number;
 };
 
