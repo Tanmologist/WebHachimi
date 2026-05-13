@@ -164,6 +164,7 @@ export class V2Renderer {
     this.lastRender = { world, options };
     this.recycleLayer(this.worldLayer);
     this.recycleLayer(this.overlayLayer);
+    this.layoutWorld(world.screenShakeOffset());
     this.stats.graphicsReused = 0;
     this.stats.graphicsCreated = 0;
     this.stats.spritesReused = 0;
@@ -307,11 +308,11 @@ export class V2Renderer {
     return targets;
   }
 
-  private layoutWorld(): void {
+  private layoutWorld(offset: Vec2 = { x: 0, y: 0 }): void {
     const screen = this.screenSize();
     const zoom = this.viewport.zoom;
-    const x = screen.width / 2 - this.viewport.x * zoom;
-    const y = screen.height / 2 - this.viewport.y * zoom;
+    const x = screen.width / 2 - this.viewport.x * zoom + offset.x;
+    const y = screen.height / 2 - this.viewport.y * zoom + offset.y;
     this.worldLayer.position.set(x, y);
     this.overlayLayer.position.set(x, y);
     this.worldLayer.scale.set(zoom);

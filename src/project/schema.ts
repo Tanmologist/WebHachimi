@@ -506,6 +506,7 @@ export type CombatEvent = {
     | "chargeReleased"
     | "attackStarted"
     | "attackTouch"
+    | "attackClash"
     | "parryStarted"
     | "parrySuccess"
     | "superParryReady"

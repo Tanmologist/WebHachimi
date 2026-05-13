@@ -14,6 +14,7 @@ assertRelativeHitboxEditing(player);
 assertRelativeMovementEditing(player);
 assertRuntimeActionContext(scene, player);
 assertRuntimeAttackLunge(scene, player);
+assertNormalAttackClashInterrupts(scene, player, enemy);
 assertDodgeWindow(scene, player, enemy);
 assertTickRateIndependentTiming(scene, player);
 
@@ -128,6 +129,38 @@ function assertRuntimeAttackLunge(sourceScene: Scene, sourcePlayer: Entity): voi
   assert(movedPlayer.transform.position.x > startX + 20, "normal attack should lunge the actor forward");
   const target = world.allEntities().find((entity) => entity.tags.includes("movement-target") && entity.parentId === sourcePlayer.id);
   assert(target, "normal attack should spawn an editable movement target marker");
+}
+
+function assertNormalAttackClashInterrupts(sourceScene: Scene, sourcePlayer: Entity, sourceEnemy: Entity): void {
+  const world = new RuntimeWorld({ scene: sourceScene });
+  const player = requireEntity(world, sourcePlayer.id);
+  const enemy = requireEntity(world, sourceEnemy.id);
+  player.body!.gravityScale = 0;
+  enemy.body!.gravityScale = 0;
+  enemy.behavior!.params.targetInternalName = "";
+  player.transform.position = { x: 0, y: 260 };
+  enemy.transform.position = { x: 78, y: 260 };
+  player.runtime = { ...player.runtime, facing: 1 };
+  enemy.runtime = { ...enemy.runtime, facing: -1 };
+  const playerAttack = scopedKey(sourcePlayer, "attack");
+  const enemyAttack = scopedKey(sourceEnemy, "attack");
+  world.setInput(playerAttack, true);
+  world.setInput(enemyAttack, true);
+  world.runFixedFrame();
+  world.setInput(playerAttack, false);
+  world.setInput(enemyAttack, false);
+  world.runFixedFrame();
+  for (let i = 0; i < 20 && !world.combatEvents.some((event) => event.type === "attackClash"); i += 1) {
+    world.runFixedFrame();
+  }
+
+  const clash = mustEvent(world, { type: "attackClash", attackerId: sourcePlayer.id, defenderId: sourceEnemy.id });
+  assert(clash.data?.interrupted === true, "normal attack clash should report an interrupt");
+  assert(requireEntity(world, sourcePlayer.id).runtime?.combatAction === undefined, "player attack animation should be interrupted on clash");
+  assert(requireEntity(world, sourceEnemy.id).runtime?.combatAction === undefined, "enemy attack animation should be interrupted on clash");
+  assert((requireEntity(world, sourcePlayer.id).runtime?.attackCooldownUntilMs ?? 0) > clash.timeMs, "player should get a short clash recovery lock");
+  assert(world.screenShakeUntilMs > clash.timeMs, "attack clash should trigger a short screen shake");
+  assert(!world.combatEvents.some((event) => event.type === "hit" && (event.attackerId === sourcePlayer.id || event.attackerId === sourceEnemy.id)), "clashed normal attacks should not continue into hit damage");
 }
 
 function assertDodgeWindow(sourceScene: Scene, sourcePlayer: Entity, sourceEnemy: Entity): void {

@@ -21,7 +21,7 @@ import { entityFollowsParentTransform } from "../project/entityHierarchy";
 import { cloneJson, makeId } from "../shared/types";
 import type { EntityId, RuntimeMode, SnapshotId } from "../shared/types";
 import type { Rect, SceneId, Vec2 } from "../shared/types";
-import { collectDynamicPairs, entityIntersectsRect } from "./collision";
+import { collectDynamicPairs, entityIntersectsRect, overlaps } from "./collision";
 import { FixedStepClock } from "./time";
 
 export type RuntimeWorldOptions = {
@@ -55,6 +55,14 @@ type AttackConfig = {
   chargeStage?: number;
 };
 
+type ActiveAttackState = {
+  entity: Entity;
+  kind: AttackKind;
+  rect: Rect;
+  controlLevel: number;
+  armorLevel: number;
+};
+
 export class RuntimeWorld {
   readonly sceneId: SceneId;
   readonly clock: FixedStepClock;
@@ -68,6 +76,9 @@ export class RuntimeWorld {
   actorInput: Record<string, Record<string, boolean>> = {};
   combatEvents: CombatEvent[] = [];
   lastSnapshot?: RuntimeSnapshot;
+  screenShakeStartedMs = 0;
+  screenShakeUntilMs = 0;
+  screenShakeMagnitude = 0;
 
   constructor(options: RuntimeWorldOptions) {
     const settings = normalizeSceneSettings(cloneJson(options.scene.settings));
@@ -102,6 +113,18 @@ export class RuntimeWorld {
 
   setTimeScale(value: number): void {
     this.timeScale = normalizeSceneTimeScale(value);
+  }
+
+  screenShakeOffset(): Vec2 {
+    const remainingMs = this.screenShakeUntilMs - this.clock.timeMs;
+    if (remainingMs <= 0 || this.screenShakeMagnitude <= 0) return { x: 0, y: 0 };
+    const durationMs = Math.max(this.clock.fixedStepMs, this.screenShakeUntilMs - this.screenShakeStartedMs);
+    const strength = this.screenShakeMagnitude * Math.max(0, remainingMs / durationMs);
+    const phase = this.clock.frame * 1.618 + this.clock.timeMs * 0.037;
+    return {
+      x: Math.sin(phase * 2.1) * strength,
+      y: Math.cos(phase * 2.7) * strength * 0.65,
+    };
   }
 
   pushDelta(deltaMs: number): void {
@@ -788,6 +811,20 @@ export class RuntimeWorld {
     return entity.runtime?.attackControlLevel ?? this.attackConfig(entity, entity.runtime?.attackKind || "normal", entity.runtime?.attackChargeStage).controlLevel;
   }
 
+  private activeAttackState(entity: Entity, timeMs = this.clock.timeMs): ActiveAttackState | undefined {
+    if (!this.canUseAttackTouch(entity) || entity.runtime?.defeated || this.isHitStunned(entity, timeMs)) return undefined;
+    const activeFrom = entity.runtime?.attackStartMs ?? Number.POSITIVE_INFINITY;
+    const activeUntil = entity.runtime?.attackActiveUntilMs ?? -1;
+    if (timeMs < activeFrom || timeMs >= activeUntil) return undefined;
+    return {
+      entity,
+      kind: entity.runtime?.attackKind || "normal",
+      rect: this.attackTouchBounds(entity),
+      controlLevel: this.attackControlLevel(entity),
+      armorLevel: this.currentArmorLevel(entity),
+    };
+  }
+
   private currentArmorLevel(entity: Entity): number {
     const timeMs = this.clock.timeMs;
     const armorWindow = combatWindowIsOpen(entity.runtime?.combatAction, "armor", timeMs);
@@ -812,6 +849,14 @@ export class RuntimeWorld {
     const diff = Math.max(0, armorLevel - controlLevel);
     const damage = roundDamage(rawDamage * (1 / (2 + k * diff)));
     return { damage, resistedDamage: roundDamage(rawDamage - damage) };
+  }
+
+  private triggerScreenShake(magnitude: number, durationMs: number): void {
+    const timeMs = this.clock.timeMs;
+    if (timeMs >= this.screenShakeUntilMs) this.screenShakeMagnitude = 0;
+    this.screenShakeStartedMs = timeMs;
+    this.screenShakeUntilMs = Math.max(this.screenShakeUntilMs, timeMs + Math.max(this.clock.fixedStepMs, durationMs));
+    this.screenShakeMagnitude = Math.max(this.screenShakeMagnitude, magnitude);
   }
 
   private beginCharge(entity: Entity): void {
@@ -1056,7 +1101,9 @@ export class RuntimeWorld {
   private resolveCombatEvents(): void {
     const timeMs = this.clock.timeMs;
     const entities = this.allEntities();
+    const clashedIds = this.resolveAttackClashes(entities, timeMs);
     for (const attacker of entities) {
+      if (clashedIds.has(attacker.id)) continue;
       if (!this.canUseAttackTouch(attacker)) continue;
       if (attacker.runtime?.defeated || this.isHitStunned(attacker, timeMs)) continue;
       const activeFrom = attacker.runtime?.attackStartMs ?? Number.POSITIVE_INFINITY;
@@ -1149,6 +1196,77 @@ export class RuntimeWorld {
       }
       attacker.runtime = { ...attacker.runtime, attackHitIds: [...hitIds] };
     }
+  }
+
+  private resolveAttackClashes(entities: Entity[], timeMs: number): Set<EntityId> {
+    const active = entities
+      .map((entity) => this.activeAttackState(entity, timeMs))
+      .filter((state): state is ActiveAttackState => Boolean(state));
+    const clashedIds = new Set<EntityId>();
+    for (let i = 0; i < active.length; i += 1) {
+      const a = active[i];
+      if (clashedIds.has(a.entity.id)) continue;
+      for (let j = i + 1; j < active.length; j += 1) {
+        const b = active[j];
+        if (clashedIds.has(b.entity.id)) continue;
+        if (!overlaps(a.rect, b.rect)) continue;
+        if (!this.attacksCanClash(a, b)) continue;
+        this.resolveAttackClash(a, b);
+        clashedIds.add(a.entity.id);
+        clashedIds.add(b.entity.id);
+        break;
+      }
+    }
+    return clashedIds;
+  }
+
+  private attacksCanClash(a: ActiveAttackState, b: ActiveAttackState): boolean {
+    return a.controlLevel <= b.armorLevel && b.controlLevel <= a.armorLevel;
+  }
+
+  private resolveAttackClash(a: ActiveAttackState, b: ActiveAttackState): void {
+    const shakeMs = Math.max(this.clock.fixedStepMs, numberParam(a.entity, "attackClashShakeMs") ?? numberParam(b.entity, "attackClashShakeMs") ?? 120);
+    const shakeMagnitude = Math.max(0, numberParam(a.entity, "attackClashShakeMagnitude") ?? numberParam(b.entity, "attackClashShakeMagnitude") ?? 6);
+    const recoveryMs = Math.max(this.clock.fixedStepMs, numberParam(a.entity, "attackClashRecoveryMs") ?? numberParam(b.entity, "attackClashRecoveryMs") ?? 120);
+    this.syncAttackTouchEntity(a.entity, a.rect);
+    this.syncAttackTouchEntity(b.entity, b.rect);
+    this.stopEntity(a.entity);
+    this.stopEntity(b.entity);
+    this.clearActiveAttack(a.entity);
+    this.clearActiveAttack(b.entity);
+    a.entity.runtime = {
+      ...a.entity.runtime,
+      attackCooldownUntilMs: this.clock.timeMs + recoveryMs,
+      attackCooldownUntilFrame: this.msToFrame(this.clock.timeMs + recoveryMs),
+    };
+    b.entity.runtime = {
+      ...b.entity.runtime,
+      attackCooldownUntilMs: this.clock.timeMs + recoveryMs,
+      attackCooldownUntilFrame: this.msToFrame(this.clock.timeMs + recoveryMs),
+    };
+    this.triggerScreenShake(shakeMagnitude, shakeMs);
+    this.emitCombatEvent({
+      type: "attackClash",
+      attackerId: a.entity.id,
+      defenderId: b.entity.id,
+      sourceId: a.entity.id,
+      targetId: b.entity.id,
+      message: `${a.entity.displayName} and ${b.entity.displayName} clashed and interrupted each other.`,
+      data: {
+        interrupted: true,
+        aKind: a.kind,
+        bKind: b.kind,
+        aControlLevel: a.controlLevel,
+        bControlLevel: b.controlLevel,
+        aArmorLevel: a.armorLevel,
+        bArmorLevel: b.armorLevel,
+        shakeMs,
+        shakeMagnitude,
+        recoveryMs,
+        aRect: cloneJson(a.rect),
+        bRect: cloneJson(b.rect),
+      },
+    });
   }
 
   private resolveParrySuccess(

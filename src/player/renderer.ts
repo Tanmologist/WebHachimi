@@ -90,7 +90,7 @@ export class PlayerRenderer {
     this.recycleWorldLayer();
     const player = findPlayer(world.allEntities());
     if (player) this.follow(player.transform.position);
-    this.layoutWorld();
+    this.layoutWorld(world.screenShakeOffset());
     this.drawBackdrop();
     this.drawAttackTelegraphs(world);
     this.drawChargeStates(world);
@@ -103,10 +103,10 @@ export class PlayerRenderer {
     this.layoutWorld();
   }
 
-  private layoutWorld(): void {
+  private layoutWorld(offset: Vec2 = { x: 0, y: 0 }): void {
     const layout = playerCameraLayout(this.app.screen, this.camera);
     this.worldLayer.scale.set(layout.scale);
-    this.worldLayer.position.set(layout.x, layout.y);
+    this.worldLayer.position.set(layout.x + offset.x, layout.y + offset.y);
   }
 
   private follow(target: Vec2): void {
