@@ -14,6 +14,7 @@ assertRelativeHitboxEditing(player);
 assertRelativeMovementEditing(player);
 assertRuntimeActionContext(scene, player);
 assertRuntimeAttackLunge(scene, player);
+assertBufferedChargeAfterNormalRecovery(scene, player);
 assertNormalAttackClashInterrupts(scene, player, enemy);
 assertControlArmorResolution(scene, player, enemy);
 assertParryControlBoundary(scene, player, enemy);
@@ -135,6 +136,54 @@ function assertRuntimeAttackLunge(sourceScene: Scene, sourcePlayer: Entity): voi
   assert(movedPlayer.transform.position.x > startX + 20, "normal attack should lunge the actor forward");
   const target = world.allEntities().find((entity) => entity.tags.includes("movement-target") && entity.parentId === sourcePlayer.id);
   assert(target, "normal attack should spawn an editable movement target marker");
+}
+
+function assertBufferedChargeAfterNormalRecovery(sourceScene: Scene, sourcePlayer: Entity): void {
+  const world = new RuntimeWorld({ scene: sourceScene });
+  const player = requireEntity(world, sourcePlayer.id);
+  player.body!.gravityScale = 0;
+  player.behavior!.params.gravityScale = 0;
+  const attackKey = scopedKey(sourcePlayer, "attack");
+
+  world.setInput(attackKey, true);
+  world.runFixedFrame();
+  world.setInput(attackKey, false);
+  world.runFixedFrame();
+
+  const normalStarted = mustEvent(world, { type: "attackStarted", attackerId: sourcePlayer.id, "data.kind": "normal" });
+  const activeUntilMs = normalStarted.data?.activeUntilMs;
+  const cooldownUntilMs = normalStarted.data?.cooldownUntilMs;
+  assert(typeof activeUntilMs === "number", "normal attack should report active end timing");
+  assert(typeof cooldownUntilMs === "number", "normal attack should report cooldown end timing");
+
+  while (world.clock.timeMs < activeUntilMs + world.clock.fixedStepMs) world.runFixedFrame();
+  assert(world.clock.timeMs < cooldownUntilMs, "test should press attack during normal attack recovery");
+
+  world.setInput(attackKey, true);
+  world.runFixedFrame();
+  const bufferStartMs = world.clock.timeMs;
+  const bufferedPlayer = requireEntity(world, sourcePlayer.id);
+  assert(bufferedPlayer.runtime?.attackBufferedChargeStartMs === bufferStartMs, "recovery attack press should buffer charge start time");
+
+  while (world.clock.timeMs < cooldownUntilMs) world.runFixedFrame();
+  const chargingPlayer = requireEntity(world, sourcePlayer.id);
+  assert(chargingPlayer.runtime?.chargeStartedMs === bufferStartMs, "buffered charge should begin from the recovery press time");
+  assert((chargingPlayer.runtime?.chargeHeldMs ?? 0) > world.clock.fixedStepMs, "buffered charge should count hold time spent in recovery");
+  assert(
+    world.combatEvents.some((event) => event.type === "chargeStarted" && event.timeMs >= cooldownUntilMs && event.data?.buffered === true),
+    "buffered charge start should be reported when recovery ends",
+  );
+
+  for (let index = 0; index < 120 && (requireEntity(world, sourcePlayer.id).runtime?.chargeStage ?? 0) < 1; index += 1) {
+    world.runFixedFrame();
+  }
+  world.setInput(attackKey, false);
+  world.runFixedFrame();
+
+  const chargedStarted = world.combatEvents.find(
+    (event) => event.type === "attackStarted" && event.timeMs > normalStarted.timeMs && event.data?.kind === "charged",
+  );
+  assert(chargedStarted?.data?.actionId === "chargeAttack", "holding buffered recovery input should release a charged attack next");
 }
 
 function assertNormalAttackClashInterrupts(sourceScene: Scene, sourcePlayer: Entity, sourceEnemy: Entity): void {

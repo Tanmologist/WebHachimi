@@ -254,6 +254,8 @@ export class RuntimeWorld {
           attackChargeStage: entity.runtime?.attackChargeStage,
           attackInputDown: entity.runtime?.attackInputDown,
           attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease,
+          attackBufferedChargeStartMs: entity.runtime?.attackBufferedChargeStartMs,
+          attackBufferedChargeStartFrame: entity.runtime?.attackBufferedChargeStartFrame,
           parryInputDown: entity.runtime?.parryInputDown,
           dodgeInputDown: entity.runtime?.dodgeInputDown,
           dodgeStartedMs: entity.runtime?.dodgeStartedMs,
@@ -361,6 +363,15 @@ export class RuntimeWorld {
         attackChargeStage: typeof state.state.attackChargeStage === "number" ? state.state.attackChargeStage : undefined,
         attackInputDown: state.state.attackInputDown === true,
         attackConsumedUntilRelease: state.state.attackConsumedUntilRelease === true,
+        attackBufferedChargeStartMs: runtimeStateMs(
+          state.state,
+          "attackBufferedChargeStartMs",
+          "attackBufferedChargeStartFrame",
+        ),
+        attackBufferedChargeStartFrame:
+          typeof state.state.attackBufferedChargeStartFrame === "number"
+            ? state.state.attackBufferedChargeStartFrame
+            : undefined,
         parryInputDown: state.state.parryInputDown === true,
         dodgeInputDown: state.state.dodgeInputDown === true,
         dodgeStartedMs: runtimeStateMs(state.state, "dodgeStartedMs", "dodgeStartedFrame"),
@@ -624,11 +635,13 @@ export class RuntimeWorld {
     const parryPressed = parryDown && !wasParryDown;
     const dodgePressed = dodgeDown && !wasDodgeDown;
 
-    if (!attackDown && entity.runtime?.attackConsumedUntilRelease) {
+    if (!attackDown && (entity.runtime?.attackConsumedUntilRelease || entity.runtime?.attackBufferedChargeStartMs !== undefined)) {
       entity.runtime = {
         ...entity.runtime,
         attackInputDown: false,
         attackConsumedUntilRelease: false,
+        attackBufferedChargeStartMs: undefined,
+        attackBufferedChargeStartFrame: undefined,
         parryInputDown: parryDown,
         dodgeInputDown: dodgeDown,
       };
@@ -641,6 +654,8 @@ export class RuntimeWorld {
         ...entity.runtime,
         attackInputDown: attackDown,
         attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease === true || attackDown,
+        attackBufferedChargeStartMs: undefined,
+        attackBufferedChargeStartFrame: undefined,
         parryInputDown: parryDown,
         dodgeInputDown: dodgeDown,
       };
@@ -648,14 +663,38 @@ export class RuntimeWorld {
     }
 
     if (this.isCombatActionLocked(entity, timeMs)) {
+      const canBufferCharge = attackPressed && this.canBufferChargeAfterNormalAttack(entity, timeMs);
+      const clearBufferedCharge = attackReleased || parryPressed || dodgePressed;
       entity.runtime = {
         ...entity.runtime,
         attackInputDown: attackDown,
-        attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease === true || attackPressed || parryPressed || dodgePressed,
+        attackConsumedUntilRelease:
+          entity.runtime?.attackConsumedUntilRelease === true ||
+          (attackPressed && !canBufferCharge) ||
+          parryPressed ||
+          dodgePressed,
+        attackBufferedChargeStartMs: clearBufferedCharge
+          ? undefined
+          : canBufferCharge
+            ? timeMs
+            : entity.runtime?.attackBufferedChargeStartMs,
+        attackBufferedChargeStartFrame: clearBufferedCharge
+          ? undefined
+          : canBufferCharge
+            ? this.clock.frame
+            : entity.runtime?.attackBufferedChargeStartFrame,
         parryInputDown: parryDown,
         dodgeInputDown: dodgeDown,
       };
       return;
+    }
+
+    if (attackDown && entity.runtime?.attackBufferedChargeStartMs !== undefined) {
+      this.beginCharge(entity, {
+        startedMs: entity.runtime.attackBufferedChargeStartMs,
+        startedFrame: entity.runtime.attackBufferedChargeStartFrame,
+        buffered: true,
+      });
     }
 
     if (parryPressed) {
@@ -666,6 +705,8 @@ export class RuntimeWorld {
           ...entity.runtime,
           attackInputDown: attackDown,
           attackConsumedUntilRelease: true,
+          attackBufferedChargeStartMs: undefined,
+          attackBufferedChargeStartFrame: undefined,
           parryInputDown: parryDown,
           dodgeInputDown: dodgeDown,
         };
@@ -684,6 +725,8 @@ export class RuntimeWorld {
         ...entity.runtime,
         attackInputDown: attackDown,
         attackConsumedUntilRelease: true,
+        attackBufferedChargeStartMs: undefined,
+        attackBufferedChargeStartFrame: undefined,
         parryInputDown: parryDown,
         dodgeInputDown: dodgeDown,
       };
@@ -691,7 +734,7 @@ export class RuntimeWorld {
     }
 
     if (attackPressed) this.beginCharge(entity);
-    if (attackDown) this.updateCharge(entity, wasAttackDown);
+    if (attackDown) this.updateCharge(entity);
     if (attackReleased) this.releaseChargeAttack(entity);
 
     entity.runtime = { ...entity.runtime, attackInputDown: attackDown, parryInputDown: parryDown, dodgeInputDown: dodgeDown };
@@ -767,6 +810,13 @@ export class RuntimeWorld {
 
   private isDodgeInvulnerable(entity: Entity, timeMs = this.clock.timeMs): boolean {
     return Boolean(combatWindowIsOpen(entity.runtime?.combatAction, "invulnerable", timeMs)) || timeMs < (entity.runtime?.dodgeUntilMs ?? -1);
+  }
+
+  private canBufferChargeAfterNormalAttack(entity: Entity, timeMs = this.clock.timeMs): boolean {
+    if (entity.runtime?.combatAction?.actionId !== "normalAttack") return false;
+    const activeUntilMs = entity.runtime?.attackActiveUntilMs ?? Number.POSITIVE_INFINITY;
+    const cooldownUntilMs = entity.runtime?.attackCooldownUntilMs ?? -1;
+    return timeMs >= activeUntilMs && timeMs < cooldownUntilMs;
   }
 
   private isCombatActionLocked(entity: Entity, timeMs = this.clock.timeMs): boolean {
@@ -859,29 +909,34 @@ export class RuntimeWorld {
     this.screenShakeMagnitude = Math.max(this.screenShakeMagnitude, magnitude);
   }
 
-  private beginCharge(entity: Entity): void {
-    const timeMs = this.clock.timeMs;
+  private beginCharge(
+    entity: Entity,
+    options: { startedMs?: number; startedFrame?: number; buffered?: boolean } = {},
+  ): void {
+    const timeMs = options.startedMs ?? this.clock.timeMs;
     entity.runtime = {
       ...entity.runtime,
       chargeStartedMs: timeMs,
       chargeHeldMs: 0,
-      chargeStartedFrame: this.msToFrame(timeMs),
+      chargeStartedFrame: options.startedFrame ?? this.msToFrame(timeMs),
       chargeHeldFrames: 0,
       chargeStage: 0,
       chargeStoredDamage: entity.runtime?.chargeStoredDamage ?? 0,
+      attackBufferedChargeStartMs: undefined,
+      attackBufferedChargeStartFrame: undefined,
     };
     this.emitCombatEvent({
       type: "chargeStarted",
       attackerId: entity.id,
       sourceId: entity.id,
       message: `${entity.displayName} began charging attack.`,
-      data: { thresholdMs: this.chargeThresholdMs(entity), stageMs: this.chargeStageMs(entity) },
+      data: { thresholdMs: this.chargeThresholdMs(entity), stageMs: this.chargeStageMs(entity), buffered: options.buffered === true },
     });
   }
 
-  private updateCharge(entity: Entity, wasAttackDown: boolean): void {
-    const previousHeld = wasAttackDown ? entity.runtime?.chargeHeldMs ?? 0 : 0;
-    const heldMs = previousHeld + this.clock.fixedStepMs;
+  private updateCharge(entity: Entity): void {
+    const startedMs = entity.runtime?.chargeStartedMs ?? this.clock.timeMs;
+    const heldMs = Math.max(this.clock.fixedStepMs, this.clock.timeMs - startedMs + this.clock.fixedStepMs);
     const stage = heldMs >= this.chargeThresholdMs(entity) ? Math.max(1, Math.floor(heldMs / this.chargeStageMs(entity))) : 0;
     entity.runtime = {
       ...entity.runtime,
@@ -958,6 +1013,8 @@ export class RuntimeWorld {
       attackControlLevel: config.controlLevel,
       attackArmorLevel: config.armorLevel,
       attackChargeStage: config.chargeStage,
+      attackBufferedChargeStartMs: undefined,
+      attackBufferedChargeStartFrame: undefined,
       combatAction: config.actionRuntime,
     };
     this.emitCombatEvent({
@@ -1614,6 +1671,8 @@ export class RuntimeWorld {
       attackControlLevel: undefined,
       attackArmorLevel: undefined,
       attackChargeStage: undefined,
+      attackBufferedChargeStartMs: undefined,
+      attackBufferedChargeStartFrame: undefined,
       combatAction: isAttackCombatAction(entity.runtime?.combatAction?.actionId) ? undefined : entity.runtime?.combatAction,
     };
   }
@@ -1704,6 +1763,9 @@ export class RuntimeWorld {
       attackKind: attackKindFromValue(entity.runtime?.attackKind),
       attackInputDown: entity.runtime?.attackInputDown ?? false,
       attackConsumedUntilRelease: entity.runtime?.attackConsumedUntilRelease ?? false,
+      attackBufferedChargeStartMs:
+        entity.runtime?.attackBufferedChargeStartMs ?? legacyFramesToMs(entity.runtime?.attackBufferedChargeStartFrame),
+      attackBufferedChargeStartFrame: entity.runtime?.attackBufferedChargeStartFrame,
       parryInputDown: entity.runtime?.parryInputDown ?? false,
       dodgeInputDown: entity.runtime?.dodgeInputDown ?? false,
       dodgeStartedMs: entity.runtime?.dodgeStartedMs ?? legacyFramesToMs(entity.runtime?.dodgeStartedFrame),

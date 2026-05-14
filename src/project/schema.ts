@@ -170,6 +170,8 @@ export type RuntimeComponent = {
   attackChargeStage?: number;
   attackInputDown?: boolean;
   attackConsumedUntilRelease?: boolean;
+  attackBufferedChargeStartMs?: number;
+  attackBufferedChargeStartFrame?: number;
   parryInputDown?: boolean;
   dodgeInputDown?: boolean;
   dodgeStartedMs?: number;
