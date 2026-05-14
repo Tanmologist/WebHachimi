@@ -181,8 +181,8 @@ export class V2Renderer {
     const isMultiSelect = selectedIds && selectedIds.size > 1;
     if (showBodyMaterial) this.drawGrid();
     if (!showEditorDecorations) {
-      this.drawGameplayAttackTelegraphs(world);
-      this.drawGameplayChargeStates(world);
+      this.drawGameplayAttackTelegraphs(world, entities);
+      this.drawGameplayChargeStates(world, entities);
     }
     for (const entity of entities) {
       const selectedPart = !isMultiSelect && selectedIds?.has(entity.id)
@@ -537,9 +537,9 @@ export class V2Renderer {
     this.worldLayer.addChild(outline);
   }
 
-  private drawGameplayAttackTelegraphs(world: RuntimeWorld): void {
+  private drawGameplayAttackTelegraphs(world: RuntimeWorld, entities: Entity[]): void {
     const timeMs = world.clock.timeMs;
-    for (const entity of world.allEntities()) {
+    for (const entity of entities) {
       if (entity.runtime?.defeated || !entity.collider) continue;
       const start = entity.runtime?.attackStartMs;
       const activeUntil = entity.runtime?.attackActiveUntilMs;
@@ -571,10 +571,10 @@ export class V2Renderer {
     }
   }
 
-  private drawGameplayChargeStates(world: RuntimeWorld): void {
+  private drawGameplayChargeStates(world: RuntimeWorld, entities: Entity[]): void {
     const frame = world.clock.frame;
     const timeMs = world.clock.timeMs;
-    for (const entity of world.allEntities()) {
+    for (const entity of entities) {
       if (entity.runtime?.defeated || !entity.collider) continue;
       const charging = (entity.runtime?.chargeHeldMs ?? 0) > 0;
       const superReady = timeMs < (entity.runtime?.superParryUntilMs ?? -1);

@@ -1426,6 +1426,25 @@ function attackTouchKindLabel(kind: "normal" | "charged" | "superParry"): string
   return "普通攻击";
 }
 
+const combatLevelParamLabels: Record<string, string> = {
+  attackControlLevel: "普通攻击控制",
+  attackArmorLevel: "普通攻击霸体",
+  chargedAttackControlLevel: "蓄力攻击控制",
+  chargedAttackArmorLevel: "蓄力攻击霸体",
+  parryControlLevel: "振刀控制",
+  parryArmorLevel: "振刀霸体",
+  superParryAttackControlLevel: "振刀处决控制",
+  superParryAttackArmorLevel: "振刀处决霸体",
+};
+
+function isCombatLevelParamKey(key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(combatLevelParamLabels, key);
+}
+
+function combatLevelParamLabel(key: string): string {
+  return combatLevelParamLabels[key] || key;
+}
+
 function sameTransform(left: Transform2D, right: Transform2D): boolean {
   return (
     left.position.x === right.position.x &&
@@ -3220,7 +3239,7 @@ function renderInspector(projectSnapshot: Project): void {
   const signature = [projectSnapshot.meta.updatedAt, selectedId, selectedPart, runtimeEntity?.runtime?.ageMs ?? ""].join("||");
   if (uiRenderState.inspector === signature) return;
   uiRenderState.inspector = signature;
-  inspectorNode.innerHTML = renderInspectorHtml(runtimeEntity, selectedPart, projectSnapshot.resources);
+  inspectorNode.innerHTML = renderInspectorHtml(runtimeEntity, selectedPart, projectSnapshot.resources, world.clock.timeMs);
   bindInspectorInteractions(inspectorNode);
 }
 
@@ -3274,6 +3293,15 @@ function bindInspectorInteractions(inspector: HTMLElement): void {
       const id = checkbox.dataset.entityId;
       if (!id) return;
       setEntityRenderVisible(id, checkbox.checked);
+    });
+  });
+
+  inspector.querySelectorAll<HTMLInputElement>("[data-combat-level-param]").forEach((input) => {
+    input.addEventListener("change", () => {
+      const id = input.dataset.entityId;
+      const key = input.dataset.combatLevelParam;
+      if (!id || !key) return;
+      setCombatLevelParam(id, key, input.value);
     });
   });
 }
@@ -3490,6 +3518,50 @@ function runWorldManagerAction(popover: HTMLElement, button: HTMLButtonElement):
     renameWorldFromManager(sceneId, input?.value || "");
   } else if (action === "remove" && sceneId) {
     removeWorldFromManager(sceneId);
+  }
+}
+
+function setCombatLevelParam(entityId: string, key: string, rawValue: string): void {
+  if (!isCombatLevelParamKey(key)) {
+    notice = "战斗等级字段无效";
+    renderAll();
+    return;
+  }
+  const nextValue = Math.max(0, Math.floor(Number(rawValue)));
+  if (!Number.isFinite(nextValue)) {
+    notice = "请输入有效的战斗等级数值";
+    renderAll();
+    return;
+  }
+  const storedEntity = scene.entities[entityId as EntityId];
+  const params = storedEntity?.behavior?.params;
+  if (!storedEntity || !params) {
+    notice = "战斗等级目标已经不存在";
+    syncWorldFromStore();
+    renderAll();
+    return;
+  }
+  const previousValue = params[key];
+  if (typeof previousValue === "number" && previousValue === nextValue) {
+    notice = `${storedEntity.displayName} 的战斗等级未变化`;
+    renderAll();
+    return;
+  }
+  const patches: ProjectPatch[] = [];
+  const inversePatches: ProjectPatch[] = [];
+  pushBehaviorParamPatch(patches, inversePatches, storedEntity.id, key, nextValue, previousValue, hasOwnParam(params, key));
+  const result = editorTransactions.apply({
+    actor: "user",
+    patches,
+    inversePatches,
+    diffSummary: `调整 ${storedEntity.displayName} 的战斗等级 ${key}=${nextValue}。`,
+    dirtyReason: `已调整 ${storedEntity.displayName} 战斗等级`,
+  });
+  if (result.ok) {
+    notice = `${storedEntity.displayName} 的 ${combatLevelParamLabel(key)} 已改为 ${nextValue}`;
+    renderAll();
+  } else {
+    notice = `战斗等级更新失败：${result.error}`;
   }
 }
 

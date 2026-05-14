@@ -16,6 +16,9 @@ assert(treeHtml.includes("可视"), "world tree should mark visible presentation
 assert(hiddenTreeHtml.includes("隐藏"), "world tree should mark hidden presentation rows");
 assert(inspectorHtml.includes("当前可视体"), "inspector should use 可视体 terminology");
 assert(!inspectorHtml.includes("表现体"), "inspector should not use old 表现体 terminology");
+assert(inspectorHtml.includes("战斗等级"), "inspector should expose combat level tuning for combat entities");
+assert(inspectorHtml.includes("attackControlLevel"), "inspector should render editable normal attack control level");
+assert(inspectorHtml.includes("superParryAttackArmorLevel"), "inspector should render editable super parry armor level");
 
 console.log(JSON.stringify({ status: "passed" }, null, 2));
 
@@ -50,6 +53,20 @@ function makeEntity(): Entity {
       friction: 0.8,
       bounce: 0,
     },
+    behavior: {
+      description: "Combat level test controller.",
+      builtin: "playerPlatformer",
+      params: {
+        attackControlLevel: 1,
+        attackArmorLevel: 1,
+        chargedAttackControlLevel: 3,
+        chargedAttackArmorLevel: 3,
+        parryControlLevel: 3,
+        parryArmorLevel: 3,
+        superParryAttackControlLevel: 4,
+        superParryAttackArmorLevel: 4,
+      },
+    },
     collider: {
       shape: "box",
       size: { x: 64, y: 64 },
@@ -60,7 +77,7 @@ function makeEntity(): Entity {
       layerMask: ["world"],
     },
     resources: [],
-    tags: [],
+    tags: ["combat"],
   };
 }
 

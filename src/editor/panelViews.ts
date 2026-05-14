@@ -1,5 +1,7 @@
 import type { Entity, Resource, ResourceBinding } from "../project/schema";
 import type { RuntimeWorld } from "../runtime/world";
+import { combatActionDefForEntity } from "../combat/actions";
+import type { CombatActionDef, CombatActionId, CombatWindowType } from "../combat/types";
 import { bodyModeLabel, escapeHtml, formatScale, typeLabel } from "./viewText";
 import type { CanvasTargetPart } from "./renderer";
 import { imageAttachments, isVisualResource, resourceAnimationLabel, resourceEffectPresetLabel, resourceEffectPresetOptions } from "./resourceAnimation";
@@ -47,6 +49,7 @@ export function renderInspectorHtml(
   entity: Entity | undefined,
   selectedPart: CanvasTargetPart = "body",
   resources: Record<string, Resource> = {},
+  runtimeTimeMs = 0,
 ): string {
   if (!entity) {
     return `
@@ -122,7 +125,108 @@ export function renderInspectorHtml(
       <dt>描述</dt><dd>${escapeHtml(description)}</dd>
       <dt>标签</dt><dd>${escapeHtml(entity.tags.join(" / ") || "暂无")}</dd>
     </dl>
+    ${renderCombatLevelPanel(entity, runtimeTimeMs)}
   `;
+}
+
+function renderCombatLevelPanel(entity: Entity, runtimeTimeMs: number): string {
+  if (!entity.behavior?.params || !entity.tags.includes("combat")) return "";
+  const rows = combatLevelRows(entity);
+  const runtime = combatRuntimeSummary(entity, runtimeTimeMs);
+  return `
+    <section class="v2-combat-tuning" data-combat-levels="${escapeHtml(entity.id)}">
+      <header>
+        <div>
+          <small class="v2-kicker">战斗等级</small>
+          <b>控制 / 霸体</b>
+        </div>
+        <small>${escapeHtml(runtime)}</small>
+      </header>
+      <div class="v2-combat-level-grid">
+        ${rows.map((row) => renderCombatLevelRow(entity, row)).join("")}
+      </div>
+      <p>规则：控制等级高于霸体等级时造成全额伤害并打出硬直；否则减伤且不打断。振刀会拦截不高于自身控制等级的攻击。</p>
+    </section>
+  `;
+}
+
+type CombatLevelRow = {
+  actionId: CombatActionId;
+  label: string;
+  controlKey: string;
+  armorKey: string;
+  controlLevel: number;
+  armorLevel: number;
+};
+
+function combatLevelRows(entity: Entity): CombatLevelRow[] {
+  return [
+    combatLevelRow(entity, "normalAttack", "普通攻击", "attackControlLevel", "attackArmorLevel"),
+    combatLevelRow(entity, "chargeAttack", "蓄力攻击", "chargedAttackControlLevel", "chargedAttackArmorLevel"),
+    combatLevelRow(entity, "parry", "振刀", "parryControlLevel", "parryArmorLevel"),
+    combatLevelRow(entity, "superParryExecution", "振刀处决", "superParryAttackControlLevel", "superParryAttackArmorLevel"),
+  ];
+}
+
+function combatLevelRow(
+  entity: Entity,
+  actionId: CombatActionId,
+  label: string,
+  controlKey: string,
+  armorKey: string,
+): CombatLevelRow {
+  const action = combatActionDefForEntity(entity, actionId, { chargeStage: Math.max(1, Math.floor(entity.runtime?.chargeStage ?? 1)) });
+  return {
+    actionId,
+    label,
+    controlKey,
+    armorKey,
+    controlLevel: actionLevel(action, actionId === "parry" ? "parry" : "hitbox", "controlLevel"),
+    armorLevel: actionLevel(action, "armor", "armorLevel"),
+  };
+}
+
+function renderCombatLevelRow(entity: Entity, row: CombatLevelRow): string {
+  const disabled = entity.persistent ? "" : " disabled";
+  return `
+    <div class="v2-combat-level-row" data-combat-action="${escapeHtml(row.actionId)}">
+      <span>${escapeHtml(row.label)}</span>
+      ${renderCombatLevelInput(entity, row.controlKey, "控制", row.controlLevel, disabled)}
+      ${renderCombatLevelInput(entity, row.armorKey, "霸体", row.armorLevel, disabled)}
+    </div>
+  `;
+}
+
+function renderCombatLevelInput(entity: Entity, key: string, label: string, value: number, disabled: string): string {
+  return `
+    <label>
+      <span>${escapeHtml(label)}</span>
+      <input data-combat-level-param="${escapeHtml(key)}" data-entity-id="${escapeHtml(entity.id)}" type="number" min="0" max="9" step="1" value="${value}"${disabled} />
+    </label>
+  `;
+}
+
+function actionLevel(action: CombatActionDef, windowType: CombatWindowType, field: "controlLevel" | "armorLevel"): number {
+  const window = action.windows.find((item) => item.type === windowType);
+  const value = window?.[field] ?? window?.level ?? action.data?.[field];
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+function combatRuntimeSummary(entity: Entity, runtimeTimeMs: number): string {
+  const action = entity.runtime?.combatAction;
+  const runtimeControl = normalizedLevel(entity.runtime?.attackControlLevel);
+  const openArmor = action?.windows.find((window) => window.type === "armor" && runtimeTimeMs >= window.startsAtMs && runtimeTimeMs < window.untilMs);
+  const runtimeArmor = normalizedLevel(openArmor?.armorLevel ?? openArmor?.level ?? entity.runtime?.attackArmorLevel);
+  const parts = [
+    action?.label || "当前无动作",
+    runtimeControl === undefined ? "" : `C${runtimeControl}`,
+    runtimeArmor === undefined ? "" : `A${runtimeArmor}`,
+  ].filter(Boolean);
+  return parts.join(" / ");
+}
+
+function normalizedLevel(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : undefined;
 }
 
 export function renderResourcesHtml(entities: Entity[], resources: Record<string, Resource>): string {

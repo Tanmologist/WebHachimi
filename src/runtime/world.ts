@@ -1055,6 +1055,8 @@ export class RuntimeWorld {
     if (timeMs < parryCooldownUntil) return false;
     const action = combatActionDefForEntity(entity, "parry");
     const actionRuntime = buildCombatActionRuntime(action, timeMs);
+    const parryArmorLevel = combatRuntimeWindowLevel(actionRuntime, "armor", "armorLevel", 3);
+    const parryControlLevel = combatRuntimeWindowLevel(actionRuntime, "parry", "controlLevel", 3);
     const windowMs = Math.max(1, combatPhaseDurationMs(action, "active"));
     const recoveryMs = Math.max(0, combatPhaseDurationMs(action, "recovery"));
     const cooldownMs = windowMs + recoveryMs;
@@ -1089,8 +1091,8 @@ export class RuntimeWorld {
         cooldown: this.msToFrame(cooldownMs),
         animationFrames: this.msToFrame(animationMs),
         fromCharge: options.fromCharge === true,
-        armorLevel: numberParam(entity, "parryArmorLevel") ?? 3,
-        controlLevel: numberParam(entity, "parryControlLevel") ?? 3,
+        armorLevel: parryArmorLevel,
+        controlLevel: parryControlLevel,
         phases: cloneJson(actionRuntime.phases),
         windows: cloneJson(actionRuntime.windows),
       },
@@ -1811,6 +1813,17 @@ function combatActionRuntimeFromValue(value: unknown): CombatActionRuntime | und
         : legacyFramesToMs(legacy.windows?.[index]?.untilFrame as number | undefined) ?? startedMs,
   }));
   return next;
+}
+
+function combatRuntimeWindowLevel(
+  runtime: CombatActionRuntime,
+  type: "armor" | "parry",
+  field: "armorLevel" | "controlLevel",
+  fallback: number,
+): number {
+  const window = runtime.windows.find((candidate) => candidate.type === type);
+  const value = window?.[field] ?? window?.level;
+  return typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : fallback;
 }
 
 function isCombatActionId(value: unknown): value is CombatActionId {

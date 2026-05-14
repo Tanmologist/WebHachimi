@@ -15,6 +15,8 @@ assertRelativeMovementEditing(player);
 assertRuntimeActionContext(scene, player);
 assertRuntimeAttackLunge(scene, player);
 assertNormalAttackClashInterrupts(scene, player, enemy);
+assertControlArmorResolution(scene, player, enemy);
+assertParryControlBoundary(scene, player, enemy);
 assertDodgeWindow(scene, player, enemy);
 assertTickRateIndependentTiming(scene, player);
 
@@ -104,12 +106,16 @@ function assertRuntimeActionContext(sourceScene: Scene, sourcePlayer: Entity): v
   assert(chargedStarted.data?.actionId === "chargeAttack", "charged release should report the charge action id");
 
   const parryWorld = new RuntimeWorld({ scene: sourceScene });
+  const parryPlayer = requireEntity(parryWorld, sourcePlayer.id);
+  parryPlayer.behavior!.params.parryControlLevel = 3.7;
+  parryPlayer.behavior!.params.parryArmorLevel = -1;
   parryWorld.setInput(scopedKey(sourcePlayer, "parry"), true);
   parryWorld.runFixedFrame();
   parryWorld.setInput(scopedKey(sourcePlayer, "parry"), false);
   parryWorld.runFixedFrame();
   const parryStarted = mustEvent(parryWorld, { type: "parryStarted", defenderId: sourcePlayer.id });
   assert(parryStarted.data?.actionId === "parry", "parry should report its action id");
+  assert(parryStarted.data?.controlLevel === 3 && parryStarted.data?.armorLevel === 0, "parry event levels should match clamped action windows");
 }
 
 function assertRuntimeAttackLunge(sourceScene: Scene, sourcePlayer: Entity): void {
@@ -161,6 +167,99 @@ function assertNormalAttackClashInterrupts(sourceScene: Scene, sourcePlayer: Ent
   assert((requireEntity(world, sourcePlayer.id).runtime?.attackCooldownUntilMs ?? 0) > clash.timeMs, "player should get a short clash recovery lock");
   assert(world.screenShakeUntilMs > clash.timeMs, "attack clash should trigger a short screen shake");
   assert(!world.combatEvents.some((event) => event.type === "hit" && (event.attackerId === sourcePlayer.id || event.attackerId === sourceEnemy.id)), "clashed normal attacks should not continue into hit damage");
+}
+
+function assertControlArmorResolution(sourceScene: Scene, sourcePlayer: Entity, sourceEnemy: Entity): void {
+  const resisted = runArmorHitTrial(sourceScene, sourcePlayer, sourceEnemy, { controlLevel: 1, armorLevel: 2 });
+  assert(resisted.hit.data?.damage === 4, "control below armor should apply armor mitigation");
+  assert(resisted.hit.data?.resistedDamage === 6, "resisted damage should record the mitigated amount");
+  assert(resisted.hit.data?.stunned === false, "control below armor should not stun");
+  assert(requireEntity(resisted.world, sourceEnemy.id).runtime?.chargeHeldMs !== undefined, "resisted hit should not clear charge armor");
+
+  const broken = runArmorHitTrial(sourceScene, sourcePlayer, sourceEnemy, { controlLevel: 3, armorLevel: 2 });
+  assert(broken.hit.data?.damage === 10, "control above armor should deal full damage");
+  assert(broken.hit.data?.resistedDamage === 0, "broken armor should not resist damage");
+  assert(broken.hit.data?.stunned === true, "control above armor should stun");
+  assert(requireEntity(broken.world, sourceEnemy.id).runtime?.chargeHeldMs === undefined, "stun should clear charge armor");
+}
+
+function assertParryControlBoundary(sourceScene: Scene, sourcePlayer: Entity, sourceEnemy: Entity): void {
+  const failed = runParryBoundaryTrial(sourceScene, sourcePlayer, sourceEnemy, 2);
+  assert(!failed.world.combatEvents.some((event) => event.type === "parrySuccess"), "parry should not catch attacks above parry control level");
+  assert(failed.world.combatEvents.some((event) => event.type === "hit" && event.defenderId === sourcePlayer.id), "failed parry boundary should fall through to hit resolution");
+
+  const matched = runParryBoundaryTrial(sourceScene, sourcePlayer, sourceEnemy, 3);
+  assert(matched.world.combatEvents.some((event) => event.type === "parrySuccess" && event.attackerId === sourceEnemy.id), "parry should catch attacks at its control level");
+  assert(!matched.world.combatEvents.some((event) => event.type === "hit" && event.defenderId === sourcePlayer.id), "successful parry should prevent defender hit damage");
+}
+
+function runArmorHitTrial(
+  sourceScene: Scene,
+  sourcePlayer: Entity,
+  sourceEnemy: Entity,
+  levels: { controlLevel: number; armorLevel: number },
+): { world: RuntimeWorld; hit: CombatEvent } {
+  const world = new RuntimeWorld({ scene: sourceScene });
+  const player = requireEntity(world, sourcePlayer.id);
+  const enemy = requireEntity(world, sourceEnemy.id);
+  player.body!.gravityScale = 0;
+  enemy.body!.gravityScale = 0;
+  delete enemy.behavior!.builtin;
+  player.behavior!.params.gravityScale = 0;
+  player.behavior!.params.attackDamage = 10;
+  player.behavior!.params.attackControlLevel = levels.controlLevel;
+  player.behavior!.params.attackHitStunMs = 300;
+  player.behavior!.params.attackMoveOffsetX = 0;
+  enemy.behavior!.params.health = 20;
+  enemy.runtime = {
+    ...enemy.runtime,
+    health: 20,
+    chargeHeldMs: 600,
+    chargeStage: 1,
+    facing: -1,
+  };
+  if (levels.armorLevel <= 1) enemy.runtime.chargeHeldMs = 300;
+  player.transform.position = { x: 0, y: 260 };
+  enemy.transform.position = { x: 78, y: 260 };
+  player.runtime = { ...player.runtime, facing: 1 };
+
+  world.setInput(scopedKey(sourcePlayer, "attack"), true);
+  world.runFixedFrame();
+  world.setInput(scopedKey(sourcePlayer, "attack"), false);
+  for (let index = 0; index < 40 && !world.combatEvents.some((event) => event.type === "hit" && event.defenderId === sourceEnemy.id); index += 1) {
+    world.runFixedFrame();
+  }
+  return { world, hit: mustEvent(world, { type: "hit", attackerId: sourcePlayer.id, defenderId: sourceEnemy.id }) };
+}
+
+function runParryBoundaryTrial(sourceScene: Scene, sourcePlayer: Entity, sourceEnemy: Entity, parryControlLevel: number): { world: RuntimeWorld } {
+  const world = new RuntimeWorld({ scene: sourceScene });
+  const player = requireEntity(world, sourcePlayer.id);
+  const enemy = requireEntity(world, sourceEnemy.id);
+  player.body!.gravityScale = 0;
+  enemy.body!.gravityScale = 0;
+  enemy.behavior!.builtin = "playerPlatformer";
+  player.behavior!.params.gravityScale = 0;
+  player.behavior!.params.parryControlLevel = parryControlLevel;
+  enemy.behavior!.params.gravityScale = 0;
+  enemy.behavior!.params.attackControlLevel = 3;
+  enemy.behavior!.params.attackDamage = 10;
+  enemy.behavior!.params.attackMoveOffsetX = 0;
+  enemy.behavior!.params.attackRange = 120;
+  player.transform.position = { x: 0, y: 260 };
+  enemy.transform.position = { x: 78, y: 260 };
+  player.runtime = { ...player.runtime, facing: 1, health: 20 };
+  enemy.runtime = { ...enemy.runtime, facing: -1 };
+
+  world.setInput(scopedKey(sourcePlayer, "parry"), true);
+  world.setInput(scopedKey(sourceEnemy, "attack"), true);
+  world.runFixedFrame();
+  world.setInput(scopedKey(sourcePlayer, "parry"), false);
+  world.setInput(scopedKey(sourceEnemy, "attack"), false);
+  for (let index = 0; index < 40 && !world.combatEvents.some((event) => event.type === "hit" || event.type === "parrySuccess"); index += 1) {
+    world.runFixedFrame();
+  }
+  return { world };
 }
 
 function assertDodgeWindow(sourceScene: Scene, sourcePlayer: Entity, sourceEnemy: Entity): void {
