@@ -137,6 +137,15 @@ export function combatAttackRectForEntity(entity: Entity): Rect {
   return rectForForwardBox(entity, shape);
 }
 
+export function combatAttackShadowRectForEntity(entity: Entity): Rect {
+  const runtimeShadow = entity.runtime?.combatAction?.windows.find(
+    (window) => window.type === "attackShadow" && window.shape?.type === "forwardBox",
+  )?.shape;
+  const kind = combatAttackKindFromValue(entity.runtime?.attackKind) ?? "normal";
+  const shape = runtimeShadow || attackHitboxShape(entity, kind);
+  return rectForForwardBox(entity, shape);
+}
+
 export function combatWindowIsOpen(
   runtime: CombatActionRuntime | undefined,
   type: CombatWindowType,
@@ -149,6 +158,14 @@ function attackActionDef(entity: Entity, kind: CombatAttackKind, options: Combat
   const stats = attackNumbers(entity, kind, options.chargeStage);
   const phases = attackPhases(stats.startupMs, stats.activeMs, stats.recoveryMs);
   const windows: CombatWindowDef[] = [
+    {
+      id: `${combatActionIdForAttackKind(kind)}-shadow`,
+      type: "attackShadow",
+      phase: "startup",
+      label: "Attack shadow",
+      controlLevel: stats.controlLevel,
+      shape: attackHitboxShape(entity, kind),
+    },
     {
       id: `${combatActionIdForAttackKind(kind)}-hitbox`,
       type: "hitbox",
@@ -298,7 +315,7 @@ function attackNumbers(entity: Entity, kind: CombatAttackKind, chargeStageInput?
     const growth = Math.max(1, numberParam(entity, "chargedAttackDamageGrowth") ?? 1.2);
     const storedDamage = entity.runtime?.chargeStoredDamage ?? 0;
     return {
-      startupMs: durationParam(entity, ["chargedAttackStartupMs"], ["chargedAttackStartupFrames"], 200, 0),
+      startupMs: durationParam(entity, ["chargedAttackStartupMs"], ["chargedAttackStartupFrames"], 100, 0),
       activeMs: durationParam(entity, ["chargedAttackActiveMs"], ["chargedAttackActiveFrames"], 500, 1),
       recoveryMs: durationParam(
         entity,

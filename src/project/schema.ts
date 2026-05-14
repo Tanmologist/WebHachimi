@@ -180,6 +180,12 @@ export type RuntimeComponent = {
   dodgeStartedFrame?: number;
   dodgeUntilFrame?: number;
   dodgeRecoveryUntilFrame?: number;
+  dodgeShadowRect?: Rect;
+  dodgeShadowUntilMs?: number;
+  dodgeShadowUntilFrame?: number;
+  dodgeShadowHitIds?: EntityId[];
+  perfectDodgeUntilMs?: number;
+  perfectDodgeUntilFrame?: number;
   chargeStartedMs?: number;
   chargeHeldMs?: number;
   chargeStartedFrame?: number;
@@ -513,6 +519,7 @@ export type CombatEvent = {
     | "parrySuccess"
     | "superParryReady"
     | "dodgeStarted"
+    | "perfectDodge"
     | "hit"
     | "defeated";
   attackerId?: EntityId;

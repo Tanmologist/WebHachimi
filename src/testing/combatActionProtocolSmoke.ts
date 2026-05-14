@@ -19,6 +19,7 @@ assertNormalAttackClashInterrupts(scene, player, enemy);
 assertControlArmorResolution(scene, player, enemy);
 assertParryControlBoundary(scene, player, enemy);
 assertDodgeWindow(scene, player, enemy);
+assertPerfectDodgeAttackShadow(scene, player, enemy);
 assertTickRateIndependentTiming(scene, player);
 
 console.log("combat action protocol smoke passed");
@@ -33,13 +34,15 @@ function assertActionDefinitions(entity: Entity): void {
   assert(combatPhaseDurationMs(normal, "active") === 300, "normal attack active window should follow the time table");
   assert(combatPhaseDurationMs(normal, "recovery") === 200, "normal attack recovery should follow the time table");
   assert(normal.windows.some((window) => window.type === "hitbox" && window.phase === "active"), "normal attack needs an active hitbox window");
+  assert(normal.windows.some((window) => window.type === "attackShadow" && window.phase === "startup"), "normal attack needs a startup attack shadow");
   assert(normal.windows.some((window) => window.type === "movement" && window.phase === "startup"), "normal attack should expose a movement window");
   assert(normal.data?.moveOffsetX === 36 && normal.data?.moveDurationMs === 100, "normal attack should default to a short 100ms lunge");
   assert(normal.windows.some((window) => window.type === "armor" && window.armorLevel === 1), "normal attack should carry level 1 armor");
 
-  assert(combatPhaseDurationMs(charged, "startup") === 200, "charged attack startup should follow the time table");
+  assert(combatPhaseDurationMs(charged, "startup") === 100, "charged attack startup should follow the time table");
   assert(combatPhaseDurationMs(charged, "active") === 500, "charged attack active window should follow the time table");
   assert(charged.data?.chargeStage === 2, "charged action should preserve charge stage");
+  assert(charged.windows.some((window) => window.type === "attackShadow" && window.phase === "startup"), "charged attack needs a startup attack shadow");
   assert(charged.windows.some((window) => window.type === "hitbox" && window.controlLevel === 3), "charged hitbox should carry level 3 control");
 
   assert(combatPhaseDurationMs(parry, "active") === 200, "parry active window should be 200ms");
@@ -337,6 +340,40 @@ function assertDodgeWindow(sourceScene: Scene, sourcePlayer: Entity, sourceEnemy
   assert(dodgeStarted.data?.actionId === "dodge", "dodge should report its action id");
   assert(requireEntity(world, sourcePlayer.id).runtime?.dodgeUntilMs !== undefined, "dodge should write an invulnerable runtime window");
   assert(!world.combatEvents.some((event) => event.type === "hit" && event.defenderId === sourcePlayer.id), "player should not be hit during the dodge invulnerable window");
+}
+
+function assertPerfectDodgeAttackShadow(sourceScene: Scene, sourcePlayer: Entity, sourceEnemy: Entity): void {
+  const world = new RuntimeWorld({ scene: sourceScene });
+  const player = requireEntity(world, sourcePlayer.id);
+  const enemy = requireEntity(world, sourceEnemy.id);
+  player.body!.mode = "kinematic";
+  enemy.body!.mode = "kinematic";
+  player.body!.gravityScale = 0;
+  player.behavior!.params.gravityScale = 0;
+  enemy.body!.gravityScale = 0;
+  enemy.behavior!.params.targetInternalName = "";
+  enemy.behavior!.params.left = -999;
+  enemy.behavior!.params.right = 999;
+  enemy.behavior!.params.attackMoveOffsetX = 0;
+  player.transform.position = { x: 0, y: 260 };
+  enemy.transform.position = { x: 78, y: 260 };
+  player.runtime = { ...player.runtime, facing: -1, health: 20 };
+  enemy.runtime = { ...enemy.runtime, facing: -1, patrolDirection: -1 };
+
+  world.setInput(scopedKey(sourcePlayer, "dodge"), true);
+  world.setInput(scopedKey(sourceEnemy, "attack"), true);
+  world.runFixedFrame();
+  world.setInput(scopedKey(sourcePlayer, "dodge"), false);
+  world.setInput(scopedKey(sourceEnemy, "attack"), false);
+  for (let index = 0; index < 50 && !world.combatEvents.some((event) => event.type === "perfectDodge"); index += 1) {
+    world.runFixedFrame();
+  }
+
+  const perfect = mustEvent(world, { type: "perfectDodge", attackerId: sourceEnemy.id, defenderId: sourcePlayer.id });
+  assert(perfect.data?.window === "attackShadow", "perfect dodge should be driven by the startup attack shadow");
+  assert(requireEntity(world, sourcePlayer.id).runtime?.perfectDodgeUntilMs !== undefined, "perfect dodge should drive the gray screen overlay timer");
+  world.runFixedFrames(40);
+  assert(!world.combatEvents.some((event) => event.type === "hit" && event.attackerId === sourceEnemy.id && event.defenderId === sourcePlayer.id), "perfect dodge should consume that attack for the dodging body");
 }
 
 function assertTickRateIndependentTiming(sourceScene: Scene, sourcePlayer: Entity): void {

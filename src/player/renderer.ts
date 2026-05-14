@@ -5,7 +5,7 @@ import { isAttackTouchEntity, isGameplayDebugEntity } from "../project/entityVis
 import { isVisualResource, resourceFrameAtTime, type ResourceFrameRect } from "../editor/resourceAnimation";
 import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
-import type { Vec2 } from "../shared/types";
+import type { Rect, Vec2 } from "../shared/types";
 import { playerCameraLayout } from "./cameraLayout";
 
 export type PlayerRendererOptions = {
@@ -18,6 +18,7 @@ export class PlayerRenderer {
   readonly app = new Application();
   private readonly worldLayer = new Container();
   private readonly hudLayer = new Container();
+  private readonly screenOverlay = new Graphics();
   private readonly graphicsPool: Graphics[] = [];
   private readonly spritePool: Sprite[] = [];
   private readonly imageTextures = new Map<string, Texture>();
@@ -55,7 +56,7 @@ export class PlayerRenderer {
     this.app.canvas.className = "player-canvas";
     options.host.appendChild(this.app.canvas);
     this.app.stage.addChild(this.worldLayer, this.hudLayer);
-    this.hudLayer.addChild(this.hudText);
+    this.hudLayer.addChild(this.screenOverlay, this.hudText);
 
     if ("ResizeObserver" in globalThis) {
       this.resizeObserver = new ResizeObserver(() => this.layout());
@@ -94,8 +95,10 @@ export class PlayerRenderer {
     this.drawBackdrop();
     this.drawAttackTelegraphs(world);
     this.drawChargeStates(world);
+    this.drawDodgeAfterimages(world);
     world.allEntities().forEach((entity) => this.drawEntity(entity, world));
     world.allEntities().forEach((entity) => this.drawHealthBar(entity, world));
+    this.drawScreenEffects(world);
     this.drawHud(world, player);
   }
 
@@ -263,6 +266,7 @@ export class PlayerRenderer {
       const activeUntil = entity.runtime?.attackActiveUntilMs;
       const cooldownUntil = entity.runtime?.attackCooldownUntilMs;
       if (start === undefined || activeUntil === undefined || cooldownUntil === undefined || timeMs >= cooldownUntil) continue;
+      if (timeMs < start) continue;
       if (timeMs >= activeUntil) {
         const bounds = boundsFor(entity);
         const graphics = this.takeGraphics();
@@ -275,20 +279,43 @@ export class PlayerRenderer {
       }
       const rect = attackRect(entity);
       const graphics = this.takeGraphics();
-      if (timeMs < start) {
-        graphics.rect(rect.x, rect.y, rect.w, rect.h);
-        graphics.fill({ color: 0xffd166, alpha: 0.18 });
-        graphics.setStrokeStyle({ width: 2, color: 0xffd166, alpha: 0.68 });
-        graphics.stroke();
-      } else {
-        graphics.rect(rect.x, rect.y, rect.w, rect.h);
-        graphics.fill({ color: 0xff4d5d, alpha: 0.24 });
-        graphics.setStrokeStyle({ width: 3, color: 0xff4d5d, alpha: 0.82 });
-        graphics.stroke();
-      }
+      graphics.rect(rect.x, rect.y, rect.w, rect.h);
+      graphics.fill({ color: 0xff4d5d, alpha: 0.24 });
+      graphics.setStrokeStyle({ width: 3, color: 0xff4d5d, alpha: 0.82 });
+      graphics.stroke();
       this.worldLayer.addChild(graphics);
-      this.drawWorldLabel(timeMs < start ? "WINDUP" : "ACTIVE", rect.x + rect.w / 2, rect.y - 4, timeMs < start ? "#ffe9a9" : "#ffd9de");
+      this.drawWorldLabel("ACTIVE", rect.x + rect.w / 2, rect.y - 4, "#ffd9de");
     }
+  }
+
+  private drawDodgeAfterimages(world: RuntimeWorld): void {
+    const timeMs = world.clock.timeMs;
+    for (const entity of world.allEntities()) {
+      const shadowRect = entity.runtime?.dodgeShadowRect;
+      const shadowUntil = entity.runtime?.dodgeShadowUntilMs;
+      if (!shadowRect || shadowUntil === undefined || timeMs >= shadowUntil) continue;
+      const startedMs = entity.runtime?.dodgeStartedMs ?? timeMs;
+      const durationMs = Math.max(1, shadowUntil - startedMs);
+      const fade = clamp((shadowUntil - timeMs) / durationMs, 0, 1);
+      const currentRect = boundsFor(entity);
+      const count = timeMs < (entity.runtime?.dodgeUntilMs ?? -1) ? 3 : 1;
+      for (let index = 0; index < count; index += 1) {
+        const amount = count <= 1 ? 0 : index / count;
+        const rect = lerpRect(shadowRect, currentRect, amount);
+        const alpha = (0.2 + (count - index - 1) * 0.055) * fade;
+        this.drawAfterimageRect(entity, rect, alpha);
+      }
+    }
+  }
+
+  private drawAfterimageRect(entity: Entity, rect: Rect, alpha: number): void {
+    const graphics = this.takeGraphics();
+    const color = parseColor(entity.render?.color || "#74a8bd");
+    graphics.roundRect(rect.x, rect.y, rect.w, rect.h, 10);
+    graphics.fill({ color, alpha: Math.max(0.08, alpha) });
+    graphics.setStrokeStyle({ width: 2, color: 0xdfe6e2, alpha: Math.min(0.34, alpha + 0.08) });
+    graphics.stroke();
+    this.worldLayer.addChild(graphics);
   }
 
   private drawChargeStates(world: RuntimeWorld): void {
@@ -344,6 +371,19 @@ export class PlayerRenderer {
     bar.roundRect(x + 1, y + 1, Math.max(0, (width - 2) * ratio), height - 2, 2);
     bar.fill({ color: entity.runtime?.defeated ? 0x6f756c : world.clock.timeMs < (entity.runtime?.hitFlashUntilMs ?? -1) ? 0xf2d16b : 0x79d6ba, alpha: 0.95 });
     this.worldLayer.addChild(bar);
+  }
+
+  private drawScreenEffects(world: RuntimeWorld): void {
+    this.screenOverlay.clear();
+    const timeMs = world.clock.timeMs;
+    let remainingMs = 0;
+    for (const entity of world.allEntities()) {
+      remainingMs = Math.max(remainingMs, (entity.runtime?.perfectDodgeUntilMs ?? -1) - timeMs);
+    }
+    if (remainingMs <= 0) return;
+    const alpha = 0.3 * clamp(remainingMs / 260, 0, 1);
+    this.screenOverlay.rect(0, 0, this.app.screen.width, this.app.screen.height);
+    this.screenOverlay.fill({ color: 0x8f9399, alpha });
   }
 
   private recycleWorldLayer(): void {
@@ -472,6 +512,16 @@ function parseColor(value: string): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function lerpRect(from: Rect, to: Rect, amount: number): Rect {
+  const t = clamp(amount, 0, 1);
+  return {
+    x: from.x + (to.x - from.x) * t,
+    y: from.y + (to.y - from.y) * t,
+    w: from.w + (to.w - from.w) * t,
+    h: from.h + (to.h - from.h) * t,
+  };
 }
 
 function resetGraphics(item: Graphics): void {

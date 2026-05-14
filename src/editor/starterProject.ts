@@ -76,7 +76,7 @@ export function createStarterProject(): Project {
       chargeThresholdFrames: 60,
       chargeStageFrames: 60,
       chargeNoArmorFrames: 30,
-      chargedAttackStartupFrames: 20,
+      chargedAttackStartupFrames: 10,
       chargedAttackActiveFrames: 50,
       chargedAttackCooldownFrames: 30,
       chargedAttackRange: 140,
@@ -174,7 +174,7 @@ export function createStarterProject(): Project {
       chargeThresholdFrames: 60,
       chargeStageFrames: 60,
       chargeNoArmorFrames: 30,
-      chargedAttackStartupFrames: 20,
+      chargedAttackStartupFrames: 10,
       chargedAttackActiveFrames: 50,
       chargedAttackCooldownFrames: 30,
       chargedAttackRange: 150,
@@ -225,7 +225,7 @@ export function createStarterProject(): Project {
       attackHitStunFrames: 100,
       chargeThresholdFrames: 60,
       chargeStageFrames: 60,
-      chargedAttackStartupFrames: 20,
+      chargedAttackStartupFrames: 10,
       chargedAttackActiveFrames: 50,
       chargedAttackCooldownFrames: 30,
       chargedAttackRange: 132,
@@ -490,7 +490,7 @@ function repairKnownCombatTouchTuning(entity: Entity): void {
     setNumberDefault(params, "chargeThresholdFrames", 60);
     setNumberDefault(params, "chargeStageFrames", 60);
     setNumberDefault(params, "chargeNoArmorFrames", 30);
-    setNumberDefault(params, "chargedAttackStartupFrames", 20);
+    setNumberWhenUnsetOrLegacy(params, "chargedAttackStartupFrames", 10, [20]);
     setNumberWhenUnsetOrLegacy(params, "chargedAttackActiveFrames", 50, [20, 22, 24]);
     setNumberWhenUnsetOrLegacy(params, "chargedAttackCooldownFrames", 30, [36, 38]);
     setNumberDefault(params, "chargedAttackRange", entity.internalName === "Enemy_Patrol" ? 150 : 140);
@@ -535,7 +535,7 @@ function repairKnownCombatTouchTuning(entity: Entity): void {
     setNumberDefault(params, "attackHitStunFrames", 100);
     setNumberDefault(params, "chargeThresholdFrames", 60);
     setNumberDefault(params, "chargeStageFrames", 60);
-    setNumberDefault(params, "chargedAttackStartupFrames", 20);
+    setNumberWhenUnsetOrLegacy(params, "chargedAttackStartupFrames", 10, [20]);
     setNumberDefault(params, "chargedAttackActiveFrames", 50);
     setNumberDefault(params, "chargedAttackCooldownFrames", 30);
     setNumberDefault(params, "chargedAttackRange", 132);
@@ -692,7 +692,7 @@ function makeBox(input: BoxInput): Entity {
                   attackHitStunFrames: 100,
                   chargeThresholdFrames: 60,
                   chargeStageFrames: 60,
-                  chargedAttackStartupFrames: 20,
+                  chargedAttackStartupFrames: 10,
                   chargedAttackActiveFrames: 50,
                   chargedAttackCooldownFrames: 30,
                   chargedAttackRange: Math.max(132, input.w + 80),
@@ -724,7 +724,7 @@ function makeBox(input: BoxInput): Entity {
                   attackHitStunFrames: 100,
                   chargeThresholdFrames: 60,
                   chargeStageFrames: 60,
-                  chargedAttackStartupFrames: 20,
+                  chargedAttackStartupFrames: 10,
                   chargedAttackActiveFrames: 50,
                   chargedAttackCooldownFrames: 30,
                   chargedAttackRange: 240,

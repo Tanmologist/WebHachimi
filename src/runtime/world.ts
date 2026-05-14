@@ -11,6 +11,7 @@ import {
   combatActionIdForAttackKind,
   combatActionTotalDurationMs,
   combatAttackRectForEntity,
+  combatAttackShadowRectForEntity,
   combatAttackStatsForEntity,
   combatPhaseDurationMs,
   combatWindowIsOpen,
@@ -21,7 +22,7 @@ import { entityFollowsParentTransform } from "../project/entityHierarchy";
 import { cloneJson, makeId } from "../shared/types";
 import type { EntityId, RuntimeMode, SnapshotId } from "../shared/types";
 import type { Rect, SceneId, Vec2 } from "../shared/types";
-import { collectDynamicPairs, entityIntersectsRect, overlaps } from "./collision";
+import { boundsFor, collectDynamicPairs, entityIntersectsRect, overlaps } from "./collision";
 import { FixedStepClock } from "./time";
 
 export type RuntimeWorldOptions = {
@@ -264,6 +265,12 @@ export class RuntimeWorld {
           dodgeStartedFrame: entity.runtime?.dodgeStartedFrame,
           dodgeUntilFrame: entity.runtime?.dodgeUntilFrame,
           dodgeRecoveryUntilFrame: entity.runtime?.dodgeRecoveryUntilFrame,
+          dodgeShadowRect: entity.runtime?.dodgeShadowRect,
+          dodgeShadowUntilMs: entity.runtime?.dodgeShadowUntilMs,
+          dodgeShadowUntilFrame: entity.runtime?.dodgeShadowUntilFrame,
+          dodgeShadowHitIds: entity.runtime?.dodgeShadowHitIds,
+          perfectDodgeUntilMs: entity.runtime?.perfectDodgeUntilMs,
+          perfectDodgeUntilFrame: entity.runtime?.perfectDodgeUntilFrame,
           chargeStartedMs: entity.runtime?.chargeStartedMs,
           chargeHeldMs: entity.runtime?.chargeHeldMs,
           chargeStartedFrame: entity.runtime?.chargeStartedFrame,
@@ -381,6 +388,14 @@ export class RuntimeWorld {
         dodgeUntilFrame: typeof state.state.dodgeUntilFrame === "number" ? state.state.dodgeUntilFrame : undefined,
         dodgeRecoveryUntilFrame:
           typeof state.state.dodgeRecoveryUntilFrame === "number" ? state.state.dodgeRecoveryUntilFrame : undefined,
+        dodgeShadowRect: rectFromRuntimeState(state.state.dodgeShadowRect),
+        dodgeShadowUntilMs: runtimeStateMs(state.state, "dodgeShadowUntilMs", "dodgeShadowUntilFrame"),
+        dodgeShadowUntilFrame:
+          typeof state.state.dodgeShadowUntilFrame === "number" ? state.state.dodgeShadowUntilFrame : undefined,
+        dodgeShadowHitIds: Array.isArray(state.state.dodgeShadowHitIds) ? cloneJson(state.state.dodgeShadowHitIds) : [],
+        perfectDodgeUntilMs: runtimeStateMs(state.state, "perfectDodgeUntilMs", "perfectDodgeUntilFrame"),
+        perfectDodgeUntilFrame:
+          typeof state.state.perfectDodgeUntilFrame === "number" ? state.state.perfectDodgeUntilFrame : undefined,
         chargeStartedMs: runtimeStateMs(state.state, "chargeStartedMs", "chargeStartedFrame"),
         chargeHeldMs: runtimeStateMs(state.state, "chargeHeldMs", "chargeHeldFrames"),
         chargeStartedFrame: typeof state.state.chargeStartedFrame === "number" ? state.state.chargeStartedFrame : undefined,
@@ -462,11 +477,14 @@ export class RuntimeWorld {
 
   private beginFixedStep(): void {
     const dtMs = this.clock.fixedStepMs;
+    const timeMs = this.clock.timeMs;
     for (const entity of this.allEntities()) {
       const flags = this.runtimeFlags(entity);
       flags.wasGrounded = flags.grounded;
       flags.grounded = false;
       flags.ageMs += dtMs;
+      const dodgeShadowExpired = timeMs >= (entity.runtime?.dodgeShadowUntilMs ?? Number.POSITIVE_INFINITY);
+      const perfectDodgeExpired = timeMs >= (entity.runtime?.perfectDodgeUntilMs ?? Number.POSITIVE_INFINITY);
       entity.runtime = {
         ...entity.runtime,
         ageMs: flags.ageMs,
@@ -474,6 +492,12 @@ export class RuntimeWorld {
         wasGrounded: flags.wasGrounded,
         grounded: false,
         patrolDirection: flags.patrolDirection,
+        dodgeShadowRect: dodgeShadowExpired ? undefined : entity.runtime?.dodgeShadowRect,
+        dodgeShadowUntilMs: dodgeShadowExpired ? undefined : entity.runtime?.dodgeShadowUntilMs,
+        dodgeShadowUntilFrame: dodgeShadowExpired ? undefined : entity.runtime?.dodgeShadowUntilFrame,
+        dodgeShadowHitIds: dodgeShadowExpired ? undefined : entity.runtime?.dodgeShadowHitIds,
+        perfectDodgeUntilMs: perfectDodgeExpired ? undefined : entity.runtime?.perfectDodgeUntilMs,
+        perfectDodgeUntilFrame: perfectDodgeExpired ? undefined : entity.runtime?.perfectDodgeUntilFrame,
       };
     }
   }
@@ -1069,6 +1093,8 @@ export class RuntimeWorld {
     const cooldownMs = combatActionTotalDurationMs(action);
     const speed = this.dodgeSpeed(entity, action);
     const direction = entity.runtime?.facing === -1 ? -1 : 1;
+    const dodgeShadowMs = Math.max(evadeMs, numberParam(entity, "dodgeShadowMs") ?? numberParam(entity, "dodgeAfterimageMs") ?? 260);
+    const dodgeShadowRect = boundsFor(entity);
     if (entity.body) entity.body.velocity.x = speed * direction;
     entity.runtime = {
       ...entity.runtime,
@@ -1079,6 +1105,12 @@ export class RuntimeWorld {
       dodgeStartedFrame: this.msToFrame(timeMs),
       dodgeUntilFrame: this.msToFrame(timeMs + evadeMs - this.clock.fixedStepMs),
       dodgeRecoveryUntilFrame: this.msToFrame(timeMs + cooldownMs),
+      dodgeShadowRect: cloneJson(dodgeShadowRect),
+      dodgeShadowUntilMs: timeMs + dodgeShadowMs,
+      dodgeShadowUntilFrame: this.msToFrame(timeMs + dodgeShadowMs),
+      dodgeShadowHitIds: [],
+      perfectDodgeUntilMs: undefined,
+      perfectDodgeUntilFrame: undefined,
       attackTouchEntityId: undefined,
     };
     this.emitCombatEvent({
@@ -1096,6 +1128,8 @@ export class RuntimeWorld {
         cooldown: this.msToFrame(cooldownMs),
         speed,
         direction,
+        shadowMs: dodgeShadowMs,
+        shadowRect: cloneJson(dodgeShadowRect),
         phases: cloneJson(actionRuntime.phases),
         windows: cloneJson(actionRuntime.windows),
       },
@@ -1160,6 +1194,7 @@ export class RuntimeWorld {
   private resolveCombatEvents(): void {
     const timeMs = this.clock.timeMs;
     const entities = this.allEntities();
+    this.resolveAttackShadowDodges(entities, timeMs);
     const clashedIds = this.resolveAttackClashes(entities, timeMs);
     for (const attacker of entities) {
       if (clashedIds.has(attacker.id)) continue;
@@ -1252,6 +1287,61 @@ export class RuntimeWorld {
           },
         });
         if (nextHealth <= 0) this.defeatEntity(defender, attacker);
+      }
+      attacker.runtime = { ...attacker.runtime, attackHitIds: [...hitIds] };
+    }
+  }
+
+  private resolveAttackShadowDodges(entities: Entity[], timeMs: number): void {
+    for (const attacker of entities) {
+      if (!this.canUseAttackTouch(attacker)) continue;
+      if (attacker.runtime?.defeated || this.isHitStunned(attacker, timeMs)) continue;
+      const shadowWindow = combatWindowIsOpen(attacker.runtime?.combatAction, "attackShadow", timeMs);
+      if (!shadowWindow) continue;
+      const attackArea = this.attackShadowBounds(attacker);
+      const attackKind = attacker.runtime?.attackKind || "normal";
+      const hitIds = new Set(attacker.runtime?.attackHitIds || []);
+      for (const defender of entities) {
+        if (hitIds.has(defender.id) || !this.canReceiveAttackShadow(attacker, defender, timeMs)) continue;
+        const dodgeShadow = defender.runtime?.dodgeShadowRect;
+        if (!dodgeShadow || !overlaps(attackArea, dodgeShadow)) continue;
+
+        const dodgeShadowHitIds = new Set(defender.runtime?.dodgeShadowHitIds || []);
+        if (dodgeShadowHitIds.has(attacker.id)) continue;
+        const bodyInShadow = entityIntersectsRect(defender, attackArea);
+        const activeStartMs = attacker.runtime?.attackStartMs ?? timeMs;
+        const dodgeCoversActiveStart = (defender.runtime?.dodgeUntilMs ?? -1) >= activeStartMs;
+        if (bodyInShadow && !dodgeCoversActiveStart) continue;
+
+        hitIds.add(defender.id);
+        dodgeShadowHitIds.add(attacker.id);
+        attacker.runtime = { ...attacker.runtime, attackHitIds: [...hitIds] };
+        const overlayMs = Math.max(this.clock.fixedStepMs, numberParam(defender, "perfectDodgeOverlayMs") ?? 260);
+        defender.runtime = {
+          ...defender.runtime,
+          dodgeShadowHitIds: [...dodgeShadowHitIds],
+          perfectDodgeUntilMs: Math.max(defender.runtime?.perfectDodgeUntilMs ?? -1, timeMs + overlayMs),
+          perfectDodgeUntilFrame: this.msToFrame(Math.max(defender.runtime?.perfectDodgeUntilMs ?? -1, timeMs + overlayMs)),
+        };
+        this.emitCombatEvent({
+          type: "perfectDodge",
+          attackerId: attacker.id,
+          defenderId: defender.id,
+          sourceId: defender.id,
+          targetId: attacker.id,
+          message: `${defender.displayName} perfectly dodged ${attacker.displayName}'s ${attackKindLabel(attackKind)}.`,
+          data: {
+            actionId: combatActionIdForAttackKind(attackKind),
+            kind: attackKind,
+            phase: "startup",
+            window: "attackShadow",
+            rect: cloneJson(attackArea),
+            dodgeShadowRect: cloneJson(dodgeShadow),
+            bodyInShadow,
+            overlayMs,
+            controlLevel: shadowWindow.controlLevel,
+          },
+        });
       }
       attacker.runtime = { ...attacker.runtime, attackHitIds: [...hitIds] };
     }
@@ -1410,9 +1500,20 @@ export class RuntimeWorld {
     return combatAttackRectForEntity(entity);
   }
 
+  private attackShadowBounds(entity: Entity): Rect {
+    return combatAttackShadowRectForEntity(entity);
+  }
+
   private canUseAttackTouch(entity: Entity): boolean {
     if (entity.kind !== "entity" || !entity.collider) return false;
     return Boolean(entity.behavior?.builtin === "playerPlatformer" || entity.behavior?.builtin === "enemyPatrol");
+  }
+
+  private canReceiveAttackShadow(attacker: Entity, defender: Entity, timeMs: number): boolean {
+    if (defender.id === attacker.id || defender.kind !== "entity" || !defender.collider) return false;
+    if (defender.runtime?.defeated || timeMs >= (defender.runtime?.dodgeShadowUntilMs ?? -1)) return false;
+    if (defender.body?.mode !== "dynamic" && defender.body?.mode !== "kinematic") return false;
+    return hasHealth(defender);
   }
 
   private canReceiveAttackTouch(attacker: Entity, defender: Entity): boolean {
@@ -1698,6 +1799,12 @@ export class RuntimeWorld {
       dodgeStartedFrame: undefined,
       dodgeUntilFrame: undefined,
       dodgeRecoveryUntilFrame: undefined,
+      dodgeShadowRect: undefined,
+      dodgeShadowUntilMs: undefined,
+      dodgeShadowUntilFrame: undefined,
+      dodgeShadowHitIds: undefined,
+      perfectDodgeUntilMs: undefined,
+      perfectDodgeUntilFrame: undefined,
       combatAction: entity.runtime?.combatAction?.actionId === "dodge" ? undefined : entity.runtime?.combatAction,
     };
   }
@@ -1774,6 +1881,12 @@ export class RuntimeWorld {
       dodgeStartedFrame: entity.runtime?.dodgeStartedFrame,
       dodgeUntilFrame: entity.runtime?.dodgeUntilFrame,
       dodgeRecoveryUntilFrame: entity.runtime?.dodgeRecoveryUntilFrame,
+      dodgeShadowRect: rectFromRuntimeState(entity.runtime?.dodgeShadowRect),
+      dodgeShadowUntilMs: entity.runtime?.dodgeShadowUntilMs ?? legacyFramesToMs(entity.runtime?.dodgeShadowUntilFrame),
+      dodgeShadowUntilFrame: entity.runtime?.dodgeShadowUntilFrame,
+      dodgeShadowHitIds: Array.isArray(entity.runtime?.dodgeShadowHitIds) ? cloneJson(entity.runtime.dodgeShadowHitIds) : [],
+      perfectDodgeUntilMs: entity.runtime?.perfectDodgeUntilMs ?? legacyFramesToMs(entity.runtime?.perfectDodgeUntilFrame),
+      perfectDodgeUntilFrame: entity.runtime?.perfectDodgeUntilFrame,
       chargeStartedMs: entity.runtime?.chargeStartedMs ?? legacyFramesToMs(entity.runtime?.chargeStartedFrame),
       chargeHeldMs: entity.runtime?.chargeHeldMs ?? legacyFramesToMs(entity.runtime?.chargeHeldFrames),
       parryStartedMs: entity.runtime?.parryStartedMs ?? legacyFramesToMs(entity.runtime?.parryStartedFrame),
@@ -1827,6 +1940,14 @@ function runtimeStateMs(state: Record<string, unknown>, msKey: string, legacyFra
   if (typeof ms === "number" && Number.isFinite(ms)) return ms;
   const frames = state[legacyFrameKey];
   return typeof frames === "number" && Number.isFinite(frames) ? legacyFramesToMs(frames) : undefined;
+}
+
+function rectFromRuntimeState(value: unknown): Rect | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = value as Partial<Rect>;
+  const { x, y, w, h } = candidate;
+  if (![x, y, w, h].every((item) => typeof item === "number" && Number.isFinite(item))) return undefined;
+  return { x: x as number, y: y as number, w: w as number, h: h as number };
 }
 
 function attackKindFromValue(value: unknown): AttackKind | undefined {

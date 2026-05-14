@@ -12,6 +12,7 @@ export type CombatActionId =
 export type CombatPhaseId = "startup" | "active" | "evade" | "recovery";
 
 export type CombatWindowType =
+  | "attackShadow"
   | "hitbox"
   | "armor"
   | "parry"
