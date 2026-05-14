@@ -73,6 +73,7 @@ export class RuntimeWorld {
   entities = new Map<string, Entity>();
   transientEntities = new Map<string, Entity>();
   private entityListCache?: Entity[];
+  private readonly defaultInputActorId?: EntityId;
   input: Record<string, boolean> = {};
   actorInput: Record<string, Record<string, boolean>> = {};
   combatEvents: CombatEvent[] = [];
@@ -96,6 +97,7 @@ export class RuntimeWorld {
       this.normalizeRuntime(copy);
       if (copy.persistent) this.entities.set(copy.id, copy);
     });
+    this.defaultInputActorId = defaultInputActorIdFor(this.entities.values());
   }
 
   setMode(mode: RuntimeMode): RuntimeSnapshot | undefined {
@@ -189,6 +191,14 @@ export class RuntimeWorld {
         [scoped.key]: pressed,
       };
     }
+  }
+
+  setActorInput(entityId: EntityId, key: string, pressed: boolean): void {
+    this.setInput(actorScopedKey(entityId, key), pressed);
+  }
+
+  defaultPlayerInputActorId(): EntityId | undefined {
+    return this.defaultInputActorId;
   }
 
   runFixedFrame(): void {
@@ -1823,7 +1833,10 @@ export class RuntimeWorld {
 
   private isInputDown(entity: Entity, key: string, ...aliases: string[]): boolean {
     const scoped = this.actorInput[entity.id] || {};
-    return [key, ...aliases].some((candidate) => Boolean(scoped[candidate] || this.input[candidate]));
+    return [key, ...aliases].some((candidate) => {
+      if (scoped[candidate]) return true;
+      return entity.id === this.defaultInputActorId && this.input[candidate] === true;
+    });
   }
 
   private cleanupExpiredTransients(): void {
@@ -2040,6 +2053,20 @@ function hasHealth(entity: Entity): boolean {
 function stringParam(entity: Entity, key: string): string | undefined {
   const value = entity.behavior?.params[key];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function defaultInputActorIdFor(entities: Iterable<Entity>): EntityId | undefined {
+  let fallback: EntityId | undefined;
+  for (const entity of entities) {
+    if (entity.behavior?.builtin !== "playerPlatformer") continue;
+    fallback ||= entity.id;
+    if (entity.internalName === "Player") return entity.id;
+  }
+  return fallback;
+}
+
+function actorScopedKey(entityId: EntityId, key: string): string {
+  return `${entityId}:${key}`;
 }
 
 function parseActorScopedKey(key: string): { entityId: EntityId; key: string } | undefined {

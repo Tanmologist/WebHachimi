@@ -36,9 +36,11 @@ export function bindPlayerInput(root: HTMLElement, world: RuntimeWorld): PlayerI
   const pressedPointers = new Map<number, PlayerInputKey>();
   const pressedMouseButtons = new Map<number, PlayerInputKey>();
   const cleanup: Array<() => void> = [];
+  const inputActorId = world.defaultPlayerInputActorId();
 
   const setInput = (key: PlayerInputKey, pressed: boolean) => {
-    world.setInput(key, pressed);
+    if (inputActorId) world.setActorInput(inputActorId, key, pressed);
+    else world.setInput(key, pressed);
   };
 
   const onKeyDown = (event: KeyboardEvent) => {

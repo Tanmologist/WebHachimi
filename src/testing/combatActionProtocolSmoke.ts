@@ -12,6 +12,7 @@ const enemy = findByInternalName(scene, "Enemy_Patrol");
 assertActionDefinitions(player);
 assertRelativeHitboxEditing(player);
 assertRelativeMovementEditing(player);
+assertGlobalInputTargetsDefaultPlayerOnly(scene, player, enemy);
 assertRuntimeActionContext(scene, player);
 assertRuntimeAttackLunge(scene, player);
 assertBufferedChargeAfterNormalRecovery(scene, player);
@@ -79,6 +80,26 @@ function assertRelativeMovementEditing(entity: Entity): void {
 
   const leftFacingEdit = planMovedAttackMovementOffsets(entity.behavior!.params, "normal", -1, { x: 18, y: 4 });
   assert(leftFacingEdit.nextX === 18 && leftFacingEdit.nextY === 4, "left-facing move target should invert world x into local forward offset");
+}
+
+function assertGlobalInputTargetsDefaultPlayerOnly(sourceScene: Scene, sourcePlayer: Entity, sourceEnemy: Entity): void {
+  const world = new RuntimeWorld({ scene: sourceScene });
+  assert(world.defaultPlayerInputActorId() === sourcePlayer.id, "global gameplay input should be assigned to the combat player actor");
+  const enemy = requireEntity(world, sourceEnemy.id);
+  enemy.behavior!.params.targetInternalName = "";
+  enemy.behavior!.params.speed = 0;
+  enemy.behavior!.params.left = enemy.transform.position.x;
+  enemy.behavior!.params.right = enemy.transform.position.x;
+
+  world.setInput("attack", true);
+  world.runFixedFrame();
+  world.setInput("attack", false);
+  world.runFixedFrame();
+
+  const playerStarted = mustEvent(world, { type: "attackStarted", attackerId: sourcePlayer.id });
+  const enemyStarted = world.combatEvents.find((event) => event.type === "attackStarted" && event.attackerId === sourceEnemy.id);
+  assert(playerStarted.data?.kind === "normal", "global attack should drive the default player actor");
+  assert(!enemyStarted, "global attack should not be consumed by enemy actors");
 }
 
 function assertRuntimeActionContext(sourceScene: Scene, sourcePlayer: Entity): void {
