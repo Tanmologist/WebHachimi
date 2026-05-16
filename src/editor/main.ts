@@ -47,6 +47,14 @@ import { renderInspectorHtml, renderResourceLibraryHtml, renderResourcesHtml } f
 import { bindSceneTreeInteractions, renderSceneTreeHtml } from "./sceneTreeController";
 import { renderTaskPanelHtml } from "./taskPanelViews";
 import { renderWorldManagerPopoverHtml } from "./worldManagerViews";
+import {
+  planAddWorldTransaction,
+  planRemoveWorldTransaction,
+  planRenameWorldTransaction,
+  planSelectWorldTransaction,
+  type WorldManagerActionPlan,
+  type WorldManagerTransactionPlan,
+} from "./worldManagerTransactions";
 import { planPersistentFolderMoveTransaction } from "./folderMoveTransaction";
 import {
   planBatchDeleteEntitiesTransaction,
@@ -789,116 +797,36 @@ function centerWindowPanel(panel: PanelId): void {
 }
 
 function addWorldFromManager(): void {
-  const projectSnapshot = store.peekProject();
-  const sourceScene = projectSnapshot.scenes[projectSnapshot.activeSceneId] || Object.values(projectSnapshot.scenes)[0];
-  if (!sourceScene) return;
-  const sceneId = makeId<"SceneId">("scene") as SceneId;
-  const sceneName = uniqueWorldName(projectSnapshot, "新世界");
-  const sceneValue: Scene = {
-    id: sceneId,
-    name: sceneName,
-    settings: cloneJson(sourceScene.settings),
-    entities: {},
-    folders: [],
-    layers: cloneJson(sourceScene.layers?.length ? sourceScene.layers : [{ id: "world", displayName: "世界", order: 0, visible: true, locked: false }]),
-  };
-  applyWorldManagerTransaction({
-    patches: [
-      { op: "set", path: `/scenes/${sceneId}` as ProjectPatch["path"], value: sceneValue },
-      { op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: sceneId },
-    ],
-    inversePatches: [
-      { op: "delete", path: `/scenes/${sceneId}` as ProjectPatch["path"] },
-      { op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: projectSnapshot.activeSceneId },
-    ],
-    diffSummary: `添加世界：${sceneName}`,
-    dirtyReason: `已添加世界 ${sceneName}`,
-    noticeText: `已添加并切换到 ${sceneName}`,
-  });
+  applyWorldManagerPlan(planAddWorldTransaction(store.peekProject()));
 }
 
 function selectWorldFromManager(sceneId: SceneId): void {
-  const projectSnapshot = store.peekProject();
-  const target = projectSnapshot.scenes[sceneId];
-  if (!target) return;
-  if (projectSnapshot.activeSceneId === sceneId) {
-    notice = `${target.name || "未命名世界"} 已经是当前世界`;
-    renderUi();
-    return;
-  }
-  applyWorldManagerTransaction({
-    patches: [{ op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: sceneId }],
-    inversePatches: [{ op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: projectSnapshot.activeSceneId }],
-    diffSummary: `切换世界：${target.name || "未命名世界"}`,
-    dirtyReason: `已切换世界 ${target.name || "未命名世界"}`,
-    noticeText: `已切换到 ${target.name || "未命名世界"}`,
-  });
+  applyWorldManagerPlan(planSelectWorldTransaction(store.peekProject(), sceneId));
 }
 
 function renameWorldFromManager(sceneId: SceneId, rawName: string): void {
-  const projectSnapshot = store.peekProject();
-  const sceneValue = projectSnapshot.scenes[sceneId];
-  if (!sceneValue) return;
-  const nextName = rawName.trim();
-  if (!nextName) {
-    notice = "世界名称不能为空";
-    renderUi();
-    return;
-  }
-  if (nextName === sceneValue.name) {
-    notice = "世界名称没有变化";
-    renderUi();
-    return;
-  }
-  applyWorldManagerTransaction({
-    patches: [{ op: "set", path: `/scenes/${sceneId}/name` as ProjectPatch["path"], value: nextName }],
-    inversePatches: [{ op: "set", path: `/scenes/${sceneId}/name` as ProjectPatch["path"], value: sceneValue.name }],
-    diffSummary: `重命名世界：${sceneValue.name} -> ${nextName}`,
-    dirtyReason: `已重命名世界 ${nextName}`,
-    noticeText: `世界已重命名为 ${nextName}`,
-    resetSelection: false,
-  });
+  applyWorldManagerPlan(planRenameWorldTransaction(store.peekProject(), sceneId, rawName));
 }
 
 function removeWorldFromManager(sceneId: SceneId): void {
-  const projectSnapshot = store.peekProject();
-  const scenes = Object.values(projectSnapshot.scenes);
-  const sceneValue = projectSnapshot.scenes[sceneId];
-  if (!sceneValue) return;
-  if (scenes.length <= 1) {
-    notice = "至少需要保留一个世界";
+  applyWorldManagerPlan(planRemoveWorldTransaction(store.peekProject(), sceneId));
+}
+
+function applyWorldManagerPlan(result: Result<WorldManagerActionPlan>): void {
+  if (!result.ok) {
+    notice = `世界管理器操作失败：${result.error}`;
     renderUi();
     return;
   }
-  const nextActiveSceneId = projectSnapshot.activeSceneId === sceneId
-    ? scenes.find((item) => item.id !== sceneId)?.id as SceneId | undefined
-    : projectSnapshot.activeSceneId;
-  if (!nextActiveSceneId) return;
-  const patches: ProjectPatch[] = [];
-  const inversePatches: ProjectPatch[] = [];
-  if (projectSnapshot.activeSceneId !== nextActiveSceneId) {
-    patches.push({ op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: nextActiveSceneId });
-    inversePatches.push({ op: "set", path: "/activeSceneId" as ProjectPatch["path"], value: projectSnapshot.activeSceneId });
+  if (result.value.kind === "notice") {
+    notice = result.value.noticeText;
+    renderUi();
+    return;
   }
-  patches.push({ op: "delete", path: `/scenes/${sceneId}` as ProjectPatch["path"] });
-  inversePatches.unshift({ op: "set", path: `/scenes/${sceneId}` as ProjectPatch["path"], value: cloneJson(sceneValue) });
-  applyWorldManagerTransaction({
-    patches,
-    inversePatches,
-    diffSummary: `移除世界：${sceneValue.name || "未命名世界"}`,
-    dirtyReason: `已移除世界 ${sceneValue.name || "未命名世界"}`,
-    noticeText: `已移除 ${sceneValue.name || "未命名世界"}`,
-  });
+  applyWorldManagerTransaction(result.value.transaction);
 }
 
-function applyWorldManagerTransaction(input: {
-  patches: ProjectPatch[];
-  inversePatches: ProjectPatch[];
-  diffSummary: string;
-  dirtyReason: string;
-  noticeText: string;
-  resetSelection?: boolean;
-}): void {
+function applyWorldManagerTransaction(input: WorldManagerTransactionPlan): void {
   const result = editorTransactions.apply({
     actor: "user",
     patches: input.patches,
@@ -925,14 +853,6 @@ function resetSelectionToFirstEditableEntity(): void {
   selectedPart = "body";
   selectedIds = selectedId ? [selectedId as EntityId] : [];
   selectionArea = undefined;
-}
-
-function uniqueWorldName(projectSnapshot: Project, baseName: string): string {
-  const existing = new Set(Object.values(projectSnapshot.scenes).map((item) => item.name));
-  if (!existing.has(baseName)) return baseName;
-  let index = 2;
-  while (existing.has(`${baseName} ${index}`)) index += 1;
-  return `${baseName} ${index}`;
 }
 
 function previewWorldSpeed(rawValue: string): void {
