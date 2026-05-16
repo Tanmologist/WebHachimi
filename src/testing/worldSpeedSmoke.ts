@@ -1,4 +1,5 @@
 import { createStarterProject } from "../editor/starterProject";
+import { formatWorldSpeed, parseWorldSpeedInput } from "../editor/worldSpeedControl";
 import { normalizeProjectDefaults, normalizeSceneTimeScale } from "../project/schema";
 import { RuntimeWorld } from "../runtime/world";
 
@@ -8,6 +9,12 @@ assert(scene.settings.timeScale === 1, `expected default world speed 1, got ${sc
 assert(normalizeSceneTimeScale(Number.POSITIVE_INFINITY) === 1, "invalid world speed should normalize to 1");
 assert(normalizeSceneTimeScale(-2) === 0, "negative world speed should clamp to 0");
 assert(normalizeSceneTimeScale(9) === 4, "world speed should clamp to 4x");
+assert(parseWorldSpeedInput("") === undefined, "empty editor speed input should be rejected");
+assert(parseWorldSpeedInput("bad") === undefined, "non-numeric editor speed input should be rejected");
+assert(parseWorldSpeedInput("-2") === 0, "editor speed input should clamp negative values");
+assert(parseWorldSpeedInput("9") === 4, "editor speed input should clamp high values");
+assert(formatWorldSpeed(1) === "1x", "integer speed label should omit decimals");
+assert(formatWorldSpeed(0.5) === "0.5x", "single decimal speed label should trim trailing zero");
 
 scene.settings.timeScale = 2;
 const world = new RuntimeWorld({ scene });
