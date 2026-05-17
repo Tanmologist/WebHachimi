@@ -67,7 +67,7 @@ type PreviewWindowSnapshot = {
 };
 
 type PreviewLayoutSnapshot = {
-  version: 8;
+  version: 9;
   createdWindows: number;
   windows: PreviewWindowSnapshot[];
 };
@@ -93,7 +93,7 @@ type PreviewController = {
   defaultWindows: Map<PreviewWindowId, PreviewWindowDefault>;
 };
 
-const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v8";
+const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v9";
 const LEGACY_PREVIEW_LAYOUT_STORAGE_KEYS = [
   "webhachimi.v2.workbenchPreview.layout.v1",
   "webhachimi.v2.workbenchPreview.layout.v2",
@@ -102,6 +102,7 @@ const LEGACY_PREVIEW_LAYOUT_STORAGE_KEYS = [
   "webhachimi.v2.workbenchPreview.layout.v5",
   "webhachimi.v2.workbenchPreview.layout.v6",
   "webhachimi.v2.workbenchPreview.layout.v7",
+  "webhachimi.v2.workbenchPreview.layout.v8",
 ];
 const PREVIEW_MIN_WINDOW_WIDTH = 220;
 const PREVIEW_MIN_WINDOW_HEIGHT = 150;
@@ -1476,7 +1477,7 @@ function restoreFloatingWindowStyle(root: HTMLElement, windowNode: HTMLElement, 
 function savePreviewLayout(controller: PreviewController): void {
   if (controller.restoringLayout) return;
   const snapshot: PreviewLayoutSnapshot = {
-    version: 8,
+    version: 9,
     createdWindows: controller.createdWindows,
     windows: allPreviewWindows(controller.root).map((windowNode) => previewWindowSnapshot(controller.root, windowNode)),
   };
@@ -1509,7 +1510,7 @@ function readPreviewLayoutSnapshot(): PreviewLayoutSnapshot | undefined {
     const raw = localStorage.getItem(PREVIEW_LAYOUT_STORAGE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Partial<PreviewLayoutSnapshot>;
-    if (parsed.version !== 8 || !Array.isArray(parsed.windows)) return undefined;
+    if (parsed.version !== 9 || !Array.isArray(parsed.windows)) return undefined;
     return parsed as PreviewLayoutSnapshot;
   } catch {
     return undefined;
