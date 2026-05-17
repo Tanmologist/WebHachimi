@@ -961,7 +961,7 @@ function focusEntityOnCanvas(entityId: string, part: CanvasTargetPart): void {
   const entity = editableEntity(entityId);
   if (!entity) {
     syncWorldFromStore();
-    notice = "定位目标已经不存在，世界树已刷新";
+    notice = "定位目标已经不存在，层级已刷新";
     renderAll();
     return;
   }
@@ -1000,7 +1000,7 @@ function fitWorldToCanvas(source: "initial" | "manual" = "manual", options: { re
   const bounds = editableWorldBounds();
   const entities = editableEntities();
   if (!bounds) {
-    notice = "世界树里没有可适配的本体；画布为空。";
+    notice = "层级里没有可适配的本体；画布为空。";
     if (options.render !== false) renderAll();
     return;
   }
@@ -3168,6 +3168,17 @@ function renderTree(projectSnapshot: Project): void {
     onFilterChange: (value) => {
       sceneTreeFilter = value;
     },
+    onExpandAll: () => {
+      collapsedTreeNodes.clear();
+      notice = "层级已全部展开";
+      renderUi(projectSnapshot);
+    },
+    onCollapseAll: () => {
+      collapsedTreeNodes.clear();
+      sceneTreeCollapsibleNodeIds(entities).forEach((nodeId) => collapsedTreeNodes.add(nodeId));
+      notice = "层级已全部折叠";
+      renderUi(projectSnapshot);
+    },
     onToggleNode: (nodeId) => {
       if (!nodeId) return;
       if (collapsedTreeNodes.has(nodeId)) {
@@ -3203,6 +3214,16 @@ function renderTree(projectSnapshot: Project): void {
       showEntityContextMenu(entity, "body", target.clientX, target.clientY, entity.transform.position);
     },
   });
+}
+
+function sceneTreeCollapsibleNodeIds(entities: Entity[]): string[] {
+  const ids = scene.folders.map((folder) => `folder:${folder.id}`);
+  const folderedIds = new Set(scene.folders.flatMap((folder) => folder.entityIds));
+  if (entities.some((entity) => !folderedIds.has(entity.id))) ids.push("folder:__loose");
+  entities
+    .filter((entity) => entity.render)
+    .forEach((entity) => ids.push(`entity:${entity.id}`));
+  return ids;
 }
 
 function sceneTreeRenderSignature(projectSnapshot: Project, entities: Entity[]): string {

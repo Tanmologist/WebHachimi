@@ -67,7 +67,7 @@ type PreviewWindowSnapshot = {
 };
 
 type PreviewLayoutSnapshot = {
-  version: 9;
+  version: 10;
   createdWindows: number;
   windows: PreviewWindowSnapshot[];
 };
@@ -93,7 +93,7 @@ type PreviewController = {
   defaultWindows: Map<PreviewWindowId, PreviewWindowDefault>;
 };
 
-const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v9";
+const PREVIEW_LAYOUT_STORAGE_KEY = "webhachimi.v2.workbenchPreview.layout.v10";
 const LEGACY_PREVIEW_LAYOUT_STORAGE_KEYS = [
   "webhachimi.v2.workbenchPreview.layout.v1",
   "webhachimi.v2.workbenchPreview.layout.v2",
@@ -103,6 +103,7 @@ const LEGACY_PREVIEW_LAYOUT_STORAGE_KEYS = [
   "webhachimi.v2.workbenchPreview.layout.v6",
   "webhachimi.v2.workbenchPreview.layout.v7",
   "webhachimi.v2.workbenchPreview.layout.v8",
+  "webhachimi.v2.workbenchPreview.layout.v9",
 ];
 const PREVIEW_MIN_WINDOW_WIDTH = 220;
 const PREVIEW_MIN_WINDOW_HEIGHT = 150;
@@ -141,42 +142,27 @@ export function mountEditorShell(root: HTMLElement): void {
         <button class="tool-page__button" type="button" data-action="toggle-run" aria-label="播放预览" title="播放">▶</button>
       </aside>
 
-      <aside class="sidebar" data-dock-slot="left" data-preview-window="explorer" data-window-title="世界总览" data-window-state="open">
+      <aside class="sidebar" data-dock-slot="left" data-preview-window="explorer" data-window-title="层级" data-window-state="open">
         <div class="pane-header">
-          <span data-sidebar-title>世界总览</span>
+          <span data-sidebar-title>层级</span>
           <div class="pane-actions">
-            <button type="button" aria-label="最小化世界总览" data-window-minimize="explorer">-</button>
-            <button type="button" aria-label="关闭世界总览" data-window-close="explorer">x</button>
+            <button type="button" aria-label="最小化层级" data-window-minimize="explorer">-</button>
+            <button type="button" aria-label="关闭层级" data-window-close="explorer">x</button>
           </div>
         </div>
-        <div class="tree-list file-tree" data-role="tree">
-          <details class="tree-folder" open>
-            <summary>世界工程</summary>
-            <details class="tree-folder" open>
-              <summary>起始世界</summary>
-              <button class="tree-item is-selected" type="button">玩家身体</button>
-              <button class="tree-item" type="button">地面碰撞体</button>
-              <button class="tree-item" type="button">摄像机绑定</button>
-            </details>
-            <details class="tree-folder" open>
-              <summary>挂靠资源</summary>
-              <details class="tree-folder">
-                <summary>角色图片</summary>
-                <button class="tree-item" type="button">run_cycle_01.png</button>
-                <button class="tree-item" type="button">idle_01.png</button>
-              </details>
-              <details class="tree-folder" open>
-                <summary>地形图片</summary>
-                <button class="tree-item" type="button">grass_tile.png</button>
-                <button class="tree-item" type="button">stone_edge.png</button>
-              </details>
-            </details>
-            <details class="tree-folder">
-              <summary>脚本</summary>
-              <button class="tree-item" type="button">player.logic</button>
-              <button class="tree-item" type="button">camera.logic</button>
-            </details>
-          </details>
+        <div class="sidebar-workspace">
+          <section class="hierarchy-panel" aria-label="层级">
+            <div class="tree-list file-tree" data-role="tree"></div>
+          </section>
+          <section class="sidebar-inspector" aria-label="属性">
+            <header class="sidebar-inspector__header">
+              <span>属性</span>
+              <small>当前选中对象</small>
+            </header>
+            <div class="inspector-body inspector-body--sidebar">
+              <section class="inspector-properties" data-role="inspector"></section>
+            </div>
+          </section>
         </div>
       </aside>
 
@@ -221,39 +207,6 @@ export function mountEditorShell(root: HTMLElement): void {
           </div>
         </div>
         <div class="workspace-scroll">
-          <section class="workspace-section">
-            <header class="workspace-section__header">
-              <span class="section-title">属性</span>
-              <small>当前选中对象</small>
-            </header>
-            <div class="inspector-body workspace-section__body">
-              <section class="inspector-properties" data-role="inspector">
-                <label>
-                  名称
-                  <input type="text" value="玩家身体" />
-                </label>
-                <label>
-                  位置
-                  <div class="field-row">
-                    <input type="text" value="120" />
-                    <input type="text" value="84" />
-                  </div>
-                </label>
-                <label>
-                  尺寸
-                  <div class="field-row">
-                    <input type="text" value="64" />
-                    <input type="text" value="96" />
-                  </div>
-                </label>
-                <div class="property-group">
-                  <div class="section-title">表现层</div>
-                  <button class="property-toggle is-on" type="button">游戏中可见</button>
-                  <button class="property-toggle" type="button">锁定变换</button>
-                </div>
-              </section>
-            </div>
-          </section>
           <section class="workspace-section">
             <header class="workspace-section__header">
               <span class="section-title">物体资源</span>
@@ -328,13 +281,13 @@ export function mountEditorShell(root: HTMLElement): void {
         </div>
       </aside>
 
-      <section class="bottom-panel" data-dock-slot="bottom" data-preview-window="output" data-window-title="输出面板" data-window-state="closed">
+      <section class="bottom-panel" data-dock-slot="bottom" data-preview-window="output" data-window-title="日志" data-window-state="open">
         <div class="panel-tabs">
-          <span class="is-active" role="presentation">输出</span>
+          <span class="is-active" role="presentation">日志</span>
           <div class="tab-spacer"></div>
           <div class="inline-window-actions">
-            <button type="button" aria-label="最小化输出面板" data-window-minimize="output">-</button>
-            <button type="button" aria-label="关闭输出面板" data-window-close="output">x</button>
+            <button type="button" aria-label="最小化日志" data-window-minimize="output">-</button>
+            <button type="button" aria-label="关闭日志" data-window-close="output">x</button>
           </div>
         </div>
         <div class="output-console" data-role="output">
@@ -346,9 +299,9 @@ export function mountEditorShell(root: HTMLElement): void {
       </section>
 
       <div class="dock-overlay" data-dock-overlay aria-hidden="true">
-        <div class="dock-target dock-target--left" data-dock-zone="left" data-label="世界树"></div>
+        <div class="dock-target dock-target--left" data-dock-zone="left" data-label="层级"></div>
         <div class="dock-target dock-target--right" data-dock-zone="right" data-label="AI 任务"></div>
-        <div class="dock-target dock-target--bottom" data-dock-zone="bottom" data-label="底部面板"></div>
+        <div class="dock-target dock-target--bottom" data-dock-zone="bottom" data-label="日志"></div>
         <div class="dock-target dock-target--center" data-dock-zone="center" data-label="世界编辑组"></div>
       </div>
 
@@ -1297,7 +1250,7 @@ export function previewWorkspacePresetPlan(
     ...base,
     { id: "explorer", state: "open" },
     { id: "workspace", state: "open" },
-    { id: "output", state: "minimized" },
+    { id: "output", state: "open" },
   ];
 }
 
@@ -1477,7 +1430,7 @@ function restoreFloatingWindowStyle(root: HTMLElement, windowNode: HTMLElement, 
 function savePreviewLayout(controller: PreviewController): void {
   if (controller.restoringLayout) return;
   const snapshot: PreviewLayoutSnapshot = {
-    version: 9,
+    version: 10,
     createdWindows: controller.createdWindows,
     windows: allPreviewWindows(controller.root).map((windowNode) => previewWindowSnapshot(controller.root, windowNode)),
   };
@@ -1510,7 +1463,7 @@ function readPreviewLayoutSnapshot(): PreviewLayoutSnapshot | undefined {
     const raw = localStorage.getItem(PREVIEW_LAYOUT_STORAGE_KEY);
     if (!raw) return undefined;
     const parsed = JSON.parse(raw) as Partial<PreviewLayoutSnapshot>;
-    if (parsed.version !== 9 || !Array.isArray(parsed.windows)) return undefined;
+    if (parsed.version !== 10 || !Array.isArray(parsed.windows)) return undefined;
     return parsed as PreviewLayoutSnapshot;
   } catch {
     return undefined;
@@ -1652,18 +1605,18 @@ function windowStateLabel(state: PreviewWindowState): string {
 
 function previewWindowLabel(windowId: PreviewWindowId): string {
   if (windowId === "tools") return "工具";
-  if (windowId === "explorer") return "世界树";
+  if (windowId === "explorer") return "层级";
   if (windowId === "editor") return "世界";
-  if (windowId === "workspace") return "检查器";
-  if (windowId === "output") return "输出面板";
+  if (windowId === "workspace") return "AI 任务";
+  if (windowId === "output") return "日志";
   if (windowId.startsWith("custom-")) return `窗口 ${windowId.slice("custom-".length)}`;
   return "窗口";
 }
 
 function previewDockTargetLabel(target: Exclude<PreviewDockTarget, "float">): string {
   if (target === "left") return "左侧栏";
-  if (target === "right") return "右侧检查器";
-  if (target === "bottom") return "底部面板";
+  if (target === "right") return "右侧任务";
+  if (target === "bottom") return "日志";
   return "编辑器组";
 }
 

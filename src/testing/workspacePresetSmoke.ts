@@ -8,7 +8,7 @@ assertState(edit, "tools", "open");
 assertState(edit, "explorer", "open");
 assertState(edit, "editor", "open");
 assertState(edit, "workspace", "open");
-assertState(edit, "output", "minimized");
+assertState(edit, "output", "open");
 assertMissing(edit, "world-manager");
 
 const focus = byId(previewWorkspacePresetPlan("focus", desktop));

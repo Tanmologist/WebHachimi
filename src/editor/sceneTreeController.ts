@@ -9,6 +9,8 @@ export type SceneTreeCallbacks = {
   onMoveEntityToFolder: (entityId: EntityId, folderId: string) => void;
   onToggleNode?: (nodeId: string) => void;
   onFilterChange?: (value: string) => void;
+  onExpandAll?: () => void;
+  onCollapseAll?: () => void;
   onFocusEntity?: (entityId: string, part: CanvasTargetPart) => void;
   onOpenContextMenu?: (target: { entityId: string; part: CanvasTargetPart; clientX: number; clientY: number }) => void;
 };
@@ -25,12 +27,9 @@ export function renderSceneTreeHtml(
   const entityById = new Map(entities.map((entity) => [entity.id, entity] as const));
   const runtimeFolder = scene.folders.find((folder) => folder.id === "runtime");
   const runtimeEntities = entities.filter((entity) => !entity.persistent);
-  const persistentEntities = entities.filter((entity) => entity.persistent);
-  const visibleEntities = entities.filter((entity) => entity.render?.visible !== false);
   const folderedIds = new Set(scene.folders.flatMap((folder) => folder.entityIds));
   if (runtimeFolder) runtimeEntities.forEach((entity) => folderedIds.add(entity.id));
   const looseEntities = entities.filter((entity) => !folderedIds.has(entity.id));
-  const selectedEntity = selectedId ? entityById.get(selectedId as EntityId) : undefined;
   const normalizedFilter = filterText.trim();
   const filterMatchCount = normalizedFilter
     ? entities.filter((entity) => sceneTreeSearchText(entity, resources).toLocaleLowerCase().includes(normalizedFilter.toLocaleLowerCase())).length
@@ -51,6 +50,7 @@ export function renderSceneTreeHtml(
         <section class="v2-folder" data-folder-id="${escapeHtml(folder.id)}" data-tree-collapsed="${collapsed ? "true" : "false"}">
           <header>
             <button class="v2-tree-toggle" data-tree-toggle="${escapeHtml(nodeId)}" type="button">${collapsed ? "▸" : "▾"}</button>
+            <span class="v2-folder-icon" aria-hidden="true">${collapsed ? "▸" : "▾"}</span>
             <span>${escapeHtml(folder.displayName)}</span>
             <small>${folderChildren.length} 项</small>
           </header>
@@ -64,59 +64,44 @@ export function renderSceneTreeHtml(
     .join("");
   const looseNodeId = "folder:__loose";
   const looseCollapsed = collapsedNodes.has(looseNodeId);
-  const overview = `
-    <article class="v2-scene-overview">
-      <div class="v2-scene-overview__top">
-        <span class="v2-scene-overview__mark" aria-hidden="true"></span>
-        <div>
-          <small class="v2-kicker">当前世界</small>
-          <b>${escapeHtml(scene.name || "未命名世界")}</b>
-        </div>
-        <strong>${escapeHtml(String(visibleEntities.length))}/${escapeHtml(String(entities.length))}</strong>
-      </div>
-      <div class="v2-scene-overview__focus">
-        <span>选中</span>
-        <b>${escapeHtml(selectedEntity?.displayName || "未选中")}</b>
-      </div>
-      <div class="v2-metrics v2-metrics--scene">
-        ${renderMetric("分组", scene.folders.length)}
-        ${renderMetric("对象", persistentEntities.length)}
-        ${renderMetric("运行时", runtimeEntities.length)}
-        ${renderMetric("资源", Object.keys(resources).length)}
-      </div>
-    </article>
-    <div class="v2-tree-filter">
-      <span aria-hidden="true">⌕</span>
-      <input data-scene-tree-filter type="text" value="${escapeHtml(filterText)}" placeholder="筛选对象、分组或资源" aria-label="筛选世界总览" />
-      <button data-scene-tree-filter-clear type="button" aria-label="清除筛选" ${normalizedFilter ? "" : "hidden"}>×</button>
-    </div>
-    <div class="v2-tree-summary">
-      <span>层级</span>
-      <small data-tree-filter-count data-total-count="${escapeHtml(String(entities.length))}" data-loose-count="${escapeHtml(String(looseEntities.length))}">${normalizedFilter ? `匹配 ${filterMatchCount}/${entities.length}` : `${entities.length} 个对象 · ${looseEntities.length} 个未归类`}</small>
-    </div>
-  `;
-
-  return `<div class="v2-scene-panel">${overview}${folderHtml}${
+  const treeBody = `${folderHtml}${
     looseHtml
       ? `<section class="v2-folder" data-tree-collapsed="${looseCollapsed ? "true" : "false"}">
           <header>
             <button class="v2-tree-toggle" data-tree-toggle="${looseNodeId}" type="button">${looseCollapsed ? "▸" : "▾"}</button>
+            <span class="v2-folder-icon" aria-hidden="true">${looseCollapsed ? "▸" : "▾"}</span>
             <span>未归类</span>
             <small>${looseEntities.length} 项</small>
           </header>
           ${looseCollapsed ? "" : `<p class="v2-folder-hint">这些对象还没有归到任何分组，适合在结构稳定后再整理。</p>${looseHtml}`}
         </section>`
       : ""
-  }</div>`;
-}
+  }`;
 
-function renderMetric(label: string, value: number): string {
-  return `
-    <span>
-      <small>${escapeHtml(label)}</small>
-      <b>${escapeHtml(String(value))}</b>
-    </span>
-  `;
+  return `<div class="v2-scene-panel">
+    <div class="v2-tree-filter">
+      <span aria-hidden="true">⌕</span>
+      <input data-scene-tree-filter type="text" value="${escapeHtml(filterText)}" placeholder="筛选层级对象" aria-label="筛选层级" />
+      <button data-scene-tree-filter-clear type="button" aria-label="清除筛选" ${normalizedFilter ? "" : "hidden"}>×</button>
+    </div>
+    <div class="v2-tree-summary">
+      <span>${escapeHtml(scene.name || "Workspace")}</span>
+      <small data-tree-filter-count data-total-count="${escapeHtml(String(entities.length))}" data-loose-count="${escapeHtml(String(looseEntities.length))}">${normalizedFilter ? `匹配 ${filterMatchCount}/${entities.length}` : `${entities.length} 个对象 · ${looseEntities.length} 个未归类`}</small>
+    </div>
+    <div class="v2-tree-actions" aria-label="层级快捷操作">
+      <button data-scene-tree-expand-all type="button">全部展开</button>
+      <button data-scene-tree-collapse-all type="button">全部折叠</button>
+    </div>
+    <section class="v2-folder v2-folder--root" data-tree-collapsed="false">
+      <header>
+        <span class="v2-tree-toggle-spacer"></span>
+        <span class="v2-folder-icon" aria-hidden="true">▾</span>
+        <span>${escapeHtml(scene.name || "Workspace")}</span>
+        <small>${scene.folders.length} 组</small>
+      </header>
+      <div class="v2-folder__children">${treeBody}</div>
+    </section>
+  </div>`;
 }
 
 export function bindSceneTreeInteractions(tree: HTMLElement, callbacks: SceneTreeCallbacks): void {
@@ -139,6 +124,14 @@ export function bindSceneTreeInteractions(tree: HTMLElement, callbacks: SceneTre
     applySceneTreeFilter(tree, "");
     filterClear.hidden = true;
     filterInput.focus();
+  });
+  tree.querySelector<HTMLButtonElement>("[data-scene-tree-expand-all]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    callbacks.onExpandAll?.();
+  });
+  tree.querySelector<HTMLButtonElement>("[data-scene-tree-collapse-all]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    callbacks.onCollapseAll?.();
   });
   tree.querySelectorAll<HTMLButtonElement>("[data-tree-toggle]").forEach((button) => {
     button.addEventListener("click", (event) => {
