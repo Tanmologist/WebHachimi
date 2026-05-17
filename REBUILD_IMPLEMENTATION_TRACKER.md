@@ -58,6 +58,8 @@
 | v2 自治摘要模型拆分 | 已完成第一刀 | `autonomousRoundSummaryFromCycle()`、`latestAutonomyRoundSummaryFromProject()` 和 `buildAutonomousRoundNextSteps()` 已从 `main.ts` 抽到 `src/editor/summaryModels.ts`；`main.ts` 保留自治执行和页面状态接线 |
 | autonomy summary 自动化验证 | 已完成第一轮 | 新增 `src/testing/autonomySummaryModelsSmoke.ts` 和 `npm run smoke:autonomy-summary`，覆盖 live cycle 摘要、项目 fallback 摘要和队列为空 self-test next steps |
 | 自治摘要目标层验证 | 已完成 | 前台预览刷新后实际点击 `自治一轮`；目标层确认 notice 为 `AI自治第 1 轮完成...`，任务面板渲染 `AI自治工作台` 和 `测试通过` |
+| 服务入口与项目 profile 收敛 | 已完成第一轮 | 新增 `project-profiles.cjs`，Vite dev 插件和 Node server 共用项目路由/路径；`server.js` 根路径进入真实编辑器入口，缺少 `dist-v2/` 时对重建入口返回明确 build-required 错误 |
+| runtime 性能 smoke 指标扩展 | 已完成第一轮 | `src/testing/performanceSmoke.ts` 现在输出 baseline 与 mixed-density 两组 runtime 指标，并覆盖 crowded pair pruning 与 circle/polygon shape mix 动态碰撞 |
 
 ## 未完成但必须落实
 
@@ -68,12 +70,12 @@
 | P0 | 明确源项目只是参考 | 代码结构不再照搬旧 `app.js` 或继续膨胀 `src/editor/main.ts` | 已写入口径，并持续拆出 v2 模块 |
 | P1 | 拆分 `src/editor/main.ts` | 拆出 canvas、keyboard、runtime、persistence、panels、tasks、AI 控制器 | 已开始：壳层、视图工具、摘要模型、面板、任务面板、画布变换、场景树、键盘、持久化控制器、任务工作流控制器、自治摘要模型和文件夹移动事务模块已拆出；`main.ts` 约 819 行 |
 | P1 | 清理重构残留 | 核实并清理 `runAutonomousRound()` 不可达旧代码 | 已完成第一轮 |
-| P1 | 统一持久化服务 | Vite dev 和 Node server 都支持清晰的 v2 项目 API | 已完成第一轮：保存形状、wrapper/bare payload 和 dataUrl 附件处理已对齐 |
+| P1 | 统一持久化服务 | Vite dev 和 Node server 都支持清晰的 v2 项目 API | 已完成第二轮：保存形状、wrapper/bare payload 和 dataUrl 附件处理已对齐，项目 profile 路由/路径已抽成共享配置 |
 | P1 | 拆分后的页面目标层验证 | 每次拆模块后除构建外还要验证浏览器实际渲染 | 已执行 1365px/390px 截图和任务面板 CDP 交互验证，仍需继续覆盖更多交互 |
 | P1 | 文档收敛 | README、架构、运行方式、发布边界统一成重构后的口径 | 进行中 |
 | P2 | 物理增强 | swept AABB、trigger/sensor、one-way platform、layer/mask、hitbox 生命周期 | 未开始 |
-| P2 | 测试补强 | transaction、undo/redo、snapshot restore、planner、player movement 等测试 | 未开始 |
-| P2 | 跨平台脚本 | 去掉 Windows-only 环境变量和自动打开浏览器依赖 | 未开始 |
+| P2 | 测试补强 | transaction、undo/redo、snapshot restore、planner、player movement 等测试 | 已开始：performance smoke 已扩展为多场景指标矩阵 |
+| P2 | 跨平台脚本 | 去掉 Windows-only 环境变量和自动打开浏览器依赖 | 已开始：`server.js` 自动打开浏览器改为 `execFile` 分平台入口，`serve:legacy` 通过 `WEBHACHIMI_ENTRY_PATH` 指向 legacy |
 
 ## 当前剩余队列
 
@@ -82,14 +84,14 @@
 | 1 | 任务 / AI 控制器继续拆分 | 下一刀抽 `recordAutonomousSuite()` 或维护/清理动作，但要先对照 `AutonomyLoop` 内部失败任务生成语义 |
 | 2 | 事务化扩面 | 属性修改、创建/删除、资源绑定和任务编辑逐步改为 transaction；数组类 patch 暂用完整 `set` 保证 inverse 可逆 |
 | 3 | 目标层回归脚本化 | 将当前 Browser/CDP 保存/加载、任务排队、AI 执行、自治摘要、transform、文件夹移动验证沉淀为可重复命令或 Playwright/DevTools 测试 |
-| 4 | `syncWorldFromStore()` 删除语义 | 后续做实体删除事务前，先让 runtime world 能移除 store 中已不存在的 persistent entity，避免幽灵实体 |
+| 4 | 生产预览目标层脚本化 | 将根路径重定向、重建入口 build-required 错误、构建 asset immutable cache 等服务端目标层检查沉淀为可重复脚本 |
 
 ## 功能承接表
 
 | 源能力 | 源位置 | 重构后目标 | 处理原则 |
 | --- | --- | --- | --- |
 | Legacy Canvas 编辑器 | `index.html`、`styles.css`、`app.js` | 只作为功能参考 | 不承接大文件结构 |
-| v2 编辑器壳层 | `v2.html`、`src/editor/main.ts`、`src/editor/styles.css` | 新编辑器主线 | 保留功能接线，重做 UI 和模块边界 |
+| v2 编辑器壳层 | `apps/webhachimi/editor.html`、`src/editor/main.ts`、`src/editor/styles.css` | 新编辑器主线 | 保留功能接线，重做 UI 和模块边界 |
 | Pixi 渲染 | `src/editor/renderer.ts` | 中央画布渲染层 | 尽量保留，围绕新 UI 重新接线 |
 | 项目模型 | `src/project/schema.ts` | 新项目权威数据层 | 保留并强化 |
 | 事务系统 | `src/project/transactions.ts` | 所有编辑动作的唯一修改入口 | 必须扩大使用范围 |
@@ -98,7 +100,7 @@
 | 超级画笔 | `src/editor/superBrush.ts` | 空间意图采集工具 | 保留概念，重做任务输入体验 |
 | 规则式 AI 执行 | `src/ai/*` | 第一版安全 AI 修改器 | 保留，但 UI 文案避免夸成通用 AI |
 | 自主测试 | `src/testing/*` | AI 修改后的验证层 | 保留并做结果可视化 |
-| 玩家端 | `player.html`、`src/player/*` | 独立运行入口 | 保持轻量，不依赖编辑器 UI |
+| 玩家端 | `games/hachimi-nanbei-lvdong/index.html`、`src/player/*` | 独立运行入口 | 保持轻量，不依赖编辑器 UI |
 
 ## UI 重构目标
 

@@ -42,7 +42,7 @@ npm run serve:legacy
 Then open:
 
 ```text
-http://localhost:5577/
+http://localhost:5577/index.html
 ```
 
 Legacy direct file mode can still open `index.html`, with browser-local persistence.
@@ -77,6 +77,20 @@ dist-v2/
 
 `dist-v2/` is a build artifact and is not source.
 
+For a production preview after building, run:
+
+```powershell
+npm run serve
+```
+
+The server opens the rebuilt editor at:
+
+```text
+http://localhost:5577/apps/webhachimi/editor.html
+```
+
+If `dist-v2/` is missing, `server.js` returns an explicit build-required error for rebuilt editor/game entries instead of silently serving source HTML that cannot load through the production static allowlist.
+
 ## Smoke Checks
 
 Run the full smoke suite through the unified verification entry:
@@ -98,17 +112,25 @@ npm run smoke:persistence
 npm run smoke:persistence-api
 npm run smoke:folder-move
 npm run smoke:task-workflow
+npm run smoke:super-brush-evidence
+npm run smoke:task-panel
 npm run smoke:autonomy-summary
 npm run smoke:viewport
+npm run smoke:keyboard
 npm run smoke:context-menu
+npm run smoke:entity-properties
 npm run smoke:resource-import
 npm run smoke:resource-animation
+npm run smoke:world-manager
+npm run smoke:world-speed
 npm run smoke:canvas-transform
 npm run smoke:collision-geometry
 npm run smoke:presentation-label
 npm run smoke:floating-panels
+npm run smoke:workspace-presets
 npm run smoke:runtime-visibility
 npm run smoke:performance
+npm run smoke:combat-action-protocol
 npm run smoke:workshops
 npm run smoke:transform
 npm run smoke:sweep

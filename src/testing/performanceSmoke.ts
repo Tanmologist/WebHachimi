@@ -3,55 +3,91 @@ import { collectDynamicPairs, collectPairs } from "../runtime/collision";
 import { RuntimeWorld } from "../runtime/world";
 import type { EntityId, SceneId } from "../shared/types";
 
-const staticCount = 360;
+type RuntimePerformanceCase = {
+  name: string;
+  staticCount: number;
+  dynamicCount: number;
+  ticks: number;
+  minTicksPerSecond: number;
+};
+
+const runtimeCases: RuntimePerformanceCase[] = [
+  { name: "baseline", staticCount: 360, dynamicCount: 1, ticks: 180, minTicksPerSecond: 900 },
+  { name: "mixed-density", staticCount: 1000, dynamicCount: 10, ticks: 120, minTicksPerSecond: 300 },
+];
 const crowdedStaticCount = 80;
-const ticks = 180;
-const scene = createPerformanceScene(staticCount);
-const world = new RuntimeWorld({ scene });
-world.setMode("game");
+
 const crowdedEntities = createCrowdedCollisionEntities(crowdedStaticCount);
 const fullCrowdedPairs = collectPairs(crowdedEntities);
 const dynamicCrowdedPairs = collectDynamicPairs(crowdedEntities);
+const shapeMixEntities = createShapeMixCollisionEntities(36);
+const shapeMixPairs = collectDynamicPairs(shapeMixEntities);
+const runtimeResults = runtimeCases.map(runRuntimePerformanceCase);
 
-const started = performance.now();
-for (let index = 0; index < ticks; index += 1) world.runFixedFrame();
-const elapsedMs = performance.now() - started;
-const ticksPerSecond = Math.round((ticks * 1000) / Math.max(1, elapsedMs));
-const player = world.entityById("perf-player" as EntityId);
-
-assert(player?.transform.position.y !== undefined, "player should still be simulated");
-assert(ticksPerSecond >= 900, `runtime performance smoke too slow: ${ticksPerSecond} ticks/s`);
 assert(dynamicCrowdedPairs.length === crowdedStaticCount, `expected ${crowdedStaticCount} dynamic pairs, got ${dynamicCrowdedPairs.length}`);
 assert(fullCrowdedPairs.length > dynamicCrowdedPairs.length * 20, "crowded collision fixture should expose static-static pair pruning");
 assert(
   dynamicCrowdedPairs.every((hit) => hit.a.body?.mode === "dynamic" || hit.b.body?.mode === "dynamic"),
   "dynamic collision collection should not return static-static pairs",
 );
+assert(shapeMixPairs.length === 36, `expected 36 shape-mix dynamic pairs, got ${shapeMixPairs.length}`);
 
 console.log(
   JSON.stringify(
     {
       status: "passed",
-      staticCount,
-      ticks,
-      elapsedMs: Number(elapsedMs.toFixed(2)),
-      ticksPerSecond,
+      runtimeCases: runtimeResults,
       crowdedPairPruning: {
         fullPairs: fullCrowdedPairs.length,
         dynamicPairs: dynamicCrowdedPairs.length,
       },
-      playerY: Math.round(player?.transform.position.y || 0),
+      shapeMixCollision: {
+        entities: shapeMixEntities.length,
+        dynamicPairs: shapeMixPairs.length,
+      },
     },
     null,
     2,
   ),
 );
 
-function createPerformanceScene(count: number): Scene {
-  const entities: Record<string, Entity> = {
-    "perf-player": makeEntity("perf-player" as EntityId, 0, -360, 42, 64, "dynamic"),
+function runRuntimePerformanceCase(input: RuntimePerformanceCase): Record<string, unknown> {
+  const scene = createPerformanceScene(input.staticCount, input.dynamicCount);
+  const world = new RuntimeWorld({ scene });
+  world.setMode("game");
+
+  const started = performance.now();
+  for (let index = 0; index < input.ticks; index += 1) world.runFixedFrame();
+  const elapsedMs = performance.now() - started;
+  const ticksPerSecond = Math.round((input.ticks * 1000) / Math.max(1, elapsedMs));
+  const player = world.entityById("perf-player-0" as EntityId);
+
+  assert(player?.transform.position.y !== undefined, `${input.name}: player should still be simulated`);
+  assert(
+    ticksPerSecond >= input.minTicksPerSecond,
+    `${input.name}: runtime performance smoke too slow: ${ticksPerSecond} ticks/s`,
+  );
+
+  return {
+    name: input.name,
+    staticCount: input.staticCount,
+    dynamicCount: input.dynamicCount,
+    ticks: input.ticks,
+    elapsedMs: Number(elapsedMs.toFixed(2)),
+    ticksPerSecond,
+    minTicksPerSecond: input.minTicksPerSecond,
+    playerY: Math.round(player?.transform.position.y || 0),
   };
-  for (let index = 0; index < count; index += 1) {
+}
+
+function createPerformanceScene(staticCount: number, dynamicCount: number): Scene {
+  const entities: Record<string, Entity> = {
+  };
+  for (let index = 0; index < dynamicCount; index += 1) {
+    const id = `perf-player-${index}` as EntityId;
+    entities[id] = makeEntity(id, index * 72 - 240, -360 - (index % 3) * 18, 42, 64, "dynamic");
+  }
+  for (let index = 0; index < staticCount; index += 1) {
     const id = `perf-static-${index}` as EntityId;
     const column = index % 40;
     const row = Math.floor(index / 40);
@@ -76,6 +112,23 @@ function createPerformanceScene(count: number): Scene {
   };
 }
 
+function createShapeMixCollisionEntities(count: number): Entity[] {
+  const entities: Entity[] = [makeEntity("perf-shape-player" as EntityId, 0, 0, 64, 64, "dynamic", "circle")];
+  for (let index = 0; index < count; index += 1) {
+    const entity = makeEntity(`perf-shape-static-${index}` as EntityId, 0, 0, 64, 64, "static", index % 2 === 0 ? "circle" : "polygon");
+    if (entity.collider?.shape === "polygon") {
+      entity.collider.points = [
+        { x: -32, y: -32 },
+        { x: 32, y: -24 },
+        { x: 28, y: 32 },
+        { x: -28, y: 30 },
+      ];
+    }
+    entities.push(entity);
+  }
+  return entities;
+}
+
 function createCrowdedCollisionEntities(count: number): Entity[] {
   const entities: Entity[] = [makeEntity("perf-crowded-player" as EntityId, 0, 0, 64, 64, "dynamic")];
   for (let index = 0; index < count; index += 1) {
@@ -84,7 +137,15 @@ function createCrowdedCollisionEntities(count: number): Entity[] {
   return entities;
 }
 
-function makeEntity(id: EntityId, x: number, y: number, width: number, height: number, mode: "dynamic" | "static"): Entity {
+function makeEntity(
+  id: EntityId,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  mode: "dynamic" | "static",
+  shape: "box" | "circle" | "polygon" = "box",
+): Entity {
   return {
     id,
     internalName: id,
@@ -111,7 +172,7 @@ function makeEntity(id: EntityId, x: number, y: number, width: number, height: n
       bounce: 0,
     },
     collider: {
-      shape: "box",
+      shape,
       size: { x: width, y: height },
       offset: { x: 0, y: 0 },
       rotation: 0,
