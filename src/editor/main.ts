@@ -152,6 +152,8 @@ type ContextMenuItem = {
   action: ContextMenuAction;
   label: string;
   hint?: string;
+  icon?: string;
+  shortcut?: string;
   danger?: boolean;
   disabled?: boolean;
   separatorBefore?: boolean;
@@ -168,6 +170,7 @@ type ContextMenuState = {
   x: number;
   y: number;
   title: string;
+  subtitle?: string;
   entityId?: string;
   part?: CanvasTargetPart;
   worldPoint?: Vec2;
@@ -245,6 +248,7 @@ let pendingWindowMenuClick: number | undefined;
 let activeSurface: ActiveSurface = "canvas";
 let contextMenu: ContextMenuState | undefined;
 const collapsedTreeNodes = new Set<string>();
+let sceneTreeFilter = "";
 const managedPanels: PanelId[] = ["scene", "properties", "assets", "library", "tasks", "output"];
 const aiTraceByTask: Record<string, string> = {};
 const outputLog = new OutputLogController();
@@ -1811,6 +1815,7 @@ function showEntityContextMenu(entity: Entity, part: CanvasTargetPart, clientX: 
   contextMenu = {
     ...clampedContextMenuPosition(clientX, clientY, items.length),
     title: entity.displayName,
+    subtitle: part === "presentation" ? "当前可视体" : "世界本体",
     entityId: entity.id,
     part: "body",
     worldPoint,
@@ -1823,14 +1828,15 @@ function showEntityContextMenu(entity: Entity, part: CanvasTargetPart, clientX: 
 function showMultiEntityContextMenu(entity: Entity | null, clientX: number, clientY: number, worldPoint: Vec2): void {
   const count = selectedIds.length;
   const items: ContextMenuItem[] = [
-    { action: "duplicate-selected", label: `复制选中的 ${count} 个本体`, hint: "向右下偏移一段" },
-    { action: "delete-selected", label: `删除选中的 ${count} 个本体`, danger: true, separatorBefore: true },
-    { action: "clear-selection", label: "清除选择", separatorBefore: true },
-    { action: "reset-viewport", label: "重置视角", separatorBefore: true },
+    { action: "duplicate-selected", label: `复制选中的 ${count} 个本体`, hint: "向右下偏移一段", icon: "⧉" },
+    { action: "delete-selected", label: `删除选中的 ${count} 个本体`, icon: "⌫", danger: true, separatorBefore: true },
+    { action: "clear-selection", label: "清除选择", icon: "◇", separatorBefore: true },
+    { action: "reset-viewport", label: "重置视角", icon: "⌖", separatorBefore: true },
   ];
   contextMenu = {
     ...clampedContextMenuPosition(clientX, clientY, items.length),
     title: entity ? `已选中 ${count} 个本体` : `画布 · 已选中 ${count} 个本体`,
+    subtitle: "批量操作",
     entityId: entity?.id,
     part: "body",
     worldPoint,
@@ -1843,14 +1849,15 @@ function showMultiEntityContextMenu(entity: Entity | null, clientX: number, clie
 function showCanvasContextMenu(clientX: number, clientY: number, worldPoint: Vec2): void {
   const hasSelection = Boolean(selectedId || selectedIds.length || selectionArea);
   const items: ContextMenuItem[] = [
-    { action: "create-box", label: "新建方块", hint: "64 x 64 对象" },
-    { action: "create-circle", label: "新建圆形", hint: "64 x 64 对象" },
-    ...(hasSelection ? [{ action: "clear-selection" as const, label: "清除选择", separatorBefore: true }] : []),
-    { action: "reset-viewport", label: "重置视角", hint: "回到默认缩放和位", separatorBefore: true },
+    { action: "create-box", label: "新建方块", hint: "64 x 64 对象", icon: "□" },
+    { action: "create-circle", label: "新建圆形", hint: "64 x 64 对象", icon: "○" },
+    ...(hasSelection ? [{ action: "clear-selection" as const, label: "清除选择", icon: "◇", separatorBefore: true }] : []),
+    { action: "reset-viewport", label: "重置视角", hint: "回到默认缩放和位置", icon: "⌖", separatorBefore: true },
   ];
   contextMenu = {
     ...clampedContextMenuPosition(clientX, clientY, items.length),
     title: "画布",
+    subtitle: `世界坐标 ${Math.round(worldPoint.x)}, ${Math.round(worldPoint.y)}`,
     worldPoint,
     items,
   };
@@ -1861,18 +1868,18 @@ function showCanvasContextMenu(clientX: number, clientY: number, worldPoint: Vec
 function contextMenuItemsForEntity(entity: Entity, part: CanvasTargetPart): ContextMenuItem[] {
   void part;
   return [
-    { action: "select-target", label: "选择", disabled: selectedId === entity.id && selectedPart === "body" },
-    { action: "rename-entity", label: "重命名", disabled: !entity.persistent },
-    { action: "duplicate-entity", label: "复制", hint: "向右下偏移一段", disabled: !entity.persistent },
-    { action: "duplicate-here", label: "复制到此", disabled: !entity.persistent },
-    { action: "delete-target", label: "删除", danger: true, separatorBefore: true, disabled: !entity.persistent },
-    { action: "reset-viewport", label: "重置视角", separatorBefore: true },
+    { action: "select-target", label: "选择", icon: "⌖", disabled: selectedId === entity.id && selectedPart === "body" },
+    { action: "rename-entity", label: "重命名", icon: "T", shortcut: "F2", disabled: !entity.persistent },
+    { action: "duplicate-entity", label: "复制", hint: "向右下偏移一段", icon: "⧉", shortcut: "Ctrl+D", disabled: !entity.persistent },
+    { action: "duplicate-here", label: "复制到此", icon: "＋", disabled: !entity.persistent },
+    { action: "delete-target", label: "删除", icon: "⌫", danger: true, separatorBefore: true, shortcut: "Del", disabled: !entity.persistent },
+    { action: "reset-viewport", label: "重置视角", icon: "⌖", separatorBefore: true },
   ];
 }
 
 function clampedContextMenuPosition(clientX: number, clientY: number, itemCount: number): { x: number; y: number } {
-  const width = 236;
-  const height = 44 + itemCount * 38;
+  const width = 288;
+  const height = 76 + itemCount * 44;
   return {
     x: Math.max(8, Math.min(clientX, window.innerWidth - width - 8)),
     y: Math.max(8, Math.min(clientY, window.innerHeight - height - 8)),
@@ -3087,7 +3094,7 @@ function renderMinimizedTray(): void {
 function renderContextMenu(): void {
   const signature = !contextMenu || world.mode === "game"
     ? "hidden"
-    : `${contextMenu.x}|${contextMenu.y}|${contextMenu.title}|${contextMenu.entityId || ""}|${contextMenu.part || ""}|${contextMenu.items.map((item) => `${item.action}:${item.label}:${item.hint || ""}:${item.danger ? 1 : 0}:${item.disabled ? 1 : 0}:${item.separatorBefore ? 1 : 0}`).join("~")}`;
+    : `${contextMenu.x}|${contextMenu.y}|${contextMenu.title}|${contextMenu.subtitle || ""}|${contextMenu.entityId || ""}|${contextMenu.part || ""}|${contextMenu.items.map((item) => `${item.action}:${item.label}:${item.hint || ""}:${item.icon || ""}:${item.shortcut || ""}:${item.danger ? 1 : 0}:${item.disabled ? 1 : 0}:${item.separatorBefore ? 1 : 0}`).join("~")}`;
   if (uiRenderState.contextMenu === signature) return;
   uiRenderState.contextMenu = signature;
   if (!contextMenu || world.mode === "game") {
@@ -3104,7 +3111,11 @@ function renderContextMenu(): void {
   contextMenuNode.style.left = `${contextMenu.x}px`;
   contextMenuNode.style.top = `${contextMenu.y}px`;
   contextMenuNode.innerHTML = `
-    <header id="v2-context-menu-title">${escapeHtml(contextMenu.title)}</header>
+    <header id="v2-context-menu-title">
+      <span>上下文</span>
+      <strong>${escapeHtml(contextMenu.title)}</strong>
+      ${contextMenu.subtitle ? `<small>${escapeHtml(contextMenu.subtitle)}</small>` : ""}
+    </header>
     <div class="v2-context-menu-list">
       ${contextMenu.items
         .map(
@@ -3117,14 +3128,27 @@ function renderContextMenu(): void {
               aria-disabled="${item.disabled ? "true" : "false"}"
               ${item.disabled ? "disabled" : ""}
             >
-              <span>${escapeHtml(item.label)}</span>
-              ${item.hint ? `<small>${escapeHtml(item.hint)}</small>` : ""}
+              <span class="v2-context-menu__icon" aria-hidden="true">${escapeHtml(item.icon || "•")}</span>
+              <span class="v2-context-menu__body">
+                <span>${escapeHtml(item.label)}</span>
+                ${item.hint ? `<small>${escapeHtml(item.hint)}</small>` : ""}
+              </span>
+              ${item.shortcut ? `<kbd>${escapeHtml(item.shortcut)}</kbd>` : ""}
             </button>
           `,
         )
         .join("")}
     </div>
   `;
+  fitContextMenuToViewport(contextMenuNode);
+}
+
+function fitContextMenuToViewport(menuNode: HTMLElement): void {
+  const rect = menuNode.getBoundingClientRect();
+  const left = Math.max(8, Math.min(rect.left, window.innerWidth - rect.width - 8));
+  const top = Math.max(8, Math.min(rect.top, window.innerHeight - rect.height - 8));
+  menuNode.style.left = `${left}px`;
+  menuNode.style.top = `${top}px`;
 }
 
 function renderFrame(): void {
@@ -3139,8 +3163,11 @@ function renderTree(projectSnapshot: Project): void {
   const signature = sceneTreeRenderSignature(projectSnapshot, entities);
   if (uiRenderState.tree === signature) return;
   uiRenderState.tree = signature;
-  treeNode.innerHTML = renderSceneTreeHtml(scene, entities, selectedId, selectedPart, projectSnapshot.resources, collapsedTreeNodes);
+  treeNode.innerHTML = renderSceneTreeHtml(scene, entities, selectedId, selectedPart, projectSnapshot.resources, collapsedTreeNodes, sceneTreeFilter);
   bindSceneTreeInteractions(treeNode, {
+    onFilterChange: (value) => {
+      sceneTreeFilter = value;
+    },
     onToggleNode: (nodeId) => {
       if (!nodeId) return;
       if (collapsedTreeNodes.has(nodeId)) {
@@ -3205,6 +3232,7 @@ function sceneTreeRenderSignature(projectSnapshot: Project, entities: Entity[]):
     projectSnapshot.meta.updatedAt,
     selectedId,
     selectedPart,
+    sceneTreeFilter,
     collapsedTreeSignature(),
     folderSignature,
     entitySignature,

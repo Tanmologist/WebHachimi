@@ -20,8 +20,16 @@ export function renderTreeItemHtml(
   const hasPresentation = Boolean(entity.render);
   const collapsed = hasPresentation && collapsedNodes.has(nodeId);
   const presentationHidden = entity.render?.visible === false;
+  const searchText = [
+    entity.displayName,
+    entity.internalName,
+    entity.kind,
+    entity.persistent ? "本体" : "运行时",
+    presentationName,
+    presentationHidden ? "隐藏" : "可视",
+  ].join(" ");
   return `
-    <article class="v2-world-node">
+    <article class="v2-world-node" data-tree-search="${escapeHtml(searchText)}">
       <div class="v2-tree-row">
         ${
           hasPresentation
@@ -29,6 +37,7 @@ export function renderTreeItemHtml(
             : `<span class="v2-tree-toggle-spacer"></span>`
         }
         <button class="v2-tree-item ${bodySelected ? "is-selected" : ""}" data-entity-id="${entity.id}" data-part="body" type="button" draggable="${entity.persistent ? "true" : "false"}">
+          <span class="v2-tree-type-dot" data-kind="${escapeHtml(entity.kind)}" aria-hidden="true"></span>
           <span>${escapeHtml(entity.displayName)}</span>
           <small class="v2-tree-badge">${entity.persistent ? "本体" : "运行时"}</small>
         </button>

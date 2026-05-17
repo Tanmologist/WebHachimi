@@ -140,12 +140,12 @@ export function mountEditorShell(root: HTMLElement): void {
         <button class="tool-page__button" type="button" data-action="toggle-run" aria-label="播放预览" title="播放">▶</button>
       </aside>
 
-      <aside class="sidebar" data-dock-slot="left" data-preview-window="explorer" data-window-title="世界树" data-window-state="open">
+      <aside class="sidebar" data-dock-slot="left" data-preview-window="explorer" data-window-title="世界总览" data-window-state="open">
         <div class="pane-header">
-          <span data-sidebar-title>世界树</span>
+          <span data-sidebar-title>世界总览</span>
           <div class="pane-actions">
-            <button type="button" aria-label="最小化世界树" data-window-minimize="explorer">-</button>
-            <button type="button" aria-label="关闭世界树" data-window-close="explorer">x</button>
+            <button type="button" aria-label="最小化世界总览" data-window-minimize="explorer">-</button>
+            <button type="button" aria-label="关闭世界总览" data-window-close="explorer">x</button>
           </div>
         </div>
         <div class="tree-list file-tree" data-role="tree">
