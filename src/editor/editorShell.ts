@@ -181,6 +181,17 @@ export function mountEditorShell(root: HTMLElement): void {
 
       <section class="stage" data-role="stage" aria-label="编辑舞台">
         <div class="stage-grid"></div>
+        <aside class="canvas-guide-panel" data-role="canvas-guide-panel" data-super-brush-target="editor-ui-panel" aria-label="UI 指导面板">
+          <header>
+            <span>UI 指导面板</span>
+            <strong data-role="canvas-guide-state">待标注</strong>
+          </header>
+          <div class="canvas-guide-panel__body">
+            <button type="button" data-tool="superBrush" title="超级画笔" aria-label="使用超级画笔">✎</button>
+            <p data-role="canvas-guide-hint">用超级画笔圈住这里，写明要更新的界面行为。</p>
+            <button type="button" data-action="confirm-super-brush">确认</button>
+          </div>
+        </aside>
       </section>
 
       <main class="editor-grid" data-dock-slot="center" data-preview-window="editor" data-window-title="世界" data-window-state="open">

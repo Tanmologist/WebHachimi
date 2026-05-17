@@ -60,6 +60,7 @@ export function resolveTarget(snapshot: RuntimeSnapshot, target: TargetRef): { e
     return { exists: Boolean(entity), value: entity };
   }
   if (target.kind === "area") return { exists: target.sceneId === snapshot.sceneId, value: target.rect };
+  if (target.kind === "editorUi") return { exists: true, value: target };
   if (target.kind === "runtime") return { exists: !target.sceneId || target.sceneId === snapshot.sceneId, value: snapshot };
   return { exists: false, value: undefined };
 }

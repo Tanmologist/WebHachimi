@@ -294,6 +294,7 @@ export type TargetRef =
   | { kind: "entity"; entityId: EntityId }
   | { kind: "resource"; resourceId: ResourceId }
   | { kind: "area"; sceneId: SceneId; rect: Rect }
+  | { kind: "editorUi"; uiId: string; label: string; rect?: Rect }
   | { kind: "runtime"; sceneId?: SceneId };
 
 export type BrushContext = {

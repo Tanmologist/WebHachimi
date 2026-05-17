@@ -431,7 +431,7 @@ function buildStructureChecks(scene: Scene, maxEntityChecks: number, plannedChec
       expect: { exists: true },
     });
   }
-  return mergeFrameChecks([...checks, ...plannedChecks.filter((check) => check.target.kind !== "resource")]);
+  return mergeFrameChecks([...checks, ...plannedChecks.filter((check) => check.target.kind !== "resource" && check.target.kind !== "editorUi")]);
 }
 
 function addSnapshotLog(logs: TestLog[], options: AutonomousTestSuiteOptions, usedFrozenSnapshot: boolean): TestLog[] {

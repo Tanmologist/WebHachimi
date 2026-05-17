@@ -68,6 +68,7 @@ export function resolveProjectTarget(project: Project, target: TargetRef): { exi
     const scene = project.scenes[target.sceneId as SceneId];
     return { exists: Boolean(scene), value: target.rect };
   }
+  if (target.kind === "editorUi") return { exists: true, value: target };
   return { exists: true, value: project };
 }
 

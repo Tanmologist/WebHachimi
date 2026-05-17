@@ -625,6 +625,122 @@ input {
   opacity: 0.78;
 }
 
+.canvas-guide-panel {
+  position: absolute;
+  right: calc(var(--inspector-track) + clamp(12px, 2.2vw, 28px));
+  top: clamp(72px, 10vh, 116px);
+  z-index: 2;
+  display: grid;
+  width: clamp(226px, 22vw, 318px);
+  max-width: calc(100% - 88px);
+  gap: 8px;
+  padding: 10px;
+  color: #e5ebf3;
+  border: 1px solid rgba(112, 139, 174, 0.48);
+  border-radius: 8px;
+  background: rgba(23, 27, 33, 0.84);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+}
+
+.canvas-guide-panel::before {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  border: 1px solid rgba(64, 200, 156, 0.18);
+  content: "";
+  pointer-events: none;
+}
+
+.canvas-guide-panel header,
+.canvas-guide-panel__body {
+  position: relative;
+  min-width: 0;
+}
+
+.canvas-guide-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #f0f5fb;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.canvas-guide-panel header strong {
+  flex: 0 0 auto;
+  color: #9bd8c2;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.canvas-guide-panel__body {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) 54px;
+  align-items: center;
+  gap: 8px;
+}
+
+.canvas-guide-panel__body p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #b7c1cf;
+  font-size: 11px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.canvas-guide-panel__body button {
+  position: relative;
+  height: 28px;
+  min-width: 0;
+  padding: 0 8px;
+  color: #dce7f4;
+  border: 1px solid rgba(103, 119, 143, 0.62);
+  border-radius: 5px;
+  background: rgba(35, 42, 52, 0.96);
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.canvas-guide-panel__body button:first-child {
+  width: 32px;
+  padding: 0;
+  color: #d9fff1;
+  border-color: rgba(64, 200, 156, 0.46);
+  background: rgba(34, 73, 61, 0.8);
+}
+
+.canvas-guide-panel__body button:disabled {
+  color: #6f7987;
+  cursor: default;
+  border-color: rgba(82, 91, 105, 0.42);
+  background: rgba(28, 32, 38, 0.74);
+}
+
+.canvas-guide-panel__body button:not(:disabled):hover {
+  color: #ffffff;
+  border-color: rgba(132, 164, 204, 0.76);
+  background: rgba(45, 55, 68, 0.98);
+}
+
+#v2-root[data-super-brush-active="true"] .canvas-guide-panel {
+  border-color: rgba(64, 200, 156, 0.72);
+}
+
+#v2-root[data-super-brush-state="pending"] .canvas-guide-panel,
+#v2-root[data-super-brush-state="task"] .canvas-guide-panel {
+  border-color: rgba(215, 168, 74, 0.72);
+}
+
+.canvas-guide-panel[data-brush-targeted="true"] {
+  border-color: rgba(215, 168, 74, 0.86);
+  background: rgba(28, 30, 30, 0.9);
+}
+
 .inspector-body {
   display: flex;
   flex-direction: column;

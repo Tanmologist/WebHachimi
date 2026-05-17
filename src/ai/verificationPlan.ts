@@ -32,7 +32,7 @@ type ParsedPatchPath =
 export function createVerificationPlan(input: CreateVerificationPlanInput): VerificationPlan {
   const runtime = runtimeVerificationFromPatches(input.project, input.patches);
   const frameChecks = mergeFrameChecks([
-    ...(input.task.acceptanceCriteria || []).filter((check) => check.target.kind !== "resource"),
+    ...(input.task.acceptanceCriteria || []).filter((check) => check.target.kind !== "resource" && check.target.kind !== "editorUi"),
     { label: "planned edit target remains inspectable", target: input.testTarget, expect: { exists: true } },
     ...brushTargetFrameChecks(input.task),
     ...runtime.frameChecks,
@@ -56,7 +56,7 @@ export function createVerificationPlan(input: CreateVerificationPlanInput): Veri
 function brushTargetFrameChecks(task: Task): FrameCheck[] {
   const refs = task.brushContext?.compiled?.targetRefs || [];
   return refs
-    .filter((target) => target.kind !== "resource")
+    .filter((target) => target.kind !== "resource" && target.kind !== "editorUi")
     .slice(0, 8)
     .map((target, index) => ({
       label: `super brush target ${index + 1} remains inspectable`,
@@ -77,7 +77,7 @@ function targetProjectChecks(project: Project, task: Task, testTarget: TargetRef
     });
   }
   for (const target of targets.slice(0, 12)) {
-    if (target.kind === "runtime" || target.kind === "area") continue;
+    if (target.kind === "runtime" || target.kind === "area" || target.kind === "editorUi") continue;
     checks.push({
       label: `project target exists: ${target.kind}`,
       target,
@@ -303,6 +303,7 @@ function mergeFrameChecks(checks: FrameCheck[]): FrameCheck[] {
   const merged: FrameCheck[] = [];
   for (const check of checks) {
     if (check.target.kind === "resource") continue;
+    if (check.target.kind === "editorUi") continue;
     const key = `${check.label}:${JSON.stringify(check.target)}:${JSON.stringify(check.expect)}`;
     if (seen.has(key)) continue;
     seen.add(key);

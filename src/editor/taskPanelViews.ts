@@ -40,6 +40,7 @@ export function renderTaskPanelHtml(model: TaskPanelViewModel): string {
         "";
       const detailParts = [
         taskMatchesSelectedEntities(task, selectedEntityIds) ? "当前选中相关" : "",
+        summarizeEditorUiTargets(task),
         summarizeTargetCount(task.targetRefs.length),
         summarizeTransactionCount(task.transactionRefs.length),
         summarizeTestCount(testRecords.length),
@@ -277,6 +278,18 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 function summarizeTargetCount(count: number): string {
   return count > 0 ? `目标 ${count} 个` : "全局任务";
+}
+
+function summarizeEditorUiTargets(task: Task): string {
+  const labels = [
+    ...task.targetRefs,
+    ...(task.brushContext?.raw?.targetRefs || []),
+    ...(task.brushContext?.compiled?.targetRefs || []),
+  ]
+    .filter((target): target is Extract<TargetRef, { kind: "editorUi" }> => target.kind === "editorUi")
+    .map((target) => target.label || target.uiId);
+  const uniqueLabels = [...new Set(labels)];
+  return uniqueLabels.length ? `界面 ${uniqueLabels.join("、")}` : "";
 }
 
 function summarizeTransactionCount(count: number): string {

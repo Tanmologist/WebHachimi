@@ -359,6 +359,7 @@ function activeScene(project: Project): Scene | undefined {
 
 function criterionForTarget(project: Project, scene: Scene | undefined, target: TargetRef, index: number): AcceptanceCriterion | undefined {
   if (target.kind === "resource") return undefined;
+  if (target.kind === "editorUi") return undefined;
   if (target.kind === "entity" && !project.scenes[project.activeSceneId]?.entities[target.entityId]) return undefined;
   if (target.kind === "area" && scene && target.sceneId !== scene.id) return undefined;
   return {
@@ -373,6 +374,7 @@ function mergeAcceptanceCriteria(existing: AcceptanceCriterion[], generated: Acc
   const merged: AcceptanceCriterion[] = [];
   for (const criterion of [...existing, ...generated]) {
     if (criterion.target.kind === "resource") continue;
+    if (criterion.target.kind === "editorUi") continue;
     const normalized: AcceptanceCriterion = {
       label: criterion.label.trim() || "acceptance check",
       target: criterion.target,

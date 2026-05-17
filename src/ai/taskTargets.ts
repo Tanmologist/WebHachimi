@@ -27,6 +27,7 @@ export function targetExists(project: Project, target: TargetRef): boolean {
   if (target.kind === "entity") return Object.values(project.scenes).some((scene) => Boolean(scene.entities[target.entityId]));
   if (target.kind === "resource") return Boolean(project.resources[target.resourceId]);
   if (target.kind === "area") return Boolean(project.scenes[target.sceneId]);
+  if (target.kind === "editorUi") return Boolean(target.uiId);
   if (target.kind === "runtime") return !target.sceneId || Boolean(project.scenes[target.sceneId]);
   return false;
 }
@@ -36,5 +37,6 @@ function describeTarget(target: TargetRef): string {
   if (target.kind === "entity") return `entity:${target.entityId}`;
   if (target.kind === "resource") return `resource:${target.resourceId}`;
   if (target.kind === "area") return `area:${target.sceneId}`;
+  if (target.kind === "editorUi") return `editorUi:${target.uiId}`;
   return `runtime:${target.sceneId || "*"}`;
 }

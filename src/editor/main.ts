@@ -3,12 +3,13 @@ import type { AiTaskExecutionResult, AiTaskExecutor } from "../ai/taskExecutor";
 import { attackTouchKindForEntities, planMovedAttackMovementOffsets, planMovedAttackTouchOffsets } from "../combat/hitboxEdit";
 import { entityFollowsParentTransform } from "../project/entityHierarchy";
 import { createTask } from "../project/tasks";
-import { normalizeProjectDefaults, type BrushContext, type BrushVisualEvidence, type BrushVisualFrame, type Entity, type Project, type ProjectPatch, type Scene } from "../project/schema";
+import { normalizeProjectDefaults, type BrushAnnotation, type BrushContext, type BrushVisualEvidence, type BrushVisualFrame, type Entity, type Project, type ProjectPatch, type Scene } from "../project/schema";
 import { consumeEditorHandoff } from "../project/editorHandoff";
 import { ProjectStore } from "../project/projectStore";
 import {
   createBrushContextFromSuperBrushDraft,
   createBrushVisualEvidence,
+  createSuperBrushAnnotation,
   createSuperBrushStroke,
   createTaskFromSuperBrush,
   hasMeaningfulSuperBrushContext,
@@ -18,6 +19,12 @@ import {
   type BrushVisualEvidenceInput,
   type SuperBrushDraft,
 } from "./superBrush";
+import {
+  CANVAS_GUIDE_PANEL_ID,
+  CANVAS_GUIDE_PANEL_LABEL,
+  canvasGuidePanelAnnotationInput,
+  canvasGuidePanelTargetsForStroke,
+} from "./canvasGuidePanel";
 import { RuntimeWorld } from "../runtime/world";
 import { cloneJson, makeId, type EntityId, type Rect, type ResourceId, type Result, type SceneId, type Transform2D, type Vec2 } from "../shared/types";
 import type { Resource, ResourceBinding, TargetRef, Task } from "../project/schema";
@@ -219,6 +226,7 @@ let drawingBrush = false;
 let drawingBrushPointerId: number | undefined;
 let brushStartPoint: Vec2 | undefined;
 let currentStrokePoints: Vec2[] = [];
+let currentStrokeClientPoints: Vec2[] = [];
 let pendingBrush: SuperBrushDraft | undefined;
 let superBrushTaskDialogOpen = false;
 let superBrushTaskError = "";
@@ -286,6 +294,9 @@ mountEditorShell(root);
 panelLayout.applyPanelSizes();
 
 const stageHost = query<HTMLElement>('[data-role="stage"]');
+const canvasGuidePanelNode = query<HTMLElement>('[data-role="canvas-guide-panel"]');
+const canvasGuideStateNode = query<HTMLElement>('[data-role="canvas-guide-state"]');
+const canvasGuideHintNode = query<HTMLElement>('[data-role="canvas-guide-hint"]');
 const taskInput = query<HTMLTextAreaElement>('[data-role="task-input"]');
 const superBrushTaskInput = query<HTMLTextAreaElement>('[data-role="super-brush-task-input"]');
 const resourceFileInput = query<HTMLInputElement>('[data-role="resource-file-input"]');
@@ -742,6 +753,7 @@ function queueTaskFromComposer(visibleTaskInput: HTMLTextAreaElement | null): vo
   if (shouldIgnoreUnconfirmedBrush) {
     pendingBrush = undefined;
     currentStrokePoints = [];
+    currentStrokeClientPoints = [];
     drawingBrush = false;
     drawingBrushPointerId = undefined;
     brushStartPoint = undefined;
@@ -1516,6 +1528,7 @@ function cancelCanvasPointerInteraction(event: PointerEvent): void {
     drawingBrushPointerId = undefined;
     brushStartPoint = undefined;
     currentStrokePoints = [];
+    currentStrokeClientPoints = [];
     if (pendingBrush && !hasMeaningfulSuperBrushContext(pendingBrush)) pendingBrush = undefined;
     renderAll();
     return;
@@ -1615,7 +1628,7 @@ function enterSuperBrushMode(): void {
 function startSuperBrushStroke(event: PointerEvent, point: Vec2): void {
   const snapshot = world.freezeForInspection();
   store.recordRuntimeSnapshot(snapshot);
-  const startTargets = mergeSuperBrushTargets(pendingBrush?.selectionTargets, targetsForSuperBrushClick(point));
+  const startTargets = mergeSuperBrushTargets(pendingBrush?.selectionTargets, targetsForSuperBrushClick(point, clientPointFromPointer(event)));
   pendingBrush = {
     strokes: pendingBrush?.strokes || [],
     annotations: pendingBrush?.annotations || [],
@@ -1630,6 +1643,7 @@ function startSuperBrushStroke(event: PointerEvent, point: Vec2): void {
   drawingBrushPointerId = event.pointerId;
   brushStartPoint = point;
   currentStrokePoints = [point];
+  currentStrokeClientPoints = [clientPointFromPointer(event)];
   contextMenu = undefined;
   renderer.canvas().setPointerCapture(event.pointerId);
   notice = "正在记录超级画笔；可以连续画多笔，随后在任务框描述要改什么";
@@ -2131,6 +2145,7 @@ function onCanvasPointerMove(event: PointerEvent): void {
   const last = currentStrokePoints[currentStrokePoints.length - 1];
   if (!last || distance(point, last) >= superBrushPointSpacing()) {
     currentStrokePoints.push(point);
+    currentStrokeClientPoints.push(clientPointFromPointer(event));
     renderCanvasOnly();
   }
 }
@@ -2170,6 +2185,7 @@ function onCanvasPointerUp(event: PointerEvent): void {
   if (!drawingBrush || drawingBrushPointerId !== event.pointerId) return;
   event.preventDefault();
   const finishedPoints = currentStrokePoints;
+  const finishedClientPoints = currentStrokeClientPoints.length ? currentStrokeClientPoints : [clientPointFromPointer(event)];
   const finishedStart = brushStartPoint || finishedPoints[0];
   const finishedEnd = finishedPoints[finishedPoints.length - 1] || finishedStart;
   drawingBrush = false;
@@ -2178,14 +2194,14 @@ function onCanvasPointerUp(event: PointerEvent): void {
   releaseCanvasPointer(event.pointerId);
   const createdStroke = createSuperBrushStroke(finishedPoints);
   if (createdStroke.ok) {
-    const strokeTargets = targetsForCompletedSuperBrushStroke(finishedPoints);
+    const strokeTargets = targetsForCompletedSuperBrushStroke(finishedPoints, finishedClientPoints);
     const strokeTargetRefs = {
       ...(pendingBrush?.strokeTargetRefs || {}),
       [createdStroke.value.id]: strokeTargets,
     };
     pendingBrush = rebuildSuperBrushDraftTargets({
       strokes: [...(pendingBrush?.strokes || []), createdStroke.value],
-      annotations: pendingBrush?.annotations || [],
+      annotations: withCanvasGuidePanelAnnotation(pendingBrush?.annotations || [], strokeTargets),
       selectionTargets: pendingBrush?.selectionTargets || [],
       strokeTargetRefs,
       manualTargetRefs: pendingBrush?.manualTargetRefs,
@@ -2194,12 +2210,12 @@ function onCanvasPointerUp(event: PointerEvent): void {
     });
     notice = superBrushRecordedNotice();
   } else if (finishedStart && distance(finishedStart, finishedEnd) < superBrushClickDistance()) {
-    const clickTargets = targetsForSuperBrushClick(finishedEnd);
+    const clickTargets = targetsForSuperBrushClick(finishedEnd, clientPointFromPointer(event));
     pendingBrush =
       clickTargets.length > 0
         ? rebuildSuperBrushDraftTargets({
             strokes: pendingBrush?.strokes || [],
-            annotations: pendingBrush?.annotations || [],
+            annotations: withCanvasGuidePanelAnnotation(pendingBrush?.annotations || [], clickTargets),
             selectionTargets: pendingBrush?.selectionTargets || [],
             strokeTargetRefs: pendingBrush?.strokeTargetRefs,
             manualTargetRefs: mergeSuperBrushTargets(pendingBrush?.manualTargetRefs, clickTargets),
@@ -2218,6 +2234,7 @@ function onCanvasPointerUp(event: PointerEvent): void {
     notice = "超级画笔标记太短；请拖动画一笔，或单击对象追加目标";
   }
   currentStrokePoints = [];
+  currentStrokeClientPoints = [];
   renderAll();
 }
 
@@ -2285,6 +2302,7 @@ function queueSuperBrushTaskFromDialog(): void {
   previewTaskId = queueResult.value.id;
   pendingBrush = undefined;
   currentStrokePoints = [];
+  currentStrokeClientPoints = [];
   drawingBrush = false;
   drawingBrushPointerId = undefined;
   brushStartPoint = undefined;
@@ -2381,6 +2399,7 @@ function cancelSuperBrushSession(): void {
   drawingBrushPointerId = undefined;
   brushStartPoint = undefined;
   currentStrokePoints = [];
+  currentStrokeClientPoints = [];
   pendingBrush = undefined;
   superBrushTaskDialogOpen = false;
   superBrushTaskError = "";
@@ -2396,6 +2415,7 @@ function undoLastSuperBrushStrokeOrCancel(): void {
     drawingBrushPointerId = undefined;
     brushStartPoint = undefined;
     currentStrokePoints = [];
+    currentStrokeClientPoints = [];
     notice = "已取消当前这一笔";
     renderAll();
     return;
@@ -2806,6 +2826,7 @@ function applyLoadedProjectFromDisk(projectFromDisk: Project, saveStatus: string
   superBrushTaskError = "";
   superBrushTaskInput.value = "";
   currentStrokePoints = [];
+  currentStrokeClientPoints = [];
   canvasDrag = undefined;
   parentChildMoveDrag = undefined;
   shapeDrag = undefined;
@@ -2934,11 +2955,27 @@ function superBrushPointerText(): string {
 }
 
 function superBrushSummaryText(): string {
-  if (superBrushTaskDialogOpen && pendingBrush) return `已确认：${summarizeSuperBrushDraft(pendingBrush)}`;
+  const guideSuffix = hasCanvasGuidePanelTarget(pendingBrush) ? ` · ${CANVAS_GUIDE_PANEL_LABEL}` : "";
+  if (superBrushTaskDialogOpen && pendingBrush) return `已确认：${summarizeSuperBrushDraft(pendingBrush)}${guideSuffix}`;
   if (drawingBrush) return `正在记录第 ${(pendingBrush?.strokes.length || 0) + 1} 笔；右键取消当前笔`;
-  if (pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush)) return `${summarizeSuperBrushDraft(pendingBrush)}；右键撤销上一笔`;
+  if (pendingBrush && hasMeaningfulSuperBrushContext(pendingBrush)) return `${summarizeSuperBrushDraft(pendingBrush)}${guideSuffix}；右键撤销上一笔`;
   if (activeTool === "superBrush") return "拖动画布开始标记，右键撤销上一笔";
   return "拖动画布开始标记";
+}
+
+function canvasGuidePanelStateText(brushState: ReturnType<typeof superBrushUiState>, targeted: boolean): string {
+  if (targeted) return "已指向";
+  if (brushState === "drawing") return "记录中";
+  if (brushState === "task") return "写任务";
+  if (brushState === "armed") return "可标注";
+  return "待标注";
+}
+
+function canvasGuidePanelHintText(brushState: ReturnType<typeof superBrushUiState>, targeted: boolean): string {
+  if (targeted) return "已把这个 UI 面板写入画笔上下文。";
+  if (brushState === "armed" || brushState === "drawing") return "圈住这里，让 AI 按你的笔迹更新面板。";
+  if (brushState === "task") return "补一句你希望这个面板如何变化。";
+  return "点画笔，再圈住这里更新界面。";
 }
 
 function renderUi(projectSnapshot?: Project): void {
@@ -2946,6 +2983,7 @@ function renderUi(projectSnapshot?: Project): void {
   const brushState = superBrushUiState();
   const brushSummary = superBrushSummaryText();
   const canConfirmBrush = Boolean(pendingBrush && !drawingBrush && hasMeaningfulSuperBrushContext(pendingBrush as SuperBrushDraft));
+  const guidePanelTargeted = hasCanvasGuidePanelTarget(pendingBrush);
 
   root.hidden = false;
   root.removeAttribute("aria-hidden");
@@ -3004,6 +3042,9 @@ function renderUi(projectSnapshot?: Project): void {
   brushTaskErrorNode.textContent = superBrushTaskError;
   brushTaskErrorNode.hidden = !superBrushTaskError;
   brushTaskErrorNode.setAttribute("aria-hidden", String(!superBrushTaskError));
+  canvasGuidePanelNode.dataset.brushTargeted = String(guidePanelTargeted);
+  canvasGuideStateNode.textContent = canvasGuidePanelStateText(brushState, guidePanelTargeted);
+  canvasGuideHintNode.textContent = canvasGuidePanelHintText(brushState, guidePanelTargeted);
   root.dataset.scenePanel = panelLayout.panelState.scene;
   root.dataset.propertiesPanel = panelLayout.panelState.properties;
   root.dataset.assetsPanel = panelLayout.panelState.assets;
@@ -4128,7 +4169,7 @@ function liveBrushContext(): BrushContext | undefined {
   const liveStrokeResult = createSuperBrushStroke(currentStrokePoints);
   if (drawingBrush || liveStrokeResult.ok) {
     const liveTargets = liveStrokeResult.ok
-      ? targetsForCompletedSuperBrushStroke(currentStrokePoints)
+      ? targetsForCompletedSuperBrushStroke(currentStrokePoints, currentStrokeClientPoints)
       : mergeSuperBrushTargets(pendingBrush?.selectionTargets);
     const strokeTargetRefs = liveStrokeResult.ok
       ? {
@@ -4161,22 +4202,72 @@ function liveShapeDraft(): ShapeDraftPreview | undefined {
   return undefined;
 }
 
-function targetsForSuperBrushStroke(points: Vec2[]): TargetRef[] {
+function targetsForSuperBrushStroke(points: Vec2[], clientPoints: Vec2[] = []): TargetRef[] {
   if (points.length < 2) return currentTargets();
   const rect = rectFromStrokePoints(points, 12);
   const entityIds = uniqueEntityIds(strokeHitEntityIds(points));
-  if (entityIds.length > 0) return entityIds.map((entityId) => ({ kind: "entity", entityId }));
+  const guideTargets = canvasGuidePanelTargets(clientPoints);
+  const entityTargets = entityIds.map((entityId) => ({ kind: "entity" as const, entityId }));
+  if (entityTargets.length > 0 || guideTargets.length > 0) return mergeSuperBrushTargets(guideTargets, entityTargets);
   return [{ kind: "area", sceneId: scene.id, rect }];
 }
 
-function targetsForCompletedSuperBrushStroke(points: Vec2[]): TargetRef[] {
-  return targetsForSuperBrushStroke(points);
+function targetsForCompletedSuperBrushStroke(points: Vec2[], clientPoints: Vec2[] = []): TargetRef[] {
+  return targetsForSuperBrushStroke(points, clientPoints);
 }
 
-function targetsForSuperBrushClick(point: Vec2): TargetRef[] {
+function targetsForSuperBrushClick(point: Vec2, clientPoint?: Vec2): TargetRef[] {
+  const guideTargets = canvasGuidePanelTargets(clientPoint ? [clientPoint] : []);
+  if (guideTargets.length > 0) return guideTargets;
   const picked = renderer.pickCanvasTarget(world, point, selectedId ? { entityId: selectedId, part: selectedPart } : undefined);
   if (picked) return [{ kind: "entity", entityId: picked.entity.id as EntityId }];
   return [];
+}
+
+function canvasGuidePanelTargets(clientPoints: Vec2[]): TargetRef[] {
+  const rect = canvasGuidePanelClientRect();
+  if (!rect) return [];
+  return canvasGuidePanelTargetsForStroke({
+    sceneId: scene.id,
+    panelRect: rect,
+    clientPoints,
+    screenToWorld: (point) => renderer.screenToWorld(point.x, point.y),
+  });
+}
+
+function canvasGuidePanelClientRect(): DOMRect | undefined {
+  if (canvasGuidePanelNode.hidden || canvasGuidePanelNode.getAttribute("aria-hidden") === "true") return undefined;
+  const rect = canvasGuidePanelNode.getBoundingClientRect();
+  if (rect.width < 24 || rect.height < 24) return undefined;
+  return rect;
+}
+
+function withCanvasGuidePanelAnnotation(annotations: BrushAnnotation[], targets: TargetRef[]): BrushAnnotation[] {
+  const targetRef = targets.find((target) => target.kind === "editorUi" && target.uiId === CANVAS_GUIDE_PANEL_ID);
+  if (!targetRef) return annotations;
+  if (annotations.some((annotation) => annotation.targetRef?.kind === "editorUi" && annotation.targetRef.uiId === CANVAS_GUIDE_PANEL_ID)) {
+    return annotations;
+  }
+  const rect = canvasGuidePanelClientRect();
+  if (!rect) return annotations;
+  const annotation = createSuperBrushAnnotation({
+    ...canvasGuidePanelAnnotationInput({
+      panelRect: rect,
+      screenToWorld: (point) => renderer.screenToWorld(point.x, point.y),
+    }),
+    targetRef,
+  });
+  return annotation.ok ? [...annotations, annotation.value] : annotations;
+}
+
+function hasCanvasGuidePanelTarget(draft: SuperBrushDraft | undefined): boolean {
+  if (!draft) return false;
+  return mergeSuperBrushTargets(draft.selectionTargets, draft.manualTargetRefs, ...(draft.strokes || []).map((stroke) => draft.strokeTargetRefs?.[stroke.id] || []))
+    .some((target) => target.kind === "editorUi" && target.uiId === CANVAS_GUIDE_PANEL_ID);
+}
+
+function clientPointFromPointer(event: PointerEvent | MouseEvent): Vec2 {
+  return { x: event.clientX, y: event.clientY };
 }
 
 function selectionBoxFromTargets(targets: TargetRef[]): Rect | undefined {

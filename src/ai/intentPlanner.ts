@@ -772,6 +772,7 @@ function targetKey(target: TargetRef): string {
   if (target.kind === "scene") return `scene:${target.sceneId}`;
   if (target.kind === "entity") return `entity:${target.entityId}`;
   if (target.kind === "resource") return `resource:${target.resourceId}`;
+  if (target.kind === "editorUi") return `editorUi:${target.uiId}`;
   if (target.kind === "runtime") return `runtime:${target.sceneId || ""}`;
   return `area:${target.sceneId}:${target.rect.x}:${target.rect.y}:${target.rect.w}:${target.rect.h}`;
 }
@@ -1286,7 +1287,7 @@ function createFallbackPlan(project: Project, task: Task, normalizedText: string
 }
 
 function createSmokeScript(target: TargetRef, acceptanceCriteria: FrameCheck[] = [], setupSteps: InputScript["steps"] = []): InputScript {
-  const checks = acceptanceCriteria.filter((check) => check.target.kind !== "resource");
+  const checks = acceptanceCriteria.filter((check) => check.target.kind !== "resource" && check.target.kind !== "editorUi");
   return {
     steps: [
       { op: "wait", ticks: 2 },

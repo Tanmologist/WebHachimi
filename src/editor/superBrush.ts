@@ -661,7 +661,7 @@ function brushConfidence(
   areaCount: number,
   annotationCount: number,
 ): number {
-  const targetScore = targets.some((target) => target.kind === "entity" || target.kind === "resource") ? 0.35 : 0;
+  const targetScore = targets.some((target) => target.kind === "entity" || target.kind === "resource" || target.kind === "editorUi") ? 0.35 : 0;
   const areaScore = areaCount > 0 ? 0.2 : 0;
   const strokeScore = strokeCount > 0 ? 0.2 : 0;
   const annotationScore = annotationCount > 0 ? 0.15 : 0;
@@ -685,6 +685,7 @@ function superBrushTargetKey(target: TargetRef): string {
   if (target.kind === "scene") return `scene:${target.sceneId}`;
   if (target.kind === "entity") return `entity:${target.entityId}`;
   if (target.kind === "resource") return `resource:${target.resourceId}`;
+  if (target.kind === "editorUi") return `editorUi:${target.uiId}`;
   if (target.kind === "runtime") return `runtime:${target.sceneId || ""}`;
   return `area:${target.sceneId}:${target.rect.x}:${target.rect.y}:${target.rect.w}:${target.rect.h}`;
 }
