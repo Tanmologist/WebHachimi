@@ -65,6 +65,17 @@ import {
   planRenameResourceTransaction,
   type ContextMenuTransactionPlan,
 } from "./contextMenuActions";
+import {
+  appendBehaviorParamPatch,
+  hasOwnParam,
+  planCombatLevelParamTransaction,
+  planEntityBodyModeTransaction,
+  planEntityColliderSolidTransaction,
+  planEntityColliderTriggerTransaction,
+  planEntityPersistentTransaction,
+  planEntityRenderVisibleTransaction,
+  type EntityPropertyTransactionPlan,
+} from "./entityPropertyTransactions";
 import { createTaskWorkflowController } from "./taskWorkflowController";
 import {
   escapeHtml,
@@ -1197,8 +1208,8 @@ function commitAttackTouchDebugTransform(touch: Entity, drag: CanvasDragState): 
 
   const patches: ProjectPatch[] = [];
   const inversePatches: ProjectPatch[] = [];
-  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, edit.offsetXKey, edit.nextX, previousRawX, hasOwnParam(params, edit.offsetXKey));
-  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, edit.offsetYKey, edit.nextY, previousRawY, hasOwnParam(params, edit.offsetYKey));
+  appendBehaviorParamPatch(patches, inversePatches, scene.id, storedOwner.id, edit.offsetXKey, edit.nextX, previousRawX, hasOwnParam(params, edit.offsetXKey));
+  appendBehaviorParamPatch(patches, inversePatches, scene.id, storedOwner.id, edit.offsetYKey, edit.nextY, previousRawY, hasOwnParam(params, edit.offsetYKey));
 
   const result = editorTransactions.apply({
     actor: "user",
@@ -1245,8 +1256,8 @@ function commitAttackMovementTargetTransform(target: Entity, drag: CanvasDragSta
 
   const patches: ProjectPatch[] = [];
   const inversePatches: ProjectPatch[] = [];
-  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, edit.offsetXKey, edit.nextX, previousRawX, hasOwnParam(params, edit.offsetXKey));
-  pushBehaviorParamPatch(patches, inversePatches, storedOwner.id, edit.offsetYKey, edit.nextY, previousRawY, hasOwnParam(params, edit.offsetYKey));
+  appendBehaviorParamPatch(patches, inversePatches, scene.id, storedOwner.id, edit.offsetXKey, edit.nextX, previousRawX, hasOwnParam(params, edit.offsetXKey));
+  appendBehaviorParamPatch(patches, inversePatches, scene.id, storedOwner.id, edit.offsetYKey, edit.nextY, previousRawY, hasOwnParam(params, edit.offsetYKey));
 
   const result = editorTransactions.apply({
     actor: "user",
@@ -1313,47 +1324,10 @@ function commitPresentationTransform(entity: Entity, drag: CanvasDragState): str
   return `已提交当前可视体变换${transformActionLabel(drag.kind)}。`;
 }
 
-function pushBehaviorParamPatch(
-  patches: ProjectPatch[],
-  inversePatches: ProjectPatch[],
-  entityId: EntityId,
-  key: string,
-  nextValue: number,
-  previousValue: unknown,
-  hadPreviousValue: boolean,
-): void {
-  const path = `/scenes/${scene.id}/entities/${entityId}/behavior/params/${key}` as ProjectPatch["path"];
-  patches.push({ op: "set", path, value: nextValue });
-  inversePatches.push(hadPreviousValue ? { op: "set", path, value: previousValue } : { op: "delete", path });
-}
-
-function hasOwnParam(params: Record<string, unknown>, key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(params, key);
-}
-
 function attackTouchKindLabel(kind: "normal" | "charged" | "superParry"): string {
   if (kind === "charged") return "蓄力攻击";
   if (kind === "superParry") return "振刀处决";
   return "普通攻击";
-}
-
-const combatLevelParamLabels: Record<string, string> = {
-  attackControlLevel: "普通攻击控制",
-  attackArmorLevel: "普通攻击霸体",
-  chargedAttackControlLevel: "蓄力攻击控制",
-  chargedAttackArmorLevel: "蓄力攻击霸体",
-  parryControlLevel: "振刀控制",
-  parryArmorLevel: "振刀霸体",
-  superParryAttackControlLevel: "振刀处决控制",
-  superParryAttackArmorLevel: "振刀处决霸体",
-};
-
-function isCombatLevelParamKey(key: string): boolean {
-  return Object.prototype.hasOwnProperty.call(combatLevelParamLabels, key);
-}
-
-function combatLevelParamLabel(key: string): string {
-  return combatLevelParamLabels[key] || key;
 }
 
 function sameTransform(left: Transform2D, right: Transform2D): boolean {
@@ -3220,104 +3194,54 @@ function bindInspectorInteractions(inspector: HTMLElement): void {
 function setEntityPersistent(entityId: string, value: boolean): void {
   const entity = editableEntity(entityId);
   if (!entity) return;
-  const path = `/scenes/${scene.id}/entities/${entityId}/persistent` as ProjectPatch["path"];
-  const result = editorTransactions.apply({
-    actor: "user",
-    patches: [{ op: "set", path, value }],
-    inversePatches: [{ op: "set", path, value: entity.persistent }],
-    diffSummary: `${value ? "设为" : "取消"}持久对象${entity.displayName}`,
-    dirtyReason: `已更新 ${entity.displayName} 持久状态`,
-    syncOnFailure: false,
-  });
-  if (result.ok) {
-    notice = `${entity.displayName}${value ? "已设为持久对象" : "已取消持久对象"}`;
-    renderAll();
-  } else {
-    notice = `属性更新失败：${result.error}`;
-  }
+  applyEntityPropertyTransaction(planEntityPersistentTransaction(scene, entity, value));
 }
 
 function setEntityBodyMode(entityId: string, mode: string): void {
   const entity = editableEntity(entityId);
   if (!entity) return;
-  const path = `/scenes/${scene.id}/entities/${entityId}/body/mode` as ProjectPatch["path"];
-  const oldMode = entity.body?.mode || "static";
-  const result = editorTransactions.apply({
-    actor: "user",
-    patches: [{ op: "set", path, value: mode }],
-    inversePatches: [{ op: "set", path, value: oldMode }],
-    diffSummary: `调整物理模式${entity.displayName} 为 ${mode}`,
-    dirtyReason: `已更新 ${entity.displayName} 物理模式`,
-    syncOnFailure: false,
-  });
-  if (result.ok) {
-    notice = `${entity.displayName} 物理模式已改为 ${mode}。`;
-    renderAll();
-  } else {
-    notice = `属性更新失败：${result.error}`;
-  }
+  applyEntityPropertyTransaction(planEntityBodyModeTransaction(scene, entity, mode));
 }
 
 function setEntityColliderSolid(entityId: string, value: boolean): void {
   const entity = editableEntity(entityId);
   if (!entity) return;
-  const path = `/scenes/${scene.id}/entities/${entityId}/collider/solid` as ProjectPatch["path"];
-  const oldValue = entity.collider?.solid !== false;
-  const result = editorTransactions.apply({
-    actor: "user",
-    patches: [{ op: "set", path, value }],
-    inversePatches: [{ op: "set", path, value: oldValue }],
-    diffSummary: `${value ? "启用" : "禁用"}实体碰撞${entity.displayName}`,
-    dirtyReason: `已更新 ${entity.displayName} 碰撞属性`,
-    syncOnFailure: false,
-  });
-  if (result.ok) {
-    notice = `${entity.displayName}${value ? "已启用实体碰撞" : "已禁用实体碰撞"}`;
-    renderAll();
-  } else {
-    notice = `属性更新失败：${result.error}`;
-  }
+  applyEntityPropertyTransaction(planEntityColliderSolidTransaction(scene, entity, value));
 }
 
 function setEntityColliderTrigger(entityId: string, value: boolean): void {
   const entity = editableEntity(entityId);
   if (!entity) return;
-  const path = `/scenes/${scene.id}/entities/${entityId}/collider/trigger` as ProjectPatch["path"];
-  const oldValue = entity.collider?.trigger || false;
-  const result = editorTransactions.apply({
-    actor: "user",
-    patches: [{ op: "set", path, value }],
-    inversePatches: [{ op: "set", path, value: oldValue }],
-    diffSummary: `${value ? "设为" : "取消"}触发器：${entity.displayName}`,
-    dirtyReason: `已更新 ${entity.displayName} 触发器属性`,
-    syncOnFailure: false,
-  });
-  if (result.ok) {
-    notice = `${entity.displayName}${value ? "已设为触发器" : "已取消触发器"}`;
-    renderAll();
-  } else {
-    notice = `属性更新失败：${result.error}`;
-  }
+  applyEntityPropertyTransaction(planEntityColliderTriggerTransaction(scene, entity, value));
 }
 
 function setEntityRenderVisible(entityId: string, value: boolean): void {
   const entity = editableEntity(entityId);
   if (!entity) return;
-  const path = `/scenes/${scene.id}/entities/${entityId}/render/visible` as ProjectPatch["path"];
-  const oldValue = entity.render?.visible !== false;
+  applyEntityPropertyTransaction(planEntityRenderVisibleTransaction(scene, entity, value));
+}
+
+function applyEntityPropertyTransaction(planResult: Result<EntityPropertyTransactionPlan>): void {
+  if (!planResult.ok) {
+    notice = `属性更新失败：${planResult.error}`;
+    renderAll();
+    return;
+  }
+  const plan = planResult.value;
   const result = editorTransactions.apply({
     actor: "user",
-    patches: [{ op: "set", path, value }],
-    inversePatches: [{ op: "set", path, value: oldValue }],
-    diffSummary: `${value ? "显示" : "隐藏"}可视体：${entity.displayName}`,
-    dirtyReason: `已更新 ${entity.displayName} 可视体可见性`,
+    patches: plan.patches,
+    inversePatches: plan.inversePatches,
+    diffSummary: plan.diffSummary,
+    dirtyReason: plan.dirtyReason,
     syncOnFailure: false,
   });
   if (result.ok) {
-    notice = `${entity.displayName} 可视体已${value ? "显示" : "隐藏"}`;
+    notice = plan.noticeText;
     renderAll();
   } else {
     notice = `属性更新失败：${result.error}`;
+    renderAll();
   }
 }
 
@@ -3431,47 +3355,9 @@ function runWorldManagerAction(popover: HTMLElement, button: HTMLButtonElement):
 }
 
 function setCombatLevelParam(entityId: string, key: string, rawValue: string): void {
-  if (!isCombatLevelParamKey(key)) {
-    notice = "战斗等级字段无效";
-    renderAll();
-    return;
-  }
-  const nextValue = Math.max(0, Math.floor(Number(rawValue)));
-  if (!Number.isFinite(nextValue)) {
-    notice = "请输入有效的战斗等级数值";
-    renderAll();
-    return;
-  }
-  const storedEntity = scene.entities[entityId as EntityId];
-  const params = storedEntity?.behavior?.params;
-  if (!storedEntity || !params) {
-    notice = "战斗等级目标已经不存在";
-    syncWorldFromStore();
-    renderAll();
-    return;
-  }
-  const previousValue = params[key];
-  if (typeof previousValue === "number" && previousValue === nextValue) {
-    notice = `${storedEntity.displayName} 的战斗等级未变化`;
-    renderAll();
-    return;
-  }
-  const patches: ProjectPatch[] = [];
-  const inversePatches: ProjectPatch[] = [];
-  pushBehaviorParamPatch(patches, inversePatches, storedEntity.id, key, nextValue, previousValue, hasOwnParam(params, key));
-  const result = editorTransactions.apply({
-    actor: "user",
-    patches,
-    inversePatches,
-    diffSummary: `调整 ${storedEntity.displayName} 的战斗等级 ${key}=${nextValue}。`,
-    dirtyReason: `已调整 ${storedEntity.displayName} 战斗等级`,
-  });
-  if (result.ok) {
-    notice = `${storedEntity.displayName} 的 ${combatLevelParamLabel(key)} 已改为 ${nextValue}`;
-    renderAll();
-  } else {
-    notice = `战斗等级更新失败：${result.error}`;
-  }
+  const result = planCombatLevelParamTransaction(scene, entityId as EntityId, key, rawValue);
+  if (!result.ok && result.error.includes("not found")) syncWorldFromStore();
+  applyEntityPropertyTransaction(result);
 }
 
 function bindResourceInteractions(resourcesNode: HTMLElement): void {
