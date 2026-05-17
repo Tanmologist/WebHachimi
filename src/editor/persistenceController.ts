@@ -1,5 +1,6 @@
 import { loadProject, loadProjectFromDisk, saveProject, saveProjectLocally, type LoadProjectResult, type SaveProjectResult } from "../project/persistence";
 import type { Entity, Project, Scene } from "../project/schema";
+import { stripVolatileRuntimeState } from "../project/runtimeState";
 import { cloneJson } from "../shared/types";
 
 export type BuildProjectForSaveInput = {
@@ -25,7 +26,7 @@ export function buildProjectForSave(input: BuildProjectForSaveInput): Project {
   if (!activeScene) return exportedProject;
 
   for (const entity of input.entities) {
-    if (entity.persistent) activeScene.entities[entity.id] = cloneJson(entity);
+    if (entity.persistent) activeScene.entities[entity.id] = stripVolatileRuntimeState(cloneJson(entity));
   }
   activeScene.folders = cloneJson(input.scene.folders);
   activeScene.layers = cloneJson(input.scene.layers);

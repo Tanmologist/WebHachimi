@@ -2,6 +2,7 @@ import type { CombatEvent, Entity, Project, Scene } from "../project/schema";
 import type { EntityId, Rect } from "../shared/types";
 import { RuntimeWorld } from "../runtime/world";
 import { createStarterProject } from "../editor/starterProject";
+import { buildProjectForSave } from "../editor/persistenceController";
 import { isGameplayDebugEntity } from "../project/entityVisibility";
 import { InteractiveTestRunner } from "./interactiveTestRunner";
 import { actorScopedKey } from "./timingSweep";
@@ -109,6 +110,93 @@ runSmoke("combat player short hop turns over quickly", () => {
     startY: round(startY),
     turnY: round(livePlayer.transform.position.y),
     landedFrame,
+  };
+});
+
+runSmoke("stale saved combat runtime does not lock fresh game input", () => {
+  const project = createStarterProject();
+  const scene = activeScene(project);
+  const player = findByInternalName(scene, "Player");
+  player.runtime = {
+    ...player.runtime,
+    attackInputDown: true,
+    attackConsumedUntilRelease: true,
+    attackStartMs: 37_410,
+    attackActiveUntilMs: 37_710,
+    attackCooldownUntilMs: 37_910,
+    attackStartFrame: 3741,
+    attackActiveUntilFrame: 3770,
+    attackCooldownUntilFrame: 3791,
+    parryStartedMs: 10_710,
+    parryAnimationUntilMs: 11_210,
+    parryUntilMs: 10_910,
+    parryRecoveryUntilMs: 11_210,
+    parryCooldownUntilMs: 11_210,
+    hitStunUntilMs: 20_200,
+    hitFlashUntilMs: 20_200,
+    combatAction: {
+      actionId: "normalAttack",
+      label: "stale normal attack",
+      startedMs: 37_310,
+      phases: [],
+      windows: [{ id: "stale-lock", type: "movementLock", label: "stale lock", startsAtMs: 37_310, untilMs: 37_910 }],
+    },
+  };
+
+  const world = new RuntimeWorld({ scene });
+  const controller = new InteractiveTestRunner({ world });
+  controller.step(12);
+  const startX = requireEntity(world, player.id).transform.position.x;
+
+  controller.press("right");
+  controller.step(5);
+  controller.release("right");
+  const movedX = requireEntity(world, player.id).transform.position.x;
+  assert(movedX > startX + 1, `expected stale project runtime to be cleared before movement, got ${startX} -> ${movedX}`);
+
+  controller.tap("attack", 1);
+  controller.step(2);
+  const attackStarted = controller.findCombatEvent({ type: "attackStarted", attackerId: player.id });
+  assert(attackStarted, "expected attack input to start after stale runtime was cleared");
+
+  return {
+    startX: round(startX),
+    movedX: round(movedX),
+    attackStartedFrame: attackStarted.frame,
+    playerRuntimeKeys: Object.keys(requireEntity(world, player.id).runtime || {}).sort(),
+  };
+});
+
+runSmoke("project save strips gameplay runtime locks", () => {
+  const project = createStarterProject();
+  const scene = activeScene(project);
+  const world = new RuntimeWorld({ scene });
+  const controller = new InteractiveTestRunner({ world });
+  const player = findByInternalName(scene, "Player");
+
+  controller.tap("attack", 1);
+  controller.step(2);
+  const liveRuntime = requireEntity(world, player.id).runtime || {};
+  assert(typeof liveRuntime.attackCooldownUntilMs === "number", "setup should create a live attack cooldown before save");
+
+  const saved = buildProjectForSave({ project, scene, entities: world.entities.values() });
+  const savedRuntime = runtimeRecord(activeScene(saved).entities[player.id]);
+  const strippedKeys = [
+    "combatAction",
+    "attackStartMs",
+    "attackActiveUntilMs",
+    "attackCooldownUntilMs",
+    "attackInputDown",
+    "attackConsumedUntilRelease",
+    "parryCooldownUntilMs",
+    "dodgeUntilMs",
+    "hitStunUntilMs",
+  ];
+  for (const key of strippedKeys) assert(!(key in savedRuntime), `saved project should not keep volatile runtime key ${key}`);
+
+  return {
+    liveCooldown: liveRuntime.attackCooldownUntilMs,
+    savedRuntimeKeys: Object.keys(savedRuntime),
   };
 });
 
@@ -702,6 +790,10 @@ function isRect(value: unknown): value is Rect {
   if (!value || typeof value !== "object") return false;
   const rect = value as Record<string, unknown>;
   return ["x", "y", "w", "h"].every((key) => typeof rect[key] === "number" && Number.isFinite(rect[key]));
+}
+
+function runtimeRecord(entity: Entity): Record<string, unknown> {
+  return (entity.runtime || {}) as Record<string, unknown>;
 }
 
 function setupCombatSliceActors(player: Entity, enemy: Entity, options: { enemyHealth: number; autoEnemy: boolean }): void {

@@ -1,6 +1,7 @@
 import type { Project, RuntimeSnapshot } from "./schema";
 import type { RuntimeWorld } from "../runtime/world";
 import { cloneJson } from "../shared/types";
+import { stripVolatileRuntimeState } from "./runtimeState";
 
 const EDITOR_HANDOFF_KEY = "webhachimi:editor-handoff";
 
@@ -47,7 +48,7 @@ function mergeWorldIntoProject(project: Project, world: RuntimeWorld): Project {
   const next = cloneJson(project);
   const scene = next.scenes[next.activeSceneId];
   for (const entity of world.entities.values()) {
-    if (entity.persistent) scene.entities[entity.id] = cloneJson(entity);
+    if (entity.persistent) scene.entities[entity.id] = stripVolatileRuntimeState(cloneJson(entity));
   }
   next.meta.updatedAt = new Date().toISOString();
   return next;

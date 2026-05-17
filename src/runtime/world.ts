@@ -19,6 +19,7 @@ import {
 import type { CombatActionId, CombatActionRuntime } from "../combat/types";
 import { normalizeEntityDefaults, normalizeSceneSettings, normalizeSceneTimeScale } from "../project/schema";
 import { entityFollowsParentTransform } from "../project/entityHierarchy";
+import { stripVolatileRuntimeState } from "../project/runtimeState";
 import { cloneJson, makeId } from "../shared/types";
 import type { EntityId, RuntimeMode, SnapshotId } from "../shared/types";
 import type { Rect, SceneId, Vec2 } from "../shared/types";
@@ -93,6 +94,7 @@ export class RuntimeWorld {
     });
     Object.values(options.scene.entities).forEach((entity) => {
       const copy = cloneJson(entity);
+      stripVolatileRuntimeState(copy);
       normalizeEntityDefaults(copy);
       this.normalizeRuntime(copy);
       if (copy.persistent) this.entities.set(copy.id, copy);
@@ -444,6 +446,7 @@ export class RuntimeWorld {
     const persistentIds = new Set<string>();
     Object.values(scene.entities).forEach((entity) => {
       const copy = cloneJson(entity);
+      stripVolatileRuntimeState(copy);
       normalizeEntityDefaults(copy);
       this.normalizeRuntime(copy);
       if (!copy.persistent) return;
