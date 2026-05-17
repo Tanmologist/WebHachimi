@@ -8,34 +8,22 @@ const path = require('path');
 const { execFile } = require('child_process');
 const { promisify } = require('util');
 const { URL } = require('url');
+const {
+  WEBHACHIMI_EDITOR_ENTRY,
+  createProjectProfiles,
+  projectProfilesByRoute,
+} = require('./project-profiles.cjs');
 
 const ROOT = __dirname;
 const DATA_DIR = path.join(ROOT, 'data');
 const LOCAL_DATA_DIR = path.join(DATA_DIR, 'local');
-const HACHIMI_GAME_DIR = path.join(ROOT, 'games', 'hachimi-nanbei-lvdong');
 const PROJECT_SEED_FILE = path.join(DATA_DIR, 'project.json');
 const PROJECT_FILE = path.join(LOCAL_DATA_DIR, 'project.json');
 const ASSETS_DIR = path.join(ROOT, 'resources');
 const DIST_V2_DIR = path.join(ROOT, 'dist-v2');
-const LEGACY_V2_PROJECT_ROUTE = '/api/v2/project';
-const PROJECT_PROFILES = [
-  {
-    id: 'webhachimi',
-    routes: ['/api/webhachimi/project'],
-    projectFile: path.join(LOCAL_DATA_DIR, 'webhachimi-project.json'),
-    assetsDir: path.join(LOCAL_DATA_DIR, 'webhachimi-resources'),
-    assetUrlPrefix: '/api/webhachimi/assets',
-  },
-  {
-    id: 'hachimi-nanbei-lvdong',
-    routes: ['/api/games/hachimi-nanbei-lvdong/project', LEGACY_V2_PROJECT_ROUTE],
-    projectSeedFile: path.join(HACHIMI_GAME_DIR, 'project.json'),
-    projectFile: path.join(HACHIMI_GAME_DIR, 'local', 'project.json'),
-    assetsDir: path.join(HACHIMI_GAME_DIR, 'resources'),
-    assetUrlPrefix: '/games/hachimi-nanbei-lvdong/resources',
-  },
-];
-const PROJECT_PROFILES_BY_ROUTE = new Map(PROJECT_PROFILES.flatMap((profile) => profile.routes.map((route) => [route, profile])));
+const PROJECT_PROFILES = createProjectProfiles(ROOT);
+const PROJECT_PROFILES_BY_ROUTE = projectProfilesByRoute(PROJECT_PROFILES);
+const DEFAULT_ENTRY_PATH = normalizeEntryPath(process.env.WEBHACHIMI_ENTRY_PATH || '/' + WEBHACHIMI_EDITOR_ENTRY);
 const PORT = Number(process.env.WEBHACHIMI_PORT) || 5577;
 const MAX_BODY = 50 * 1024 * 1024;
 const execFileAsync = promisify(execFile);
@@ -134,6 +122,12 @@ function send(res, status, body, headers) {
   else if (Buffer.isBuffer(body)) res.end(body);
   else if (typeof body === 'string') res.end(body);
   else res.end(JSON.stringify(body));
+}
+
+function normalizeEntryPath(value) {
+  const entryPath = String(value || '').trim();
+  if (entryPath.startsWith('/') && !entryPath.startsWith('//') && !entryPath.includes('\0')) return entryPath;
+  return '/' + WEBHACHIMI_EDITOR_ENTRY;
 }
 
 function localApiCookie() {
@@ -581,9 +575,13 @@ async function handleApi(req, res, pathname) {
 
 async function handleStatic(req, res, pathname) {
   if (pathname === '/favicon.ico') return send(res, 204, null, { 'Content-Type': 'image/x-icon' });
+  if (pathname === '/') return send(res, 302, null, { Location: DEFAULT_ENTRY_PATH });
   const rel = pathname === '/' ? 'index.html' : pathname.slice(1);
   const normalizedRel = rel.replace(/\\/g, '/');
   const builtAbs = builtStaticPath(normalizedRel);
+  if (!builtAbs && BUILT_APP_FILES.has(normalizedRel)) {
+    return send(res, 503, buildMissingMessage(normalizedRel), { 'Content-Type': 'text/plain; charset=utf-8' });
+  }
   if (!builtAbs && !isAllowedStaticPath(normalizedRel)) return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
   if (!builtAbs && normalizedRel.startsWith('resources/') && !hasLocalApiToken(req)) {
     return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -598,7 +596,22 @@ async function handleStatic(req, res, pathname) {
   if (stat.isDirectory()) return send(res, 403, 'forbidden', { 'Content-Type': 'text/plain; charset=utf-8' });
   const ext = path.extname(abs).toLowerCase();
   const data = await fsp.readFile(abs);
-  return send(res, 200, data, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+  return send(res, 200, data, {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': staticCacheControl(normalizedRel, Boolean(builtAbs)),
+  });
+}
+
+function buildMissingMessage(entry) {
+  return [
+    'WebHachimi production build is missing for ' + entry + '.',
+    'Run `npm run build` before `npm run serve`, or use `npm run dev:editor` for source-mode development.',
+  ].join('\n');
+}
+
+function staticCacheControl(rel, built) {
+  if (built && rel.startsWith('assets/')) return 'public, max-age=31536000, immutable';
+  return 'no-store';
 }
 
 function builtStaticPath(rel) {
@@ -651,9 +664,15 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  const url = 'http://localhost:' + PORT + '/';
+  const url = 'http://localhost:' + PORT + DEFAULT_ENTRY_PATH;
   console.log('WebHachimi Engine running at ' + url);
   if (!process.env.WEBHACHIMI_NO_BROWSER) {
-    require('child_process').exec('start "" "' + url + '"');
+    openBrowserUrl(url);
   }
 });
+
+function openBrowserUrl(url) {
+  const command = process.platform === 'win32' ? 'cmd' : process.platform === 'darwin' ? 'open' : 'xdg-open';
+  const args = process.platform === 'win32' ? ['/c', 'start', '', url] : [url];
+  execFile(command, args, { windowsHide: true }, () => {});
+}

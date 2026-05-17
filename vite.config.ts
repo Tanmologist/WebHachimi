@@ -1,14 +1,21 @@
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 const rootDir = fileURLToPath(new URL(".", import.meta.url));
-const hachimiGameDir = path.join(rootDir, "games", "hachimi-nanbei-lvdong");
-const legacyV2ProjectRoute = "/api/v2/project";
+const require = createRequire(import.meta.url);
+const {
+  createProjectProfiles,
+  projectProfilesByRoute: createProjectProfilesByRoute,
+} = require("./project-profiles.cjs") as {
+  createProjectProfiles: (rootDir: string) => ProjectProfile[];
+  projectProfilesByRoute: (profiles: ProjectProfile[]) => Map<string, ProjectProfile>;
+};
 const execFileAsync = promisify(execFile);
 const maxClipboardFiles = 10;
 const maxClipboardFileBytes = 8 * 1024 * 1024;
@@ -54,25 +61,8 @@ type ProjectProfile = {
   assetUrlPrefix: string;
 };
 
-const projectProfiles: ProjectProfile[] = [
-  {
-    id: "webhachimi",
-    routes: ["/api/webhachimi/project"],
-    projectFile: path.join(rootDir, "data", "local", "webhachimi-project.json"),
-    assetsDir: path.join(rootDir, "data", "local", "webhachimi-resources"),
-    assetUrlPrefix: "/api/webhachimi/assets",
-  },
-  {
-    id: "hachimi-nanbei-lvdong",
-    routes: ["/api/games/hachimi-nanbei-lvdong/project", legacyV2ProjectRoute],
-    projectSeedFile: path.join(hachimiGameDir, "project.json"),
-    projectFile: path.join(hachimiGameDir, "local", "project.json"),
-    assetsDir: path.join(hachimiGameDir, "resources"),
-    assetUrlPrefix: "/games/hachimi-nanbei-lvdong/resources",
-  },
-];
-
-const projectProfilesByRoute = new Map(projectProfiles.flatMap((profile) => profile.routes.map((route) => [route, profile])));
+const projectProfiles = createProjectProfiles(rootDir);
+const projectProfilesByRoute = createProjectProfilesByRoute(projectProfiles);
 
 export default defineConfig(({ mode }) => ({
   base: "./",

@@ -8,7 +8,7 @@
   },
   "scripts": {
     "serve": "node server.js",
-    "serve:legacy": "node server.js",
+    "serve:legacy": "node -e \"process.env.WEBHACHIMI_ENTRY_PATH='/index.html'; require('./server.js')\"",
     "serve:preview": "node -e \"process.env.WEBHACHIMI_NO_BROWSER='1'; process.env.WEBHACHIMI_PORT='5578'; require('./server.js')\"",
     "dev": "npm run dev:editor",
     "dev:editor": "vite --host 127.0.0.1 --open /apps/webhachimi/editor.html",
