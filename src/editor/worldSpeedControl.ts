@@ -48,6 +48,9 @@ export function renderWorldSpeedControlElements(
 ): void {
   const speed = normalizeWorldSpeed(state.speed);
   const controlValue = String(speed);
+  const isRunning = state.mode === "game";
+  elements.control.hidden = !isRunning;
+  elements.control.setAttribute("aria-hidden", String(!isRunning));
   elements.control.dataset.worldSpeed = controlValue;
   elements.valueNode.textContent = formatWorldSpeed(speed);
   elements.range.min = String(WORLD_SPEED_LIMITS.min);

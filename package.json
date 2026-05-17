@@ -47,6 +47,7 @@
     "smoke:combat-action-protocol": "tsx src/testing/combatActionProtocolSmoke.ts",
     "smoke:workshops": "tsx src/testing/gameplayWorkshopSmoke.ts",
     "smoke:transform": "tsx src/testing/transformTransactionSmoke.ts",
+    "smoke:selection": "tsx src/testing/selectionSmoke.ts",
     "smoke:sweep": "tsx src/testing/smokeSweep.ts",
     "smoke:autonomy": "tsx src/testing/autonomySmoke.ts"
   },

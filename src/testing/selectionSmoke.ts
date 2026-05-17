@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 import * as path from "node:path";
 import * as fs from "node:fs";
 
-const URL = "http://localhost:5577/apps/webhachimi/editor.html";
+const URL = process.env.WEBHACHIMI_EDITOR_URL || "http://127.0.0.1:5173/apps/webhachimi/editor.html";
 const SCREENSHOT_DIR = path.resolve("logs/screenshots");
 
 async function main() {
@@ -12,13 +12,15 @@ async function main() {
   const page = await browser.newPage({ viewport: { width: 1600, height: 900 } });
 
   const results: string[] = [];
+  let failed = false;
 
   try {
-    await page.goto(URL, { waitUntil: "networkidle" });
-    await page.waitForTimeout(2000);
+    results.push(`编辑器地址: ${URL}`);
+    await page.goto(URL, { waitUntil: "domcontentloaded" });
 
     const canvas = page.locator("#v2-root canvas");
     await canvas.waitFor({ state: "visible", timeout: 10000 });
+    await page.waitForTimeout(800);
 
     const canvasBox = await canvas.boundingBox();
     if (!canvasBox) throw new Error("找不到画布");
@@ -31,7 +33,7 @@ async function main() {
       if (!testHook) return [];
       const world = testHook.getWorld();
       if (!world) return [];
-      return world.allEntities().map((e: any) => e.id);
+      return world.allEntities().filter((e: any) => e.persistent !== false).map((e: any) => e.id);
     });
 
     results.push(`场景实体总数: ${allEntityIds.length}`);
@@ -40,6 +42,7 @@ async function main() {
     results.push(`用于测试的ID: ${persistentIds.join(", ")}`);
 
     if (persistentIds.length < 2) {
+      failed = true;
       results.push("❌ 实体不足2个，无法测试");
     } else {
       await page.evaluate((ids) => {
@@ -56,7 +59,12 @@ async function main() {
         return testHook ? testHook.getSelectedIds() : [];
       });
       results.push(`selectedIds: ${JSON.stringify(selectedAfter)}`);
-      results.push(selectedAfter.length >= 2 ? "✅ 多选状态已设置" : "❌ 多选设置失败");
+      if (selectedAfter.length >= 2) {
+        results.push("✅ 多选状态已设置");
+      } else {
+        failed = true;
+        results.push("❌ 多选设置失败");
+      }
 
       const cx = canvasBox.x + canvasBox.width / 2;
       const cy = canvasBox.y + canvasBox.height / 2;
@@ -88,9 +96,20 @@ async function main() {
         results.push(`菜单项: ${ctxMenu.labels.join(" | ")}`);
         const hasBatchDelete = ctxMenu.actions.includes("delete-selected");
         const hasBatchDuplicate = ctxMenu.actions.includes("duplicate-selected");
-        results.push(hasBatchDelete ? "✅ 批量删除" : "❌ 批量删除缺失");
-        results.push(hasBatchDuplicate ? "✅ 批量复制" : "❌ 批量复制缺失");
+        if (hasBatchDelete) {
+          results.push("✅ 批量删除");
+        } else {
+          failed = true;
+          results.push("❌ 批量删除缺失");
+        }
+        if (hasBatchDuplicate) {
+          results.push("✅ 批量复制");
+        } else {
+          failed = true;
+          results.push("❌ 批量复制缺失");
+        }
       } else {
+        failed = true;
         results.push("❌ 右键菜单未出现");
       }
 
@@ -123,11 +142,20 @@ async function main() {
         results.push(`单选菜单: ${singleMenu.title}`);
         results.push(`单选菜单项: ${singleMenu.labels.join(" | ")}`);
         const isSingleMenu = !singleMenu.actions.includes("delete-selected");
-        results.push(isSingleMenu ? "✅ 单选菜单正确（无批量选项）" : "❌ 单选菜单错误（有批量选项）");
+        if (isSingleMenu) {
+          results.push("✅ 单选菜单正确（无批量选项）");
+        } else {
+          failed = true;
+          results.push("❌ 单选菜单错误（有批量选项）");
+        }
+      } else {
+        failed = true;
+        results.push("❌ 单选右键菜单未出现");
       }
     }
 
   } catch (err) {
+    failed = true;
     results.push(`❌ 错误: ${String(err)}`);
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, "error.png") });
   } finally {
@@ -138,6 +166,7 @@ async function main() {
   for (const line of results) {
     console.log(line);
   }
+  if (failed) process.exitCode = 1;
 }
 
 main().catch(console.error);
