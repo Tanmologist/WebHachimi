@@ -4,6 +4,9 @@ import {
   panViewport,
   screenToWorldPoint,
   worldToScreenPoint,
+  MAX_VIEWPORT_ZOOM,
+  MIN_VIEWPORT_ZOOM,
+  WORLD_UNITS_PER_METER,
   zoomViewportAt,
   type ViewportScreen,
 } from "../editor/viewportMath";
@@ -35,8 +38,9 @@ assert(nearlyEqual(focused.zoom, panned.zoom), "centering should preserve curren
 
 const minClamped = zoomViewportAt(viewport, screen, center, 100000);
 const maxClamped = zoomViewportAt(viewport, screen, center, -100000);
-assert(minClamped.zoom === 0.2, `expected min zoom clamp, got ${minClamped.zoom}`);
-assert(maxClamped.zoom === 4, `expected max zoom clamp, got ${maxClamped.zoom}`);
+assert(minClamped.zoom === MIN_VIEWPORT_ZOOM, `expected min zoom clamp, got ${minClamped.zoom}`);
+assert(maxClamped.zoom === MAX_VIEWPORT_ZOOM, `expected max zoom clamp, got ${maxClamped.zoom}`);
+assert(WORLD_UNITS_PER_METER === 100, `expected 100 world units per meter, got ${WORLD_UNITS_PER_METER}`);
 
 const camera = { x: 240, y: -60 };
 const narrowPlayerLayout = playerCameraLayout({ width: 900, height: 600 }, camera);
@@ -70,6 +74,9 @@ console.log(
       clamps: {
         min: minClamped.zoom,
         max: maxClamped.zoom,
+      },
+      units: {
+        worldUnitsPerMeter: WORLD_UNITS_PER_METER,
       },
       playerCamera: {
         scale: widePlayerLayout.scale,

@@ -11,8 +11,9 @@ export type ViewportScreen = {
   height: number;
 };
 
-export const MIN_VIEWPORT_ZOOM = 0.2;
-export const MAX_VIEWPORT_ZOOM = 4;
+export const WORLD_UNITS_PER_METER = 100;
+export const MIN_VIEWPORT_ZOOM = 0.05;
+export const MAX_VIEWPORT_ZOOM = 12;
 
 export function defaultViewportState(): ViewportState {
   return { x: 0, y: 0, zoom: 1 };

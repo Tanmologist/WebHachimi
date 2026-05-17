@@ -1,6 +1,6 @@
 import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
 import { combatAttackRectForEntity } from "../combat/actions";
-import type { BrushContext, Entity, Resource, Task } from "../project/schema";
+import type { BrushContext, Entity, Resource, SceneSettings, Task } from "../project/schema";
 import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
@@ -13,6 +13,7 @@ import {
   defaultViewportState,
   panViewport,
   screenToWorldPoint,
+  WORLD_UNITS_PER_METER,
   zoomViewportAt,
   type ViewportState,
 } from "./viewportMath";
@@ -59,6 +60,7 @@ export type RenderOverlayOptions = {
   shapeDraft?: ShapeDraftPreview;
   resources?: Record<string, Resource>;
   animationTimeMs?: number;
+  sceneSettings?: Pick<SceneSettings, "width" | "height">;
 };
 
 export type RendererStats = {
@@ -179,7 +181,10 @@ export class V2Renderer {
     const entities = world.allEntities();
     const resources = options.resources || emptyResources;
     const isMultiSelect = selectedIds && selectedIds.size > 1;
-    if (showBodyMaterial) this.drawGrid();
+    if (showBodyMaterial) {
+      this.drawGrid(options.sceneSettings);
+      this.drawScaleOverlay(options.sceneSettings);
+    }
     if (!showEditorDecorations) {
       this.drawGameplayAttackTelegraphs(world, entities);
       this.drawGameplayChargeStates(world, entities);
@@ -365,7 +370,7 @@ export class V2Renderer {
     for (const item of this.spritePool.splice(0)) item.destroy();
   }
 
-  private drawGrid(): void {
+  private drawGrid(sceneSettings?: Pick<SceneSettings, "width" | "height">): void {
     const graphics = this.takeGraphics();
     const screen = this.screenSize();
     const topLeft = screenToWorldPoint(this.viewport, screen, { x: 0, y: 0 });
@@ -385,7 +390,83 @@ export class V2Renderer {
       graphics.lineTo(right, y);
     }
     graphics.stroke();
+
+    const meterStep = meterGridStepForZoom(this.viewport.zoom);
+    if (meterStep >= step && meterStep * this.viewport.zoom >= 28) {
+      const meterLeft = Math.floor(topLeft.x / meterStep) * meterStep;
+      const meterTop = Math.floor(topLeft.y / meterStep) * meterStep;
+      graphics.setStrokeStyle({ width: 1.2 / this.viewport.zoom, color: 0x3f4a45, alpha: 0.72 });
+      for (let x = meterLeft; x < right; x += meterStep) {
+        graphics.moveTo(x, top);
+        graphics.lineTo(x, bottom);
+      }
+      for (let y = meterTop; y < bottom; y += meterStep) {
+        graphics.moveTo(left, y);
+        graphics.lineTo(right, y);
+      }
+      graphics.stroke();
+    }
+
+    if (sceneSettings) drawWorldBounds(graphics, sceneSettings, this.viewport.zoom);
     this.worldLayer.addChild(graphics);
+  }
+
+  private drawScaleOverlay(sceneSettings?: Pick<SceneSettings, "width" | "height">): void {
+    const screen = this.screenSize();
+    const zoom = this.viewport.zoom;
+    const left = Math.min(Math.max(24, screen.width * 0.27), Math.max(24, screen.width - 280));
+    const bottom = Math.max(110, screen.height - 64);
+    const targetPixels = Math.min(180, Math.max(96, screen.width * 0.14));
+    const targetMeters = targetPixels / zoom / WORLD_UNITS_PER_METER;
+    const meters = niceScaleMeters(targetMeters);
+    const worldUnits = meters * WORLD_UNITS_PER_METER;
+    const start = screenToWorldPoint(this.viewport, screen, { x: left, y: bottom });
+    const end = { x: start.x + worldUnits, y: start.y };
+    const tick = 8 / zoom;
+
+    const line = this.takeGraphics();
+    const panelWidth = Math.max(worldUnits + 28 / zoom, 230 / zoom);
+    line.roundRect(start.x - 12 / zoom, start.y - 44 / zoom, panelWidth, 66 / zoom, 8 / zoom);
+    line.fill({ color: 0x111615, alpha: 0.76 });
+    line.setStrokeStyle({ width: 1 / zoom, color: 0x30403b, alpha: 0.92 });
+    line.stroke();
+    line.setStrokeStyle({ width: 2 / zoom, color: 0xece9df, alpha: 0.94 });
+    line.moveTo(start.x, start.y);
+    line.lineTo(end.x, end.y);
+    line.moveTo(start.x, start.y - tick);
+    line.lineTo(start.x, start.y + tick);
+    line.moveTo(end.x, end.y - tick);
+    line.lineTo(end.x, end.y + tick);
+    line.stroke();
+    this.overlayLayer.addChild(line);
+
+    const label = new Text({
+      text: `${formatMeters(meters)} · 1m = ${WORLD_UNITS_PER_METER}单位`,
+      style: {
+        fill: "#ece9df",
+        fontFamily: "Inter, Microsoft YaHei, sans-serif",
+        fontSize: 12 / zoom,
+        fontWeight: "800",
+      },
+    });
+    label.anchor.set(0, 1);
+    label.position.set(start.x, start.y - 10 / zoom);
+    this.overlayLayer.addChild(label);
+
+    if (!sceneSettings) return;
+    const worldSize = new Text({
+      text: `世界 ${formatMeters(sceneSettings.width / WORLD_UNITS_PER_METER)} x ${formatMeters(sceneSettings.height / WORLD_UNITS_PER_METER)}`,
+      style: {
+        fill: "#aeb8b3",
+        fontFamily: "Inter, Microsoft YaHei, sans-serif",
+        fontSize: 11 / zoom,
+        fontWeight: "700",
+      },
+    });
+    worldSize.anchor.set(0, 0);
+    const worldSizePoint = screenToWorldPoint(this.viewport, screen, { x: left, y: bottom + 8 });
+    worldSize.position.set(worldSizePoint.x, worldSizePoint.y);
+    this.overlayLayer.addChild(worldSize);
   }
 
   private screenSize(): { width: number; height: number } {
@@ -995,6 +1076,48 @@ function gridStepForZoom(zoom: number): number {
   while (step * zoom < 18) step *= 2;
   while (step * zoom > 120 && step > 12) step /= 2;
   return step;
+}
+
+function meterGridStepForZoom(zoom: number): number {
+  let step = WORLD_UNITS_PER_METER;
+  while (step * zoom < 28) step *= 2;
+  while (step * zoom > 220 && step > WORLD_UNITS_PER_METER) step /= 2;
+  return step;
+}
+
+function niceScaleMeters(targetMeters: number): number {
+  if (!Number.isFinite(targetMeters) || targetMeters <= 0) return 1;
+  const exponent = Math.floor(Math.log10(targetMeters));
+  const base = Math.pow(10, exponent);
+  const normalized = targetMeters / base;
+  const multiplier = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return multiplier * base;
+}
+
+function formatMeters(meters: number): string {
+  if (meters >= 1000) return `${Number((meters / 1000).toFixed(2))}km`;
+  if (meters >= 1) return `${Number(meters.toFixed(2))}m`;
+  return `${Math.round(meters * 100)}cm`;
+}
+
+function drawWorldBounds(
+  graphics: Graphics,
+  sceneSettings: Pick<SceneSettings, "width" | "height">,
+  zoom: number,
+): void {
+  const width = Math.max(1, sceneSettings.width);
+  const height = Math.max(1, sceneSettings.height);
+  const x = -width / 2;
+  const y = -height / 2;
+  graphics.setStrokeStyle({ width: 2 / zoom, color: 0x7dd3c7, alpha: 0.72 });
+  graphics.rect(x, y, width, height);
+  graphics.stroke();
+  graphics.setStrokeStyle({ width: 1 / zoom, color: 0x7dd3c7, alpha: 0.42 });
+  graphics.moveTo(x, 0);
+  graphics.lineTo(x + width, 0);
+  graphics.moveTo(0, y);
+  graphics.lineTo(0, y + height);
+  graphics.stroke();
 }
 
 function bodyMaterialStyle(entity: Entity): BodyMaterialStyle {

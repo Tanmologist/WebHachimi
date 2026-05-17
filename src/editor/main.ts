@@ -2852,6 +2852,7 @@ function renderCanvasNow(projectSnapshot?: Project): void {
     shapeDraft: showEditorOverlays ? liveShapeDraft() : undefined,
     resources: snapshotProject.resources,
     animationTimeMs: world.mode === "game" ? world.clock.timeMs : performance.now(),
+    sceneSettings: scene.settings,
   });
   editorPerformance.recordRender(renderer.performanceStats());
   canvasDirty = false;
