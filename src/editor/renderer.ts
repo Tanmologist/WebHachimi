@@ -8,6 +8,7 @@ import { entityUsesAnchorLink } from "../project/entityHierarchy";
 import { entityHasVisiblePresentation, isAttackMovementTargetEntity, isAttackTouchEntity, isGameplayDebugEntity } from "../project/entityVisibility";
 import { isVisualResource, resourceEffectFrameAtTime, resourceFrameAtTime, type ResourceFrameRect } from "./resourceAnimation";
 import {
+  centerViewportOnScreenPoint,
   centerViewportOnWorldPoint,
   clampViewportZoom,
   defaultViewportState,
@@ -15,6 +16,7 @@ import {
   screenToWorldPoint,
   WORLD_UNITS_PER_METER,
   zoomViewportAt,
+  type ViewportScreenRect,
   type ViewportState,
 } from "./viewportMath";
 
@@ -71,6 +73,16 @@ export type RendererStats = {
   spritesReused: number;
   spritesCreated: number;
   visibleObjects: number;
+};
+
+export type FitWorldBoundsOptions = {
+  padding?: number;
+  viewRect?: ViewportScreenRect;
+};
+
+type NormalizedFitWorldBoundsOptions = {
+  padding: number;
+  viewRect?: ViewportScreenRect;
 };
 
 export type ShapeDraftPreview = {
@@ -252,19 +264,32 @@ export class V2Renderer {
     return this.viewportState();
   }
 
-  fitWorldBounds(bounds: { x: number; y: number; w: number; h: number }, padding = 96): ViewportState {
+  centerOnWorldPointInView(point: Vec2, viewRect?: ViewportScreenRect, zoom?: number): ViewportState {
     const screen = this.screenSize();
+    const target = centerOfScreenRect(normalizeScreenRect(screen, viewRect));
+    this.viewport = centerViewportOnScreenPoint(this.viewport, screen, point, target, zoom);
+    this.layoutWorld();
+    return this.viewportState();
+  }
+
+  fitWorldBounds(bounds: { x: number; y: number; w: number; h: number }, options: number | FitWorldBoundsOptions = {}): ViewportState {
+    const screen = this.screenSize();
+    const fitOptions = normalizeFitWorldOptions(options);
+    const viewRect = normalizeScreenRect(screen, fitOptions.viewRect);
     const width = Math.max(1, bounds.w);
     const height = Math.max(1, bounds.h);
-    const usableWidth = Math.max(1, screen.width - padding * 2);
-    const usableHeight = Math.max(1, screen.height - padding * 2);
+    const padding = Math.min(fitOptions.padding, Math.max(0, Math.min(viewRect.width, viewRect.height) / 2 - 1));
+    const usableWidth = Math.max(1, viewRect.width - padding * 2);
+    const usableHeight = Math.max(1, viewRect.height - padding * 2);
     const zoom = clampViewportZoom(Math.min(usableWidth / width, usableHeight / height, 1.25));
-    this.viewport = centerViewportOnWorldPoint(
+    this.viewport = centerViewportOnScreenPoint(
       this.viewport,
+      screen,
       {
         x: bounds.x + bounds.w / 2,
         y: bounds.y + bounds.h / 2,
       },
+      centerOfScreenRect(viewRect),
       zoom,
     );
     this.layoutWorld();
@@ -484,6 +509,24 @@ export class V2Renderer {
       x: (clientX - rect.left) * scaleX,
       y: (clientY - rect.top) * scaleY,
     };
+  }
+
+  clientRectToScreenRect(rect: { left: number; top: number; right: number; bottom: number }): ViewportScreenRect {
+    if (!this.hasLiveRenderer()) return { x: 0, y: 0, width: 1, height: 1 };
+    const canvasRect = this.app.canvas.getBoundingClientRect();
+    const screen = this.screenSize();
+    const scaleX = canvasRect.width ? screen.width / canvasRect.width : 1;
+    const scaleY = canvasRect.height ? screen.height / canvasRect.height : 1;
+    const left = (rect.left - canvasRect.left) * scaleX;
+    const top = (rect.top - canvasRect.top) * scaleY;
+    const right = (rect.right - canvasRect.left) * scaleX;
+    const bottom = (rect.bottom - canvasRect.top) * scaleY;
+    return normalizeScreenRect(screen, {
+      x: left,
+      y: top,
+      width: right - left,
+      height: bottom - top,
+    });
   }
 
   private hasLiveRenderer(): boolean {
@@ -1076,6 +1119,33 @@ function gridStepForZoom(zoom: number): number {
   while (step * zoom < 18) step *= 2;
   while (step * zoom > 120 && step > 12) step /= 2;
   return step;
+}
+
+function normalizeFitWorldOptions(options: number | FitWorldBoundsOptions): NormalizedFitWorldBoundsOptions {
+  if (typeof options === "number") {
+    return { padding: options, viewRect: undefined };
+  }
+  return { padding: options.padding ?? 96, viewRect: options.viewRect };
+}
+
+function normalizeScreenRect(screen: { width: number; height: number }, rect?: ViewportScreenRect): ViewportScreenRect {
+  if (!rect) return { x: 0, y: 0, width: screen.width, height: screen.height };
+  const left = clampNumber(rect.x, 0, screen.width);
+  const top = clampNumber(rect.y, 0, screen.height);
+  const right = clampNumber(rect.x + rect.width, left, screen.width);
+  const bottom = clampNumber(rect.y + rect.height, top, screen.height);
+  const width = right - left;
+  const height = bottom - top;
+  if (width < 1 || height < 1) return { x: 0, y: 0, width: screen.width, height: screen.height };
+  return { x: left, y: top, width, height };
+}
+
+function centerOfScreenRect(rect: ViewportScreenRect): Vec2 {
+  return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function meterGridStepForZoom(zoom: number): number {

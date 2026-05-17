@@ -40,6 +40,7 @@ import {
 } from "./canvasTransform";
 import { createStarterProject, repairKnownStarterLabels } from "./starterProject";
 import { geometryAabb, targetGeometry, V2Renderer, type CanvasTargetPart, type ShapeDraftPreview, type TransformHandle } from "./renderer";
+import type { ViewportScreenRect } from "./viewportMath";
 import { enterGameMode, leaveGameMode, mountEditorShell } from "./editorShell";
 import { handleEditorKeyDown, handleEditorKeyUp } from "./keyboardController";
 import { PanelLayoutController, type PanelId } from "./panelLayout";
@@ -351,8 +352,9 @@ const taskWorkflow = createTaskWorkflowController({
 await renderer.init({ host: stageHost });
 
 bindUi();
-fitWorldToCanvas("initial", { render: false });
+focusSelectedOrFitWorld("initial", { render: false, zoom: 1 });
 renderUi();
+window.requestAnimationFrame(() => focusSelectedOrFitWorld("initial", { zoom: 1 }));
 loop(lastTime);
 const PROJECT_MAINTENANCE_INTERVAL_MS = 10 * 60 * 1000;
 window.setInterval(runScheduledProjectMaintenance, PROJECT_MAINTENANCE_INTERVAL_MS);
@@ -953,9 +955,29 @@ function focusEntityOnCanvas(entityId: string, part: CanvasTargetPart): void {
   selectedIds = [entity.id];
   selectionArea = undefined;
   activeSurface = "canvas";
-  renderer.centerOnWorldPoint(geometry.center);
+  renderer.centerOnWorldPointInView(geometry.center, editorCanvasViewRect());
   notice = part === "presentation" ? `已定位到 ${entity.displayName} 的可视体` : `已定位到 ${entity.displayName}`;
   renderAll();
+}
+
+function focusSelectedOrFitWorld(
+  source: "initial" | "manual" = "manual",
+  options: { render?: boolean; zoom?: number } = {},
+): void {
+  const entity = selectedId ? editableEntity(selectedId) : undefined;
+  if (!entity) {
+    fitWorldToCanvas(source, options);
+    return;
+  }
+  const part = selectedPart === "presentation" && entity.render ? "presentation" : "body";
+  const geometry = targetGeometry(entity, part);
+  renderer.centerOnWorldPointInView(geometry.center, editorCanvasViewRect(), options.zoom);
+  const entities = editableEntities();
+  notice =
+    source === "initial"
+      ? `已载入 ${entities.length} 个本体，并默认定位到 ${entity.displayName}。`
+      : `视角已回到 ${entity.displayName}。`;
+  if (options.render !== false) renderAll();
 }
 
 function fitWorldToCanvas(source: "initial" | "manual" = "manual", options: { render?: boolean } = {}): void {
@@ -966,7 +988,7 @@ function fitWorldToCanvas(source: "initial" | "manual" = "manual", options: { re
     if (options.render !== false) renderAll();
     return;
   }
-  const viewport = renderer.fitWorldBounds(bounds);
+  const viewport = renderer.fitWorldBounds(bounds, { viewRect: editorCanvasViewRect() });
   notice =
     source === "initial"
       ? `已载入 ${entities.length} 个本体，并适配到画布中心。`
@@ -1000,6 +1022,29 @@ function mergeBounds(bounds: Rect[]): Rect | undefined {
     maxY = Math.max(maxY, bound.y + bound.h);
   }
   return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
+}
+
+function editorCanvasViewRect(): ViewportScreenRect | undefined {
+  const editorPanel = root.querySelector<HTMLElement>('[data-preview-window="editor"]');
+  if (!editorPanel || editorPanel.dataset.windowState === "closed" || editorPanel.dataset.windowState === "minimized") return undefined;
+
+  const canvasRect = renderer.canvas().getBoundingClientRect();
+  const editorRect = editorPanel.getBoundingClientRect();
+  if (!isUsableClientRect(canvasRect) || !isUsableClientRect(editorRect)) return undefined;
+
+  const tabsRect = editorPanel.querySelector<HTMLElement>(".editor-tabs")?.getBoundingClientRect();
+  const toolbarRect = editorPanel.querySelector<HTMLElement>(".stage-toolbar")?.getBoundingClientRect();
+  const top = Math.max(editorRect.top, canvasRect.top, tabsRect?.bottom ?? editorRect.top, toolbarRect?.bottom ?? editorRect.top);
+  const left = Math.max(editorRect.left, canvasRect.left);
+  const right = Math.min(editorRect.right, canvasRect.right);
+  const bottom = Math.min(editorRect.bottom, canvasRect.bottom);
+  if (right - left < 80 || bottom - top < 80) return undefined;
+
+  return renderer.clientRectToScreenRect({ left, top, right, bottom });
+}
+
+function isUsableClientRect(rect: DOMRect): boolean {
+  return rect.width >= 80 && rect.height >= 80;
 }
 
 function startCanvasTransform(event: PointerEvent, entityId: string, part: CanvasTargetPart, handle: TransformHandle, point: Vec2): void {
@@ -1837,9 +1882,7 @@ function onContextMenuClick(event: MouseEvent): void {
 
 function runContextMenuAction(action: ContextMenuAction, state: ContextMenuState): void {
   if (action === "reset-viewport") {
-    renderer.resetViewport();
-    notice = "视角已重置";
-    renderAll();
+    focusSelectedOrFitWorld("manual", { zoom: 1 });
     return;
   }
 

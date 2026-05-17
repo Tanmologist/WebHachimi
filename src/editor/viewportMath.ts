@@ -11,6 +11,13 @@ export type ViewportScreen = {
   height: number;
 };
 
+export type ViewportScreenRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export const WORLD_UNITS_PER_METER = 100;
 export const MIN_VIEWPORT_ZOOM = 0.05;
 export const MAX_VIEWPORT_ZOOM = 12;
@@ -38,6 +45,21 @@ export function centerViewportOnWorldPoint(viewport: ViewportState, world: Vec2,
     x: world.x,
     y: world.y,
     zoom: clampViewportZoom(zoom),
+  };
+}
+
+export function centerViewportOnScreenPoint(
+  viewport: ViewportState,
+  screen: ViewportScreen,
+  world: Vec2,
+  local: Vec2,
+  zoom = viewport.zoom,
+): ViewportState {
+  const clampedZoom = clampViewportZoom(zoom);
+  return {
+    x: world.x - (local.x - screen.width / 2) / clampedZoom,
+    y: world.y - (local.y - screen.height / 2) / clampedZoom,
+    zoom: clampedZoom,
   };
 }
 

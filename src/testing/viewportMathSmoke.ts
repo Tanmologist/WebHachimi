@@ -1,4 +1,5 @@
 import {
+  centerViewportOnScreenPoint,
   centerViewportOnWorldPoint,
   defaultViewportState,
   panViewport,
@@ -36,6 +37,14 @@ const focused = centerViewportOnWorldPoint(panned, { x: 320, y: -180 });
 assertPoint(worldToScreenPoint(focused, screen, { x: 320, y: -180 }), center, "centered world target maps to screen center");
 assert(nearlyEqual(focused.zoom, panned.zoom), "centering should preserve current zoom by default");
 
+const focusedInVisibleEditor = centerViewportOnScreenPoint(viewport, screen, { x: 320, y: -180 }, { x: 650, y: 380 });
+assertPoint(
+  worldToScreenPoint(focusedInVisibleEditor, screen, { x: 320, y: -180 }),
+  { x: 650, y: 380 },
+  "visible editor focus maps target to requested screen point",
+);
+assert(nearlyEqual(focusedInVisibleEditor.zoom, viewport.zoom), "visible editor focus should preserve current zoom by default");
+
 const minClamped = zoomViewportAt(viewport, screen, center, 100000);
 const maxClamped = zoomViewportAt(viewport, screen, center, -100000);
 assert(minClamped.zoom === MIN_VIEWPORT_ZOOM, `expected min zoom clamp, got ${minClamped.zoom}`);
@@ -70,6 +79,11 @@ console.log(
         x: focused.x,
         y: focused.y,
         zoom: focused.zoom,
+      },
+      visibleEditorFocus: {
+        x: focusedInVisibleEditor.x,
+        y: focusedInVisibleEditor.y,
+        zoom: focusedInVisibleEditor.zoom,
       },
       clamps: {
         min: minClamped.zoom,
