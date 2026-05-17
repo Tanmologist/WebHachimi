@@ -15,7 +15,9 @@ root.hidden = false;
 root.removeAttribute("aria-hidden");
 
 root.innerHTML = `
-  <section class="player-stage" data-role="stage"></section>
+  <section class="player-stage" data-role="stage">
+    <p class="player-boot-status" data-role="boot-status" role="status" aria-live="polite">正在加载世界...</p>
+  </section>
   <nav class="player-controls" aria-label="game controls">
     <section class="player-pad" aria-label="movement">
       <button class="player-button" data-input="left" type="button" aria-label="left">←</button>
@@ -29,29 +31,64 @@ root.innerHTML = `
   </nav>
 `;
 
-const stage = query<HTMLElement>('[data-role="stage"]');
-const resumeHandoff = consumeEditorHandoff();
-const project = normalizeProjectDefaults(repairKnownStarterLabels(resumeHandoff?.project || (await loadPlayableProject())));
-const scene = project.scenes[project.activeSceneId];
-const world = new RuntimeWorld({ scene });
-const renderer = new PlayerRenderer();
-
 let raf = 0;
 let lastTime = performance.now();
+let cleanup = () => {};
 
-await renderer.init({ host: stage, scene, resources: project.resources });
-const input = bindPlayerInput(root, world);
-const removeEditorHandoffKey = bindEditorHandoffKey();
-if (resumeHandoff) restoreWorldFromHandoff(world, resumeHandoff);
-world.setMode("game");
-loop(lastTime);
+const stage = query<HTMLElement>('[data-role="stage"]');
+const bootStatus = query<HTMLElement>('[data-role="boot-status"]');
+const savedProjectTimeoutMs = 3000;
 
-function loop(time: number): void {
+void boot().catch(showBootError);
+
+async function boot(): Promise<void> {
+  setBootStatus("正在加载世界...");
+  const resumeHandoff = consumeEditorHandoff();
+  const project = normalizeProjectDefaults(repairKnownStarterLabels(resumeHandoff?.project || (await loadPlayableProject())));
+  const scene = project.scenes[project.activeSceneId];
+  if (!scene) throw new Error(`active scene not found: ${project.activeSceneId}`);
+
+  const world = new RuntimeWorld({ scene });
+  let renderer: PlayerRenderer | undefined;
+  let input: ReturnType<typeof bindPlayerInput> | undefined;
+  let removeEditorHandoffKey: (() => void) | undefined;
+  let booted = false;
+
+  try {
+    renderer = new PlayerRenderer();
+    await renderer.init({ host: stage, scene, resources: project.resources });
+
+    input = bindPlayerInput(root, world);
+    removeEditorHandoffKey = bindEditorHandoffKey(project, world);
+    if (resumeHandoff) restoreWorldFromHandoff(world, resumeHandoff);
+    world.setMode("game");
+    lastTime = performance.now();
+
+    cleanup = () => {
+      cleanup = () => {};
+      cancelAnimationFrame(raf);
+      removeEditorHandoffKey?.();
+      input?.destroy();
+      renderer?.destroy();
+    };
+    booted = true;
+    bootStatus.remove();
+    loop(lastTime, renderer, world);
+  } finally {
+    if (!booted) {
+      removeEditorHandoffKey?.();
+      input?.destroy();
+      renderer?.destroy();
+    }
+  }
+}
+
+function loop(time: number, renderer: PlayerRenderer, world: RuntimeWorld): void {
   const delta = Math.min(time - lastTime, 80);
   lastTime = time;
   world.pushDelta(delta);
   renderer.render(world);
-  raf = requestAnimationFrame(loop);
+  raf = requestAnimationFrame((nextTime) => loop(nextTime, renderer, world));
 }
 
 function query<T extends HTMLElement>(selector: string): T {
@@ -60,12 +97,12 @@ function query<T extends HTMLElement>(selector: string): T {
   return element;
 }
 
-function bindEditorHandoffKey(): () => void {
+function bindEditorHandoffKey(project: Project, world: RuntimeWorld): () => void {
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key.toLowerCase() !== "z" || isTypingTarget(event.target)) return;
     event.preventDefault();
     if (event.repeat) return;
-    cancelAnimationFrame(raf);
+    cleanup();
     saveEditorHandoff(createEditorHandoff(project, world));
     window.location.href = editorHandoffUrl();
   };
@@ -74,7 +111,7 @@ function bindEditorHandoffKey(): () => void {
 }
 
 async function loadPlayableProject(): Promise<Project> {
-  return normalizeProjectDefaults(repairKnownStarterLabels(embeddedProject() || (await savedProject()) || createStarterProject()));
+  return embeddedProject() || (await savedProjectWithTimeout(savedProjectTimeoutMs)) || createStarterProject();
 }
 
 function embeddedProject(): Project | null {
@@ -104,13 +141,33 @@ async function savedProject(): Promise<Project | null> {
   }
 }
 
+async function savedProjectWithTimeout(timeoutMs: number): Promise<Project | null> {
+  let timeoutId = 0;
+  const timeout = new Promise<null>((resolve) => {
+    timeoutId = window.setTimeout(() => resolve(null), timeoutMs);
+  });
+  try {
+    return await Promise.race([savedProject(), timeout]);
+  } finally {
+    window.clearTimeout(timeoutId);
+  }
+}
+
 function isTypingTarget(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement;
 }
 
+function setBootStatus(message: string): void {
+  bootStatus.classList.remove("is-error");
+  bootStatus.textContent = message;
+}
+
+function showBootError(error: unknown): void {
+  console.error("Player boot failed", error);
+  bootStatus.classList.add("is-error");
+  bootStatus.textContent = `游戏启动失败。\n${error instanceof Error ? error.message : String(error)}`;
+}
+
 window.addEventListener("beforeunload", () => {
-  cancelAnimationFrame(raf);
-  removeEditorHandoffKey();
-  input.destroy();
-  renderer.destroy();
+  cleanup();
 });

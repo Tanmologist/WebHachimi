@@ -38,6 +38,31 @@ body {
   touch-action: none;
 }
 
+.player-boot-status {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 1;
+  max-width: min(520px, calc(100% - 32px));
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(232, 238, 233, 0.18);
+  border-radius: 8px;
+  background: rgba(13, 18, 17, 0.82);
+  color: #e8eee9;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.45;
+  white-space: pre-line;
+  pointer-events: none;
+}
+
+.player-boot-status.is-error {
+  border-color: rgba(255, 119, 119, 0.42);
+  background: rgba(38, 14, 16, 0.9);
+  color: #ffd7d7;
+}
+
 .player-canvas {
   display: block;
   width: 100%;
