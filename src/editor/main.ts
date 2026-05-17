@@ -77,6 +77,7 @@ import {
   type EntityPropertyTransactionPlan,
 } from "./entityPropertyTransactions";
 import { createTaskWorkflowController } from "./taskWorkflowController";
+import { planUpsertTaskTransaction, type TaskTransactionLabels, type TaskTransactionPlan } from "./taskTransactions";
 import {
   escapeHtml,
   panelLabel,
@@ -317,8 +318,8 @@ const surfaceButtons = Array.from(root.querySelectorAll<HTMLButtonElement>("[dat
 const worldSpeedPresetButtons = Array.from(root.querySelectorAll<HTMLButtonElement>("[data-world-speed-preset]"));
 const confirmBrushButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-action="confirm-super-brush"]'));
 const taskWorkflow = createTaskWorkflowController({
-  store,
   executeNextAiTask,
+  queueTask: (task, dirtyReason) => queueTaskTransaction(task, { dirtyReason, noticeText: dirtyReason }),
   currentTargets,
   getPendingBrush: () => (superBrushTaskDialogOpen ? pendingBrush : undefined),
   setPendingBrush: (draft) => {
@@ -748,6 +749,28 @@ function queueTaskFromComposer(visibleTaskInput: HTMLTextAreaElement | null): vo
   if (shouldIgnoreUnconfirmedBrush) notice = "未确认的超级画笔已忽略；已按普通 AI 任务发送";
   if (visibleTaskInput && !text) visibleTaskInput.focus();
   renderAll();
+}
+
+function queueTaskTransaction(task: Task, labels: TaskTransactionLabels = {}): Result<Task> {
+  const planResult = planUpsertTaskTransaction(store.peekProject(), task, labels);
+  if (!planResult.ok) return { ok: false, error: planResult.error };
+  const applyResult = applyTaskTransaction(planResult.value);
+  if (!applyResult.ok) return { ok: false, error: applyResult.error };
+  return { ok: true, value: task };
+}
+
+function applyTaskTransaction(plan: TaskTransactionPlan): Result<void> {
+  const result = editorTransactions.apply({
+    actor: "user",
+    patches: plan.patches,
+    inversePatches: plan.inversePatches,
+    diffSummary: plan.diffSummary,
+    dirtyReason: plan.dirtyReason,
+    syncOnSuccess: false,
+    syncOnFailure: false,
+  });
+  if (!result.ok) return { ok: false, error: result.error };
+  return { ok: true, value: undefined };
 }
 
 function scheduleWindowMenuPanelClick(panel: PanelId): void {
@@ -2205,8 +2228,18 @@ function queueSuperBrushTaskFromDialog(): void {
     return;
   }
 
-  store.upsertTask(result.value);
-  previewTaskId = result.value.id;
+  const queueResult = queueTaskTransaction(result.value, {
+    dirtyReason: "超级画笔任务已排",
+    noticeText: "超级画笔任务已排队",
+  });
+  if (!queueResult.ok) {
+    superBrushTaskError = `任务排队失败：${queueResult.error}`;
+    superBrushTaskInput.focus();
+    renderAll();
+    return;
+  }
+
+  previewTaskId = queueResult.value.id;
   pendingBrush = undefined;
   currentStrokePoints = [];
   drawingBrush = false;
@@ -2216,7 +2249,6 @@ function queueSuperBrushTaskFromDialog(): void {
   superBrushTaskError = "";
   superBrushTaskInput.value = "";
   activeTool = "select";
-  markProjectDirty("超级画笔任务已排");
   notice = "超级画笔任务已排队";
   renderAll();
 }
@@ -3762,13 +3794,25 @@ function saveResourceDescription(resourceId: ResourceId, rawDescription: string)
     userText: `资源${resource.displayName}”的描述${description}\n请在后续 AI 编辑和生成时按这条描述理解它。`,
     targetRefs: resourceTaskTargets(resourceId),
   });
+  let taskQueued = false;
+  let taskQueueError = "";
   if (taskResult.ok) {
-    store.upsertTask(taskResult.value);
-    previewTaskId = taskResult.value.id;
+    const queueResult = queueTaskTransaction(taskResult.value, {
+      dirtyReason: "资源描述任务已排队",
+      noticeText: "资源描述已作为 AI 待处理任务排队",
+    });
+    if (queueResult.ok) {
+      previewTaskId = queueResult.value.id;
+      taskQueued = true;
+    } else {
+      taskQueueError = queueResult.error;
+    }
+  } else {
+    taskQueueError = taskResult.error;
   }
   syncWorldFromStore();
   markProjectDirty("资源描述已保存并排队");
-  notice = taskResult.ok ? "资源描述已保存，已作为 AI 待处理任务排队" : "资源描述已保存，但任务排队失败";
+  notice = taskQueued ? "资源描述已保存，已作为 AI 待处理任务排队" : `资源描述已保存，但任务排队失败：${taskQueueError}`;
   renderAll();
 }
 

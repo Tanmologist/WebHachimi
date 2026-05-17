@@ -1,9 +1,10 @@
 import { AiTaskExecutor } from "../ai/taskExecutor";
-import type { Project } from "../project/schema";
+import type { Project, ProjectPatch, Task } from "../project/schema";
 import { ProjectStore } from "../project/projectStore";
-import type { EntityId, TaskId } from "../shared/types";
+import type { EntityId, Result, TaskId } from "../shared/types";
 import { createStarterProject } from "../editor/starterProject";
 import { createTaskWorkflowController } from "../editor/taskWorkflowController";
+import { planUpsertTaskTransaction } from "../editor/taskTransactions";
 import {
   compileSuperBrushContext,
   createSuperBrushStroke,
@@ -29,8 +30,8 @@ let projectChangeCount = 0;
 const traces: Record<string, string> = {};
 
 const controller = createTaskWorkflowController({
-  store,
   executeNextAiTask: async () => executor.executeNextQueuedTask(),
+  queueTask,
   currentTargets: () => [{ kind: "entity", entityId: player.id }],
   getPendingBrush: () => pendingBrush,
   setPendingBrush: (draft) => {
@@ -71,9 +72,14 @@ controller.queueTaskFromText("Set the player speed to 420.");
 const task = Object.values(store.project.tasks).find((item) => item.id === previewTaskId);
 assert(task, "expected queued task to be stored and previewed");
 assert(task.status === "queued", `expected task status queued, got ${task.status}`);
+assert(Object.keys(store.project.transactions).length === 1, "expected queued task to create a transaction");
 assert(clearedInput, "expected task input to be cleared after queue");
 assert(!pendingBrush, "expected pending brush to be cleared after queue");
 assert(getProjectChangeCount() === 1, `expected one project change after queue, got ${projectChangeCount}`);
+assert(store.undo(), "expected queued task transaction to undo");
+assert(!store.project.tasks[task.id], "expected queued task removed after undo");
+assert(store.redo(), "expected queued task transaction to redo");
+assert(store.project.tasks[task.id], "expected queued task restored after redo");
 
 void (async () => {
 await controller.runNextAiTask();
@@ -264,4 +270,19 @@ function assert(condition: unknown, message: string): asserts condition {
 
 function getProjectChangeCount(): number {
   return projectChangeCount;
+}
+
+function queueTask(task: Task): Result<Task> {
+  const plan = planUpsertTaskTransaction(store.project, task);
+  if (!plan.ok) return plan;
+  const transaction = store.createTransaction({
+    actor: "user",
+    patches: plan.value.patches as ProjectPatch[],
+    inversePatches: plan.value.inversePatches as ProjectPatch[],
+    diffSummary: plan.value.diffSummary,
+  });
+  const result = store.apply(transaction);
+  if (!result.ok) return result;
+  projectChangeCount += 1;
+  return { ok: true, value: task };
 }

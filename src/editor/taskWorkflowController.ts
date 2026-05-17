@@ -1,13 +1,12 @@
 import type { AiTaskExecutionResult } from "../ai/taskExecutor";
 import { createTask } from "../project/tasks";
-import type { ProjectStore } from "../project/projectStore";
-import type { TargetRef } from "../project/schema";
+import type { TargetRef, Task } from "../project/schema";
 import type { Result, TaskId } from "../shared/types";
 import { createTaskFromSuperBrush, type SuperBrushDraft } from "./superBrush";
 
 export type TaskWorkflowControllerDeps = {
-  store: ProjectStore;
   executeNextAiTask: () => Promise<Result<AiTaskExecutionResult | undefined>>;
+  queueTask: (task: Task, dirtyReason: string) => Result<Task>;
   currentTargets: () => TargetRef[];
   getPendingBrush: () => SuperBrushDraft | undefined;
   setPendingBrush: (draft: SuperBrushDraft | undefined) => void;
@@ -50,9 +49,15 @@ export function createTaskWorkflowController(deps: TaskWorkflowControllerDeps): 
         return;
       }
 
-      deps.store.upsertTask(result.value);
-      deps.onProjectChanged("任务已排队");
-      deps.setPreviewTaskId(result.value.id);
+      const queueResult = deps.queueTask(result.value, "任务已排队");
+      if (!queueResult.ok) {
+        deps.setNotice(`任务排队失败：${queueResult.error}`);
+        deps.focusTaskInput();
+        deps.renderAll();
+        return;
+      }
+
+      deps.setPreviewTaskId(queueResult.value.id);
       deps.setPendingBrush(undefined);
       deps.clearTaskInput();
       deps.setNotice("任务已排队，AI 执行器会优先处理任务列表。");
