@@ -1,14 +1,15 @@
 'use strict';
 
-// Owns static player export packaging for a concrete project profile.
-// The exporter consumes an existing Vite game build, embeds project JSON into a
-// root-level index.html, and copies referenced resource attachments beside it.
-// Exported packages are static-host friendly and do not require the local API.
+// Owns static player/editor export packaging for a concrete project profile.
+// The exporter consumes an existing Vite game build, embeds project JSON into
+// root-level player and editor pages, and copies referenced attachments beside
+// them. Exported packages are static-host friendly and do not require the API.
 const { execFileSync } = require('node:child_process');
 const fs = require('node:fs');
 const fsp = require('node:fs/promises');
 const path = require('node:path');
 const {
+  HACHIMI_GAME_EDITOR_ENTRY,
   HACHIMI_GAME_ENTRY,
   createProjectProfiles,
 } = require('../project-profiles.cjs');
@@ -24,6 +25,7 @@ async function main() {
   if (!profile) throw new Error(`unknown project profile: ${options.profileId}`);
 
   const entryRel = entryForProfile(profile.id);
+  const editorEntryRel = editorEntryForProfile(profile.id);
   const buildDir = buildDirForProfile(profile.id);
   const outDir = path.resolve(options.outDir || path.join(DEFAULT_EXPORT_ROOT, profile.id));
   assertExportPath(outDir);
@@ -31,8 +33,10 @@ async function main() {
   if (!options.skipBuild) runBuild(profile.id);
 
   const entryPath = path.join(buildDir, entryRel);
+  const editorEntryPath = path.join(buildDir, editorEntryRel);
   const assetsDir = path.join(buildDir, 'assets');
   if (!fs.existsSync(entryPath)) throw new Error(`missing built game entry: ${entryPath}`);
+  if (!fs.existsSync(editorEntryPath)) throw new Error(`missing built game editor entry: ${editorEntryPath}`);
   if (!fs.existsSync(assetsDir)) throw new Error(`missing built assets directory: ${assetsDir}`);
 
   const project = await loadProfileProject(profile);
@@ -47,8 +51,10 @@ async function main() {
   await fsp.mkdir(resourcesDir, { recursive: true });
   await copyReferencedResources(uniqueResources);
 
-  const html = await buildExportHtml(entryPath, exportedProject);
+  const html = await buildExportHtml(entryPath, exportedProject, { role: 'player' });
+  const editorHtml = await buildExportHtml(editorEntryPath, exportedProject, { role: 'editor' });
   await fsp.writeFile(path.join(outDir, 'index.html'), html, 'utf8');
+  await fsp.writeFile(path.join(outDir, 'editor.html'), editorHtml, 'utf8');
   await fsp.writeFile(
     path.join(outDir, 'export-manifest.json'),
     JSON.stringify({
@@ -56,6 +62,7 @@ async function main() {
       version: 1,
       profile: profile.id,
       sourceEntry: entryRel,
+      sourceEditorEntry: editorEntryRel,
       resourceCount: uniqueResources.length,
       exportedAt: new Date().toISOString(),
     }, null, 2),
@@ -67,6 +74,7 @@ async function main() {
     profile: profile.id,
     outDir,
     entry: path.join(outDir, 'index.html'),
+    editorEntry: path.join(outDir, 'editor.html'),
     resources: uniqueResources.length,
   }, null, 2));
 }
@@ -97,6 +105,11 @@ function parseArgs(args) {
 function entryForProfile(profileId) {
   if (profileId === DEFAULT_PROFILE_ID) return HACHIMI_GAME_ENTRY;
   throw new Error(`profile does not have a static game entry yet: ${profileId}`);
+}
+
+function editorEntryForProfile(profileId) {
+  if (profileId === DEFAULT_PROFILE_ID) return HACHIMI_GAME_EDITOR_ENTRY;
+  throw new Error(`profile does not have a static game editor entry yet: ${profileId}`);
 }
 
 function buildDirForProfile(profileId) {
@@ -229,16 +242,17 @@ async function copyReferencedResources(resources) {
   }
 }
 
-async function buildExportHtml(entryPath, project) {
+async function buildExportHtml(entryPath, project, options) {
   const original = await fsp.readFile(entryPath, 'utf8');
   const projectJson = escapeScriptJson(JSON.stringify(project));
-  const staticExportMeta = '    <meta name="webhachimi-disable-editor-handoff" content="1" />\n';
+  const staticExportMeta = options.role === 'player'
+    ? '    <meta name="webhachimi-static-export" content="player-editor" />\n'
+    : '    <meta name="webhachimi-static-export" content="editor" />\n';
   const embeddedProject = `    <script type="application/json" data-webhachimi-project>${projectJson}</script>\n`;
   let html = original
     .replaceAll('../../assets/', './assets/')
     .replace(/^\s*<meta name="webhachimi-project-endpoint"[^>]*>\s*\n/gm, '')
     .replace(/^\s*<meta name="webhachimi-sample-resource-base"[^>]*>\s*\n/gm, '')
-    .replace(/^\s*<meta name="webhachimi-editor-url"[^>]*>\s*\n/gm, '')
     .replace('</head>', `${staticExportMeta}${embeddedProject}</head>`);
   if (!html.includes('data-webhachimi-project')) throw new Error('failed to embed project json');
   return html;

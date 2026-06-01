@@ -34,9 +34,10 @@ npm run smoke
 npm run smoke:export-game
 ```
 
-This builds the concrete game, exports a static package, serves it from a
-temporary local server, and boots it in Chromium to catch missing assets, local
-API dependencies, and startup errors.
+This builds the concrete game/editor bundle, exports a static package, serves
+it from a temporary local server, and boots it in Chromium to catch missing
+assets, local API dependencies, player startup errors, player-to-editor handoff
+regressions, and editor runtime toggle regressions.
 
 ## Pages Demo Verification
 

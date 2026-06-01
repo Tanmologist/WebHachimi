@@ -11,7 +11,7 @@ editor project rather than a loose local experiment.
 - Concrete Hachimi Nanbei Lvdong game package for editor/runtime testing.
 - Static game export path that embeds project data and runs without the local
   project API.
-- GitHub Pages workflow for publishing the static player demo.
+- GitHub Pages workflow for publishing the static player/editor demo.
 - CI verification with typecheck, build, smoke checks, and Playwright Chromium.
 - README, architecture, maintainer, editor, verification, security,
   contributing, changelog, issue template, and pull request template docs.

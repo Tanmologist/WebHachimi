@@ -20,14 +20,15 @@ review safely.
 
 ## Live Demo
 
-The GitHub Pages workflow publishes the static Hachimi Nanbei Lvdong player demo
-from the same export path that maintainers can run locally:
+The GitHub Pages workflow publishes the static Hachimi Nanbei Lvdong demo from
+the same export path that maintainers can run locally:
 
 [Open the static demo](https://tanmologist.github.io/WebHachimi/)
 
-The demo is intentionally player-only: it proves that a WebHachimi project can
-be exported into a standalone static web package without the local editor API.
-Use the Vite entries below for the editable tool surface.
+The demo includes a static player and a static editor entry. Press `Z` in the
+player to freeze into the editor, then press `Z` in the editor to toggle the
+runtime preview. It proves that a WebHachimi project can be exported into a
+standalone web package without the local project API.
 
 ## Project Snapshot
 
@@ -136,11 +137,11 @@ To export the concrete game as a standalone static web package:
 npm run export:game
 ```
 
-The exporter builds the game, writes `exports/hachimi-nanbei-lvdong/index.html`,
-copies bundled JS/CSS to `assets/`, copies referenced project resources to
-`resources/`, and embeds the project JSON directly into the page. The exported
-folder can be served by any static web server and does not require the local
-project API.
+The exporter builds the game/editor bundle, writes
+`exports/hachimi-nanbei-lvdong/index.html` and `editor.html`, copies bundled
+JS/CSS to `assets/`, copies referenced project resources to `resources/`, and
+embeds the project JSON directly into both pages. The exported folder can be
+served by any static web server and does not require the local project API.
 
 To verify the export path with a fresh game build:
 
@@ -148,9 +149,9 @@ To verify the export path with a fresh game build:
 npm run smoke:export-game
 ```
 
-This smoke check inspects the generated package and boots it in Chromium from a
-temporary static server to catch missing files, local API requests, and player
-startup errors.
+This smoke check inspects the generated package, boots it in Chromium, verifies
+the player toolbar, and confirms `Z` can hand off to the static editor and toggle
+the editor runtime preview.
 
 The Pages workflow uses the same exporter through:
 

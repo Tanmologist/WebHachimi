@@ -17,4 +17,6 @@ public release note.
 
 ## Unreleased
 
-- No unreleased changes yet.
+- Static export now includes both player and editor pages, keeps `Z` handoff
+  enabled, and adds player toolbar controls for edit, reset, reconnect, and
+  quick speed settings.

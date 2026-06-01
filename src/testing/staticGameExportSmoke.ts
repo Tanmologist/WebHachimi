@@ -15,13 +15,20 @@ void main().catch((error) => {
 
 async function main(): Promise<void> {
   const indexPath = path.join(exportDir, "index.html");
+  const editorPath = path.join(exportDir, "editor.html");
   const html = readFileSync(indexPath, "utf8");
+  const editorHtml = readFileSync(editorPath, "utf8");
 
   assert(html.includes("data-webhachimi-project"), "exported index should embed project JSON");
-  assert(html.includes("webhachimi-disable-editor-handoff"), "exported game should disable editor handoff");
+  assert(html.includes("webhachimi-static-export"), "exported game should identify static export mode");
+  assert(html.includes("webhachimi-editor-url"), "exported game should expose the static editor URL");
+  assert(!html.includes("webhachimi-disable-editor-handoff"), "exported game should keep editor handoff enabled");
   assert(!html.includes("webhachimi-project-endpoint"), "exported game should not depend on project API metadata");
   assert(!html.includes("../../assets/"), "exported game should use root-level asset paths");
   assert(html.includes("./assets/"), "exported game should reference copied assets");
+  assert(editorHtml.includes("data-webhachimi-project"), "exported editor should embed project JSON");
+  assert(!editorHtml.includes("webhachimi-project-endpoint"), "exported editor should not depend on project API metadata");
+  assert(!editorHtml.includes("../../assets/"), "exported editor should use root-level asset paths");
 
   const project = embeddedProjectFromHtml(html);
   assertRuntimeOnlyProject(project);
@@ -114,6 +121,24 @@ async function assertBrowserCanBoot(rootDir: string): Promise<void> {
       await page.keyboard.up("ArrowRight");
       await page.keyboard.press("KeyJ");
       await page.waitForTimeout(250);
+
+      const editButton = page.locator('[data-player-action="edit"]');
+      await editButton.waitFor({ state: "visible", timeout: 5000 });
+      const resetButton = page.locator('[data-player-action="reset-scene"]');
+      await resetButton.waitFor({ state: "visible", timeout: 5000 });
+      const reconnectButton = page.locator('[data-player-action="reconnect"]');
+      await reconnectButton.waitFor({ state: "visible", timeout: 5000 });
+      await resetButton.click();
+      await page.locator(".player-canvas").waitFor({ state: "visible", timeout: 15000 });
+      await page.keyboard.press("KeyZ");
+      await page.waitForURL(`${baseUrl}/editor.html?**`, { timeout: 15000 });
+      const editorCanvas = page.locator("#v2-root canvas");
+      await editorCanvas.waitFor({ state: "visible", timeout: 15000 });
+      const modeBefore = await page.locator('[data-role="mode"]').textContent({ timeout: 5000 });
+      await page.keyboard.press("KeyZ");
+      await page.waitForTimeout(300);
+      const modeAfter = await page.locator('[data-role="mode"]').textContent({ timeout: 5000 });
+      assert(modeBefore !== modeAfter, `editor Z should toggle runtime mode, before=${modeBefore}, after=${modeAfter}`);
 
       assert(apiRequests.length === 0, `exported game should not request local APIs: ${apiRequests.join(", ")}`);
       assert(failedRequests.length === 0, `exported game should not have failed requests: ${failedRequests.join(", ")}`);

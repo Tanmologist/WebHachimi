@@ -63,6 +63,101 @@ body {
   color: #ffd7d7;
 }
 
+.player-toolbar {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  left: max(14px, env(safe-area-inset-left));
+  z-index: 3;
+  display: flex;
+  max-width: min(720px, calc(100% - 28px));
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid rgba(232, 238, 233, 0.18);
+  border-radius: 8px;
+  background: rgba(13, 18, 17, 0.82);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
+}
+
+.player-tool-button,
+.player-settings summary {
+  min-height: 32px;
+  border: 1px solid rgba(232, 238, 233, 0.24);
+  border-radius: 6px;
+  background: rgba(232, 238, 233, 0.08);
+  color: #f3f7f4;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  user-select: none;
+}
+
+.player-tool-button {
+  padding: 0 10px;
+}
+
+.player-tool-button.is-primary {
+  border-color: rgba(121, 214, 186, 0.72);
+  background: rgba(121, 214, 186, 0.18);
+}
+
+.player-tool-button.is-active {
+  border-color: #9ff0d6;
+  background: #79d6ba;
+  color: #10221d;
+}
+
+.player-tool-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.player-settings {
+  position: relative;
+}
+
+.player-settings summary {
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  list-style: none;
+}
+
+.player-settings summary::-webkit-details-marker {
+  display: none;
+}
+
+.player-settings-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  display: grid;
+  min-width: 190px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid rgba(232, 238, 233, 0.18);
+  border-radius: 8px;
+  background: rgba(13, 18, 17, 0.94);
+}
+
+.player-settings-panel span {
+  grid-column: 1 / -1;
+  color: rgba(232, 238, 233, 0.78);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.player-tool-status {
+  min-width: 130px;
+  color: rgba(232, 238, 233, 0.78);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
 .player-canvas {
   display: block;
   width: 100%;
@@ -133,6 +228,16 @@ body {
 }
 
 @media (max-width: 640px) {
+  .player-toolbar {
+    right: max(14px, env(safe-area-inset-right));
+    flex-wrap: wrap;
+  }
+
+  .player-tool-status {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
   .player-pad,
   .player-actions {
     grid-template-columns: repeat(2, 56px);

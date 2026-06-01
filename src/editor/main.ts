@@ -28,6 +28,7 @@ import {
   canvasGuidePanelAnnotationInput,
   canvasGuidePanelTargetsForStroke,
 } from "./canvasGuidePanel";
+import { embeddedProjectFromDocument } from "../project/embeddedProject";
 import { RuntimeWorld } from "../runtime/world";
 import { cloneJson, makeId, type EntityId, type Rect, type ResourceId, type Result, type SceneId, type Transform2D, type Vec2 } from "../shared/types";
 import type { Resource, ResourceBinding, TargetRef, Task } from "../project/schema";
@@ -379,15 +380,26 @@ window.requestAnimationFrame(() => focusSelectedOrFitWorld("initial", { zoom: 1 
 loop(lastTime);
 const PROJECT_MAINTENANCE_INTERVAL_MS = 10 * 60 * 1000;
 window.setInterval(runScheduledProjectMaintenance, PROJECT_MAINTENANCE_INTERVAL_MS);
-window.setInterval(() => {
-  void autoLoadProjectFromDisk();
-}, DISK_AUTO_LOAD_INTERVAL_MS);
+if (!staticExportMode()) {
+  window.setInterval(() => {
+    void autoLoadProjectFromDisk();
+  }, DISK_AUTO_LOAD_INTERVAL_MS);
+}
 
 async function loadInitialProject(handoffProject?: Project): Promise<{ project: Project; notice: string; loadedFromDisk: boolean }> {
   if (handoffProject) {
     return {
       project: handoffProject,
       notice: "已接收游戏暂停现场，自动保存就绪",
+      loadedFromDisk: false,
+    };
+  }
+
+  const embeddedProject = embeddedProjectFromDocument();
+  if (staticExportMode() && embeddedProject) {
+    return {
+      project: embeddedProject,
+      notice: "已载入静态演示项目，本地浏览器会保存后续编辑",
       loadedFromDisk: false,
     };
   }
@@ -401,6 +413,14 @@ async function loadInitialProject(handoffProject?: Project): Promise<{ project: 
     };
   }
 
+  if (embeddedProject) {
+    return {
+      project: embeddedProject,
+      notice: "已载入静态演示项目，本地浏览器会保存后续编辑",
+      loadedFromDisk: false,
+    };
+  }
+
   return {
     project: createStarterProject(starterProjectOptionsFromPage()),
     notice: "未找到磁盘项目，已创建初始项目，自动保存已开启",
@@ -411,6 +431,10 @@ async function loadInitialProject(handoffProject?: Project): Promise<{ project: 
 function starterProjectOptionsFromPage(): { resourceBasePath?: string } {
   const resourceBasePath = document.querySelector<HTMLMetaElement>('meta[name="webhachimi-sample-resource-base"]')?.content.trim();
   return resourceBasePath ? { resourceBasePath } : {};
+}
+
+function staticExportMode(): boolean {
+  return Boolean(document.querySelector<HTMLMetaElement>('meta[name="webhachimi-static-export"]')?.content.trim());
 }
 
 async function getAiExecutor(): Promise<AiTaskExecutor> {
