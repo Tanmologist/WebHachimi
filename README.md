@@ -27,9 +27,7 @@ from the same export path that maintainers can run locally:
 
 The demo is intentionally player-only: it proves that a WebHachimi project can
 be exported into a standalone static web package without the local editor API.
-Use the Vite entries below for the editable tool surface. If the demo URL still
-returns 404 on a fresh repository setup, enable GitHub Pages with the publishing
-source set to GitHub Actions, then rerun the Pages Demo workflow.
+Use the Vite entries below for the editable tool surface.
 
 ## Project Snapshot
 
