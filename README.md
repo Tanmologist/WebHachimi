@@ -15,6 +15,8 @@ module boundaries, runtime/editor handoff, static game export, automated smoke
 coverage, and making the codebase easier for maintainers and coding agents to
 review safely.
 
+![WebHachimi editor overview](docs/assets/editor-overview.png)
+
 ## Project Snapshot
 
 - Public OSS repository maintained by `Tanmologist`.
@@ -30,6 +32,15 @@ review safely.
 
 This workspace is the new main project. Legacy files are kept here only as
 comparison material while the editor is rebuilt and expanded.
+
+## Documentation
+
+- [Architecture](ARCHITECTURE.md): module boundaries and data flow.
+- [Roadmap](ROADMAP.md): current priorities and planned milestones.
+- [Maintainer guide](docs/maintainer-guide.md): release, verification, and triage workflow.
+- [Editor guide](docs/editor-guide.md): practical overview of the current editor surface.
+- [Verification guide](docs/verification.md): smoke, timing, autonomy, and export checks.
+- [Cleanup plan](CLEANUP_PLAN.md): what legacy material is retained and why.
 
 ## Recommended Run
 
