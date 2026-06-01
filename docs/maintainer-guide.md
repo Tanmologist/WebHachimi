@@ -43,7 +43,9 @@ npm run pages:verify
 
 On the first repository setup, confirm GitHub Pages is configured to publish
 from GitHub Actions in repository settings. The workflow handles build,
-verification, artifact upload, and deployment after that.
+verification, artifact upload, and deployment after that. Until Pages is
+enabled, the workflow still builds and verifies the static demo, then skips the
+deployment step.
 
 ## Release Checklist
 
