@@ -1,3 +1,6 @@
+// Owns the Pixi player view for packaged games: scene layers, camera follow, HUD,
+// texture caches, and per-frame debug/combat overlays. Keep this loop low-allocation;
+// gameplay state remains in RuntimeWorld and the editor renderer has its own surface.
 import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
 import { combatAttackRectForEntity } from "../combat/actions";
 import type { Entity, Resource, Scene } from "../project/schema";
@@ -7,6 +10,8 @@ import { boundsFor } from "../runtime/collision";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Rect, Vec2 } from "../shared/types";
 import { playerCameraLayout } from "./cameraLayout";
+
+type LabelFontWeight = "700" | "800" | "900";
 
 export type PlayerRendererOptions = {
   host: HTMLElement;
@@ -21,6 +26,7 @@ export class PlayerRenderer {
   private readonly screenOverlay = new Graphics();
   private readonly graphicsPool: Graphics[] = [];
   private readonly spritePool: Sprite[] = [];
+  private readonly textPool: Text[] = [];
   private readonly imageTextures = new Map<string, Texture>();
   private readonly frameTextures = new Map<string, Texture>();
   private readonly imageTextureLoads = new Map<string, Promise<void>>();
@@ -76,8 +82,11 @@ export class PlayerRenderer {
     this.removeResizeFallback?.();
     this.frameTextures.forEach((texture) => texture.destroy(false));
     this.frameTextures.clear();
+    this.imageTextures.forEach((texture) => texture.destroy(false));
+    this.imageTextures.clear();
     this.drainGraphicsPool();
     this.drainSpritePool();
+    this.drainTextPool();
     try {
       if (this.hasLiveRenderer()) this.app.destroy(true);
     } catch {
@@ -85,20 +94,21 @@ export class PlayerRenderer {
     }
   }
 
-  render(world: RuntimeWorld): void {
+  render(world: RuntimeWorld, deltaMs = 1000 / 60): void {
     if (!this.hasLiveRenderer()) return;
     this.lastWorld = world;
     this.recycleWorldLayer();
-    const player = findPlayer(world.allEntities());
-    if (player) this.follow(player.transform.position);
+    const entities = world.allEntities();
+    const player = findPlayer(entities);
+    if (player) this.follow(player.transform.position, deltaMs);
     this.layoutWorld(world.screenShakeOffset());
     this.drawBackdrop();
-    this.drawAttackTelegraphs(world);
-    this.drawChargeStates(world);
-    this.drawDodgeAfterimages(world);
-    world.allEntities().forEach((entity) => this.drawEntity(entity, world));
-    world.allEntities().forEach((entity) => this.drawHealthBar(entity, world));
-    this.drawScreenEffects(world);
+    this.drawAttackTelegraphs(world, entities);
+    this.drawChargeStates(world, entities);
+    this.drawDodgeAfterimages(world, entities);
+    entities.forEach((entity) => this.drawEntity(entity, world));
+    entities.forEach((entity) => this.drawHealthBar(entity, world));
+    this.drawScreenEffects(world, entities);
     this.drawHud(world, player);
   }
 
@@ -112,9 +122,12 @@ export class PlayerRenderer {
     this.worldLayer.position.set(layout.x + offset.x, layout.y + offset.y);
   }
 
-  private follow(target: Vec2): void {
-    this.camera.x += (target.x - this.camera.x) * 0.12;
-    this.camera.y += (target.y - 40 - this.camera.y) * 0.1;
+  private follow(target: Vec2, deltaMs: number): void {
+    const dt = Math.max(0, Math.min(deltaMs, 100)) / 1000;
+    const followX = 1 - Math.exp(-7.7 * dt);
+    const followY = 1 - Math.exp(-6.3 * dt);
+    this.camera.x += (target.x - this.camera.x) * followX;
+    this.camera.y += (target.y - 40 - this.camera.y) * followY;
   }
 
   private hasLiveRenderer(): boolean {
@@ -258,9 +271,9 @@ export class PlayerRenderer {
     this.hudText.position.set(14, 12);
   }
 
-  private drawAttackTelegraphs(world: RuntimeWorld): void {
+  private drawAttackTelegraphs(world: RuntimeWorld, entities: Entity[]): void {
     const timeMs = world.clock.timeMs;
-    for (const entity of world.allEntities()) {
+    for (const entity of entities) {
       if (entity.runtime?.defeated || !entity.collider) continue;
       const start = entity.runtime?.attackStartMs;
       const activeUntil = entity.runtime?.attackActiveUntilMs;
@@ -288,9 +301,9 @@ export class PlayerRenderer {
     }
   }
 
-  private drawDodgeAfterimages(world: RuntimeWorld): void {
+  private drawDodgeAfterimages(world: RuntimeWorld, entities: Entity[]): void {
     const timeMs = world.clock.timeMs;
-    for (const entity of world.allEntities()) {
+    for (const entity of entities) {
       const shadowRect = entity.runtime?.dodgeShadowRect;
       const shadowUntil = entity.runtime?.dodgeShadowUntilMs;
       if (!shadowRect || shadowUntil === undefined || timeMs >= shadowUntil) continue;
@@ -318,10 +331,10 @@ export class PlayerRenderer {
     this.worldLayer.addChild(graphics);
   }
 
-  private drawChargeStates(world: RuntimeWorld): void {
+  private drawChargeStates(world: RuntimeWorld, entities: Entity[]): void {
     const frame = world.clock.frame;
     const timeMs = world.clock.timeMs;
-    for (const entity of world.allEntities()) {
+    for (const entity of entities) {
       if (entity.runtime?.defeated || !entity.collider) continue;
       const charging = (entity.runtime?.chargeHeldMs ?? 0) > 0;
       const superReady = timeMs < (entity.runtime?.superParryUntilMs ?? -1);
@@ -340,15 +353,7 @@ export class PlayerRenderer {
   }
 
   private drawWorldLabel(text: string, x: number, y: number, fill: string): void {
-    const label = new Text({
-      text,
-      style: {
-        fill,
-        fontFamily: "Inter, Microsoft YaHei, sans-serif",
-        fontSize: 11,
-        fontWeight: "800",
-      },
-    });
+    const label = this.takeText(text, fill, 11, "800");
     label.anchor.set(0.5, 1);
     label.position.set(x, y);
     this.worldLayer.addChild(label);
@@ -373,11 +378,11 @@ export class PlayerRenderer {
     this.worldLayer.addChild(bar);
   }
 
-  private drawScreenEffects(world: RuntimeWorld): void {
+  private drawScreenEffects(world: RuntimeWorld, entities: Entity[]): void {
     this.screenOverlay.clear();
     const timeMs = world.clock.timeMs;
     let remainingMs = 0;
-    for (const entity of world.allEntities()) {
+    for (const entity of entities) {
       remainingMs = Math.max(remainingMs, (entity.runtime?.perfectDodgeUntilMs ?? -1) - timeMs);
     }
     if (remainingMs <= 0) return;
@@ -398,6 +403,9 @@ export class PlayerRenderer {
       } else if (child instanceof Sprite) {
         resetSprite(child);
         this.spritePool.push(child);
+      } else if (child instanceof Text) {
+        resetText(child);
+        this.textPool.push(child);
       } else {
         child.destroy({ children: true });
       }
@@ -423,12 +431,33 @@ export class PlayerRenderer {
     return new Sprite(texture);
   }
 
+  private takeText(text: string, fill: string, fontSize: number, fontWeight: LabelFontWeight): Text {
+    const item = this.textPool.pop();
+    const style = {
+      fill,
+      fontFamily: "Inter, Microsoft YaHei, sans-serif",
+      fontSize,
+      fontWeight,
+    };
+    if (item) {
+      resetText(item);
+      item.text = text;
+      item.style = style;
+      return item;
+    }
+    return new Text({ text, style });
+  }
+
   private drainGraphicsPool(): void {
     for (const item of this.graphicsPool.splice(0)) item.destroy();
   }
 
   private drainSpritePool(): void {
     for (const item of this.spritePool.splice(0)) item.destroy();
+  }
+
+  private drainTextPool(): void {
+    for (const item of this.textPool.splice(0)) item.destroy();
   }
 
   private loadImageTexture(imagePath: string): void {
@@ -540,4 +569,14 @@ function resetSprite(item: Sprite): void {
   item.alpha = 1;
   item.visible = true;
   item.tint = 0xffffff;
+}
+
+function resetText(item: Text): void {
+  item.text = "";
+  item.anchor.set(0, 0);
+  item.position.set(0, 0);
+  item.scale.set(1, 1);
+  item.rotation = 0;
+  item.alpha = 1;
+  item.visible = true;
 }

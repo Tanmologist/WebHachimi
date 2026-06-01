@@ -1,3 +1,6 @@
+// Boots the standalone player entry: project loading, RuntimeWorld setup, input binding,
+// editor handoff, and the requestAnimationFrame loop. Renderer-specific work stays in
+// PlayerRenderer; simulation stays fixed-step inside RuntimeWorld.
 import "./styles.css";
 import { normalizeProjectDefaults, type Project } from "../project/schema";
 import { consumeEditorHandoff, createEditorHandoff, restoreWorldFromHandoff, saveEditorHandoff } from "../project/editorHandoff";
@@ -87,7 +90,7 @@ function loop(time: number, renderer: PlayerRenderer, world: RuntimeWorld): void
   const delta = Math.min(time - lastTime, 80);
   lastTime = time;
   world.pushDelta(delta);
-  renderer.render(world);
+  renderer.render(world, delta);
   raf = requestAnimationFrame((nextTime) => loop(nextTime, renderer, world));
 }
 

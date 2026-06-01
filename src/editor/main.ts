@@ -1,3 +1,6 @@
+// Owns the browser editor workbench: project state wiring, canvas input, resource import,
+// SuperBrush capture, task creation, and persistence triggers. Keep hot UI paths bounded:
+// long-running servers/tests live outside this file, while captures/imports avoid sync stalls.
 import "./styles.css";
 import type { AiTaskExecutionResult, AiTaskExecutor } from "../ai/taskExecutor";
 import { attackTouchKindForEntities, planMovedAttackMovementOffsets, planMovedAttackTouchOffsets } from "../combat/hitboxEdit";
@@ -206,6 +209,9 @@ if (handoff?.snapshot) world.restoreSnapshot(handoff.snapshot);
 const renderer = new V2Renderer();
 let animatedResourcePresent = sceneHasVisibleAnimatedResource(project);
 const DISK_AUTO_LOAD_INTERVAL_MS = 4000;
+const MAX_BROWSER_IMPORT_FILES = 10;
+const MAX_BROWSER_IMPORT_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_BROWSER_IMPORT_TOTAL_BYTES = 24 * 1024 * 1024;
 
 let selectedId = firstPersistentSceneEntityId(scene);
 let selectedPart: CanvasTargetPart = "body";
@@ -483,14 +489,16 @@ function bindUi(): void {
   root.querySelectorAll('[data-action="back-super-brush"]').forEach((button) => {
     button.addEventListener("click", closeSuperBrushTaskDialog);
   });
-  root.querySelector('[data-action="queue-super-brush-task"]')?.addEventListener("click", queueSuperBrushTaskFromDialog);
+  root.querySelector('[data-action="queue-super-brush-task"]')?.addEventListener("click", () => {
+    void queueSuperBrushTaskFromDialog();
+  });
   root.querySelectorAll('[data-action="cancel-super-brush-session"]').forEach((button) => {
     button.addEventListener("click", cancelSuperBrushSession);
   });
   superBrushTaskInput.addEventListener("keydown", (event) => {
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
-      queueSuperBrushTaskFromDialog();
+      void queueSuperBrushTaskFromDialog();
     }
   });
   taskInput.addEventListener("paste", onTaskInputPaste);
@@ -2268,7 +2276,7 @@ function closeSuperBrushTaskDialog(): void {
   renderer.canvas().focus();
 }
 
-function queueSuperBrushTaskFromDialog(): void {
+async function queueSuperBrushTaskFromDialog(): Promise<void> {
   const draft = pendingBrush;
   const userText = superBrushTaskInput.value.trim();
   if (!draft || !hasMeaningfulSuperBrushContext(draft)) {
@@ -2283,10 +2291,14 @@ function queueSuperBrushTaskFromDialog(): void {
     return;
   }
 
+  superBrushTaskError = "";
+  notice = "Capturing SuperBrush evidence...";
+  renderUi();
+  const visualEvidence = await buildSuperBrushVisualEvidenceInput(draft);
   const result = createTaskFromSuperBrush({
     userText,
     draft,
-    visualEvidence: buildSuperBrushVisualEvidenceInput(draft),
+    visualEvidence,
   });
   if (!result.ok) {
     superBrushTaskError = result.error;
@@ -2321,7 +2333,7 @@ function queueSuperBrushTaskFromDialog(): void {
   renderAll();
 }
 
-function buildSuperBrushVisualEvidenceInput(draft: SuperBrushDraft): BrushVisualEvidenceInput {
+async function buildSuperBrushVisualEvidenceInput(draft: SuperBrushDraft): Promise<BrushVisualEvidenceInput> {
   const viewport = renderer.viewportState();
   const canvas = renderer.canvas();
   const canvasSize = {
@@ -2344,21 +2356,21 @@ function buildSuperBrushVisualEvidenceInput(draft: SuperBrushDraft): BrushVisual
       canvasSize,
     },
     entities: editableEntities(),
-    imageRefs: captureBrushEvidenceImageRefs(evidence),
+    imageRefs: await captureBrushEvidenceImageRefs(evidence),
   };
 }
 
-function captureBrushEvidenceImageRefs(evidence: BrushVisualEvidence): BrushVisualEvidenceInput["imageRefs"] {
+async function captureBrushEvidenceImageRefs(evidence: BrushVisualEvidence): Promise<BrushVisualEvidenceInput["imageRefs"]> {
   const refs: NonNullable<BrushVisualEvidenceInput["imageRefs"]> = {};
   for (const frame of evidence.frames) {
-    const imageRef = captureBrushFrameDataUrl(frame);
+    const imageRef = await captureBrushFrameDataUrl(frame);
     if (!imageRef) continue;
     refs[frame.id] = { imageRef, imageMime: "image/jpeg" };
   }
   return Object.keys(refs).length > 0 ? refs : undefined;
 }
 
-function captureBrushFrameDataUrl(frame: BrushVisualFrame): string | undefined {
+async function captureBrushFrameDataUrl(frame: BrushVisualFrame): Promise<string | undefined> {
   const canvas = renderer.canvas();
   const sourceRect = frame.pixelRect || { x: 0, y: 0, w: canvas.clientWidth || canvas.width, h: canvas.clientHeight || canvas.height };
   const cssWidth = Math.max(1, canvas.clientWidth || canvas.width || 1);
@@ -2381,10 +2393,26 @@ function captureBrushFrameDataUrl(frame: BrushVisualFrame): string | undefined {
   if (!context) return undefined;
   context.drawImage(canvas, sx, sy, sw, sh, 0, 0, output.width, output.height);
   try {
-    return output.toDataURL("image/jpeg", 0.82);
+    return await canvasToDataUrl(output, "image/jpeg", 0.82);
   } catch {
     return undefined;
   }
+}
+
+function canvasToDataUrl(canvas: HTMLCanvasElement, mime: string, quality: number): Promise<string> {
+  if (!canvas.toBlob) return Promise.resolve(canvas.toDataURL(mime, quality));
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("canvas capture failed"));
+        return;
+      }
+      const reader = new FileReader();
+      reader.addEventListener("load", () => resolve(String(reader.result || "")));
+      reader.addEventListener("error", () => reject(reader.error || new Error("blob read failed")));
+      reader.readAsDataURL(blob);
+    }, mime, quality);
+  });
 }
 
 function intersectRects(left: Rect, right: Rect): Rect | undefined {
@@ -3669,20 +3697,84 @@ function shouldTryLocalClipboardFiles(data: DataTransfer | null): boolean {
 }
 
 async function importResourceFiles(files: File[]): Promise<void> {
-  const supported = files;
-  if (supported.length === 0) {
+  const { accepted, skipped } = limitBrowserResourceFiles(files);
+  if (accepted.length === 0) {
+    if (skipped.length > 0) {
+      notice = skippedResourceImportNotice(skipped);
+      renderAll();
+      return;
+    }
     notice = "没有从剪贴板或文件选择中读取到可用资源";
     renderAll();
     return;
   }
-  const imported = await Promise.all(
-    supported.map(async (file, index) => ({
-      file,
-      dataUrl: await readFileAsDataUrl(file),
-      index,
-    })),
-  );
+  const imported: ImportedFileResource[] = [];
+  for (const [index, file] of accepted.entries()) {
+    try {
+      imported.push({
+        file,
+        dataUrl: await readFileAsDataUrl(file),
+        index,
+      });
+    } catch {
+      skipped.push({ fileName: file.name || `file ${index + 1}`, reason: "read failed" });
+    }
+  }
+  if (imported.length === 0) {
+    notice = skippedResourceImportNotice(skipped);
+    renderAll();
+    return;
+  }
   addImportedResources(resourceMetadataForImportedFiles(imported));
+  if (skipped.length > 0) {
+    notice = `Imported ${imported.length} file(s); skipped ${skipped.length}. ${skippedResourceImportSummary(skipped)}`;
+    renderUi();
+  }
+}
+
+type ResourceImportSkip = {
+  fileName?: string;
+  reason: string;
+};
+
+function limitBrowserResourceFiles(files: File[]): { accepted: File[]; skipped: ResourceImportSkip[] } {
+  const accepted: File[] = [];
+  const skipped: ResourceImportSkip[] = [];
+  let totalBytes = 0;
+  for (const [index, file] of files.entries()) {
+    const fileName = file.name || `file ${index + 1}`;
+    if (accepted.length >= MAX_BROWSER_IMPORT_FILES) {
+      skipped.push({ fileName, reason: `only ${MAX_BROWSER_IMPORT_FILES} files per import` });
+      continue;
+    }
+    if (file.size > MAX_BROWSER_IMPORT_FILE_BYTES) {
+      skipped.push({ fileName, reason: `larger than ${formatBytes(MAX_BROWSER_IMPORT_FILE_BYTES)}` });
+      continue;
+    }
+    if (totalBytes + file.size > MAX_BROWSER_IMPORT_TOTAL_BYTES) {
+      skipped.push({ fileName, reason: `total import larger than ${formatBytes(MAX_BROWSER_IMPORT_TOTAL_BYTES)}` });
+      continue;
+    }
+    totalBytes += file.size;
+    accepted.push(file);
+  }
+  return { accepted, skipped };
+}
+
+function skippedResourceImportNotice(skipped: ResourceImportSkip[]): string {
+  return skipped.length
+    ? `No files imported. ${skippedResourceImportSummary(skipped)}`
+    : "No importable files found.";
+}
+
+function skippedResourceImportSummary(skipped: ResourceImportSkip[]): string {
+  return skipped.slice(0, 3).map((item) => `${item.fileName || "file"}: ${item.reason}`).join("; ");
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${Math.round(bytes / 1024 / 1024)}MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)}KB`;
+  return `${bytes}B`;
 }
 
 async function importLocalClipboardResources(options: { silentEmpty?: boolean } = {}): Promise<void> {
