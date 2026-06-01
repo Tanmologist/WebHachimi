@@ -1,6 +1,7 @@
 # WebHachimi Engine
 
 [![CI](https://github.com/Tanmologist/WebHachimi/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanmologist/WebHachimi/actions/workflows/ci.yml)
+[![Pages Demo](https://github.com/Tanmologist/WebHachimi/actions/workflows/pages.yml/badge.svg)](https://github.com/Tanmologist/WebHachimi/actions/workflows/pages.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6.x-blue.svg)](https://www.typescriptlang.org/)
 
@@ -16,6 +17,17 @@ coverage, and making the codebase easier for maintainers and coding agents to
 review safely.
 
 ![WebHachimi editor overview](docs/assets/editor-overview.png)
+
+## Live Demo
+
+The GitHub Pages workflow publishes the static Hachimi Nanbei Lvdong player demo
+from the same export path that maintainers can run locally:
+
+[Open the static demo](https://tanmologist.github.io/WebHachimi/)
+
+The demo is intentionally player-only: it proves that a WebHachimi project can
+be exported into a standalone static web package without the local editor API.
+Use the Vite entries below for the editable tool surface.
 
 ## Project Snapshot
 
@@ -139,6 +151,15 @@ npm run smoke:export-game
 This smoke check inspects the generated package and boots it in Chromium from a
 temporary static server to catch missing files, local API requests, and player
 startup errors.
+
+The Pages workflow uses the same exporter through:
+
+```powershell
+npm run pages:build
+npm run pages:verify
+```
+
+It uploads `exports/pages/` as the public demo artifact.
 
 For a production preview after building, run:
 

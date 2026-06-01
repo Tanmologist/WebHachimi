@@ -34,13 +34,23 @@ For static export changes:
 npm run smoke:export-game
 ```
 
+For the public Pages demo:
+
+```powershell
+npm run pages:build
+npm run pages:verify
+```
+
 ## Release Checklist
 
 1. Confirm the default branch is green in CI.
 2. Run `npm run verify` locally for broad changes.
 3. Run `npm run smoke:export-game` when export behavior changed.
 4. Update README or docs if user-facing workflows changed.
-5. Tag the release or create a GitHub release with the verification summary.
+5. Run `npm run pages:build` and `npm run pages:verify` for demo-affecting
+   changes.
+6. Tag the release or create a GitHub release with the verification summary.
+7. Confirm the Pages Demo workflow published the expected static artifact.
 
 ## Triage Priorities
 

@@ -38,6 +38,16 @@ This builds the concrete game, exports a static package, serves it from a
 temporary local server, and boots it in Chromium to catch missing assets, local
 API dependencies, and startup errors.
 
+## Pages Demo Verification
+
+```powershell
+npm run pages:build
+npm run pages:verify
+```
+
+These commands prepare and verify the same `exports/pages/` directory that the
+GitHub Pages workflow uploads as the public static demo.
+
 ## Browser Verification
 
 For UI changes, open the relevant local entry in a real browser and confirm:

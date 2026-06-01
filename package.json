@@ -30,6 +30,8 @@
     "build:editor": "vite build --mode editor",
     "build:game": "vite build --mode game",
     "export:game": "node scripts/export-static-game.cjs hachimi-nanbei-lvdong",
+    "pages:build": "npm run build:game && node scripts/export-static-game.cjs hachimi-nanbei-lvdong --out exports/pages --skip-build",
+    "pages:verify": "tsx src/testing/staticGameExportSmoke.ts exports/pages",
     "smoke:export-game": "npm run build:game && node scripts/export-static-game.cjs hachimi-nanbei-lvdong --out exports/smoke-hachimi-nanbei-lvdong --skip-build && tsx src/testing/staticGameExportSmoke.ts exports/smoke-hachimi-nanbei-lvdong",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "clean:logs": "node -e \"const fs=require('node:fs'); for (const name of fs.readdirSync('.')) if (name.endsWith('.log')) fs.rmSync(name,{force:true});\"",
