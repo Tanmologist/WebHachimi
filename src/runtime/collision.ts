@@ -1,5 +1,26 @@
+// Owns broad-phase and narrow-phase collision queries for RuntimeWorld and editor
+// picking helpers. Public entry points return project Entity references, while the
+// private helpers keep AABB, oriented box, and polygon checks allocation-light
+// enough for fixed-step runtime use.
 import type { ColliderComponent, Entity } from "../project/schema";
+import {
+  boundsFor,
+  boundsForPoints,
+  boxAxes,
+  boxCorners,
+  entityColliderWorldPolygon as colliderWorldPolygon,
+  entityUsesOrientedBox as canUseOrientedBox,
+  overlaps,
+  orientedBoxForEntity as orientedBoxFor,
+  orientedBoxesOverlap,
+  polygonsOverlap,
+  projectCorners,
+  rectAsOrientedBox as rectAsBox,
+  rectPolygon,
+} from "../project/entityGeometry";
 import type { Rect, Vec2 } from "../shared/types";
+
+export { boundsFor, overlaps } from "../project/entityGeometry";
 
 export type CollisionHit = {
   a: Entity;
@@ -15,26 +36,106 @@ export type CollisionQuery = {
   includeTriggers?: boolean;
 };
 
-export function boundsFor(entity: Entity): Rect {
-  const polygon = colliderWorldPolygon(entity);
-  if (polygon && !canUseOrientedBox(entity)) return boundsForPoints(polygon);
-  const size = entity.collider?.size || { x: 0, y: 0 };
-  const scale = entity.transform.scale || { x: 1, y: 1 };
-  const w = size.x * Math.max(Math.abs(scale.x), 0.001);
-  const h = size.y * Math.max(Math.abs(scale.y), 0.001);
-  const rotation = (entity.transform.rotation || 0) + (entity.collider?.rotation || 0);
-  const extents = rotatedAabbSize(w, h, rotation);
-  const center = colliderCenter(entity);
-  return {
-    x: center.x - extents.x / 2,
-    y: center.y - extents.y / 2,
-    w: extents.x,
-    h: extents.y,
-  };
+const staticGridCellSize = 256;
+const maxStaticGridCells = 64;
+
+class CollisionBoundsCache {
+  private readonly bounds = new Map<string, Rect>();
+
+  forEntity(entity: Entity): Rect {
+    const cached = this.bounds.get(entity.id);
+    if (cached) return cached;
+    const bounds = boundsFor(entity);
+    this.bounds.set(entity.id, bounds);
+    return bounds;
+  }
 }
 
-export function overlaps(a: Rect, b: Rect): boolean {
-  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+class StaticCollisionBroadPhase {
+  private readonly broad: Entity[] = [];
+  private readonly grid = new Map<string, Entity[]>();
+  private readonly order = new Map<string, number>();
+
+  constructor(
+    staticEntities: Entity[],
+    private readonly boundsCache: CollisionBoundsCache,
+    private readonly cellSize = staticGridCellSize,
+  ) {
+    staticEntities.forEach((entity, index) => this.insert(entity, index));
+  }
+
+  candidatesFor(bounds: Rect, seen: Set<string>): Entity[] {
+    seen.clear();
+    const candidates: Entity[] = [];
+    for (const entity of this.broad) appendStaticCandidate(candidates, seen, entity);
+    const range = gridRangeForBounds(bounds, this.cellSize);
+    for (let cellY = range.minY; cellY <= range.maxY; cellY += 1) {
+      for (let cellX = range.minX; cellX <= range.maxX; cellX += 1) {
+        const bucket = this.grid.get(gridKey(cellX, cellY));
+        if (!bucket) continue;
+        for (const entity of bucket) appendStaticCandidate(candidates, seen, entity);
+      }
+    }
+    candidates.sort((left, right) => (this.order.get(left.id) ?? 0) - (this.order.get(right.id) ?? 0));
+    return candidates;
+  }
+
+  private insert(entity: Entity, index: number): void {
+    this.order.set(entity.id, index);
+    const bounds = this.boundsCache.forEntity(entity);
+    const range = gridRangeForBounds(bounds, this.cellSize);
+    const cellCount = (range.maxX - range.minX + 1) * (range.maxY - range.minY + 1);
+    if (cellCount > maxStaticGridCells) {
+      this.broad.push(entity);
+      return;
+    }
+    for (let cellY = range.minY; cellY <= range.maxY; cellY += 1) {
+      for (let cellX = range.minX; cellX <= range.maxX; cellX += 1) {
+        const key = gridKey(cellX, cellY);
+        const bucket = this.grid.get(key);
+        if (bucket) bucket.push(entity);
+        else this.grid.set(key, [entity]);
+      }
+    }
+  }
+}
+
+export class CollisionPairCollector {
+  private readonly boundsCache = new CollisionBoundsCache();
+  private readonly seenStaticIds = new Set<string>();
+
+  collectDynamicPairs(entities: Entity[]): CollisionHit[] {
+    const hits: CollisionHit[] = [];
+    const dynamicEntities: Entity[] = [];
+    const staticEntities: Entity[] = [];
+
+    for (const entity of entities) {
+      if (!entity.collider?.solid) continue;
+      if (entity.body?.mode === "dynamic") dynamicEntities.push(entity);
+      else staticEntities.push(entity);
+    }
+
+    const staticBroadPhase = new StaticCollisionBroadPhase(staticEntities, this.boundsCache);
+
+    for (let index = 0; index < dynamicEntities.length; index += 1) {
+      const dynamic = dynamicEntities[index];
+      for (let otherIndex = index + 1; otherIndex < dynamicEntities.length; otherIndex += 1) {
+        this.collectHit(dynamic, dynamicEntities[otherIndex], hits);
+      }
+      for (const other of staticBroadPhase.candidatesFor(this.boundsCache.forEntity(dynamic), this.seenStaticIds)) {
+        this.collectHit(dynamic, other, hits);
+      }
+    }
+
+    return hits;
+  }
+
+  private collectHit(a: Entity, b: Entity, hits: CollisionHit[]): void {
+    if (!canCollide(a, b)) return;
+    if (!overlaps(this.boundsCache.forEntity(a), this.boundsCache.forEntity(b))) return;
+    const hit = collideAabb(a, b);
+    if (hit) hits.push(hit);
+  }
 }
 
 export function queryEntities(entities: Entity[], query: CollisionQuery): Entity[] {
@@ -71,28 +172,30 @@ export function collectPairs(entities: Entity[]): CollisionHit[] {
 }
 
 export function collectDynamicPairs(entities: Entity[]): CollisionHit[] {
-  const hits: CollisionHit[] = [];
-  const dynamicEntities: Entity[] = [];
-  const staticEntities: Entity[] = [];
-  const boundsCache = new Map<string, Rect>();
+  return new CollisionPairCollector().collectDynamicPairs(entities);
+}
 
-  for (const entity of entities) {
-    if (!entity.collider?.solid) continue;
-    if (entity.body?.mode === "dynamic") dynamicEntities.push(entity);
-    else staticEntities.push(entity);
-  }
+function appendStaticCandidate(candidates: Entity[], seen: Set<string>, entity: Entity): void {
+  if (seen.has(entity.id)) return;
+  seen.add(entity.id);
+  candidates.push(entity);
+}
 
-  for (let index = 0; index < dynamicEntities.length; index += 1) {
-    const dynamic = dynamicEntities[index];
-    for (let otherIndex = index + 1; otherIndex < dynamicEntities.length; otherIndex += 1) {
-      collectHit(dynamic, dynamicEntities[otherIndex], boundsCache, hits);
-    }
-    for (const other of staticEntities) {
-      collectHit(dynamic, other, boundsCache, hits);
-    }
-  }
+function gridRangeForBounds(bounds: Rect, cellSize: number): { minX: number; maxX: number; minY: number; maxY: number } {
+  return {
+    minX: Math.floor(bounds.x / cellSize),
+    maxX: maxCellIndex(bounds.x, bounds.w, cellSize),
+    minY: Math.floor(bounds.y / cellSize),
+    maxY: maxCellIndex(bounds.y, bounds.h, cellSize),
+  };
+}
 
-  return hits;
+function maxCellIndex(start: number, size: number, cellSize: number): number {
+  return Math.floor((start + Math.max(size, 0.001) - 0.001) / cellSize);
+}
+
+function gridKey(x: number, y: number): string {
+  return `${x}:${y}`;
 }
 
 function canCollide(a: Entity, b: Entity): boolean {
@@ -101,21 +204,6 @@ function canCollide(a: Entity, b: Entity): boolean {
   const includesSolid = a.collider.solid && b.collider.solid;
   if (!includesTrigger && !includesSolid) return false;
   return sharesLayer(a.collider, b.collider.layerMask) && sharesLayer(b.collider, a.collider.layerMask);
-}
-
-function cachedBounds(entity: Entity, cache: Map<string, Rect>): Rect {
-  const cached = cache.get(entity.id);
-  if (cached) return cached;
-  const bounds = boundsFor(entity);
-  cache.set(entity.id, bounds);
-  return bounds;
-}
-
-function collectHit(a: Entity, b: Entity, boundsCache: Map<string, Rect>, hits: CollisionHit[]): void {
-  if (!canCollide(a, b)) return;
-  if (!overlaps(cachedBounds(a, boundsCache), cachedBounds(b, boundsCache))) return;
-  const hit = collideAabb(a, b);
-  if (hit) hits.push(hit);
 }
 
 function collideAabb(a: Entity, b: Entity): CollisionHit | null {
@@ -173,218 +261,7 @@ function collideOrientedBoxes(a: Entity, b: Entity): CollisionHit | null | undef
   return { a, b, normal: bestNormal, depth: bestDepth, trigger: Boolean(a.collider?.trigger || b.collider?.trigger) };
 }
 
-function orientedBoxesOverlap(a: OrientedBox, b: OrientedBox): boolean {
-  for (const axis of [...boxAxes(a), ...boxAxes(b)]) {
-    const projectionA = projectCorners(boxCorners(a), axis);
-    const projectionB = projectCorners(boxCorners(b), axis);
-    const depth = Math.min(projectionA.max, projectionB.max) - Math.max(projectionA.min, projectionB.min);
-    if (depth <= 0) return false;
-  }
-  return true;
-}
-
-function colliderWorldPolygon(entity: Entity): Vec2[] | undefined {
-  if (!entity.collider) return undefined;
-  if (canUseOrientedBox(entity)) return boxCorners(orientedBoxFor(entity));
-  if (entity.collider.shape === "circle") return circlePolygon(entity);
-  if (entity.collider.shape === "polygon" && entity.collider.points && entity.collider.points.length >= 3) {
-    const center = colliderCenter(entity);
-    const rotation = (entity.transform.rotation || 0) + (entity.collider.rotation || 0);
-    const scale = entity.transform.scale || { x: 1, y: 1 };
-    return entity.collider.points.map((point) =>
-      rotateLocalPoint(
-        center,
-        {
-          x: point.x * Math.max(Math.abs(scale.x), 0.001),
-          y: point.y * Math.max(Math.abs(scale.y), 0.001),
-        },
-        rotation,
-      ),
-    );
-  }
-  return undefined;
-}
-
-function circlePolygon(entity: Entity): Vec2[] {
-  const center = colliderCenter(entity);
-  const size = entity.collider?.size || { x: 0, y: 0 };
-  const scale = entity.transform.scale || { x: 1, y: 1 };
-  const radius = entity.collider?.radius || Math.min(size.x, size.y) / 2;
-  const radiusX = Math.max(0.001, (radius || size.x / 2) * Math.max(Math.abs(scale.x), 0.001));
-  const radiusY = Math.max(0.001, (radius || size.y / 2) * Math.max(Math.abs(scale.y), 0.001));
-  const rotation = (entity.transform.rotation || 0) + (entity.collider?.rotation || 0);
-  const points: Vec2[] = [];
-  for (let index = 0; index < 24; index += 1) {
-    const angle = (Math.PI * 2 * index) / 24;
-    points.push(rotateLocalPoint(center, { x: Math.cos(angle) * radiusX, y: Math.sin(angle) * radiusY }, rotation));
-  }
-  return points;
-}
-
-function rectPolygon(rect: Rect): Vec2[] {
-  return [
-    { x: rect.x, y: rect.y },
-    { x: rect.x + rect.w, y: rect.y },
-    { x: rect.x + rect.w, y: rect.y + rect.h },
-    { x: rect.x, y: rect.y + rect.h },
-  ];
-}
-
-function polygonsOverlap(a: Vec2[], b: Vec2[]): boolean {
-  if (a.some((point) => pointInPolygon(point, b))) return true;
-  if (b.some((point) => pointInPolygon(point, a))) return true;
-  for (let indexA = 0; indexA < a.length; indexA += 1) {
-    const aStart = a[indexA];
-    const aEnd = a[(indexA + 1) % a.length];
-    for (let indexB = 0; indexB < b.length; indexB += 1) {
-      if (segmentsIntersect(aStart, aEnd, b[indexB], b[(indexB + 1) % b.length])) return true;
-    }
-  }
-  return false;
-}
-
-function pointInPolygon(point: Vec2, polygon: Vec2[]): boolean {
-  let inside = false;
-  for (let index = 0, previousIndex = polygon.length - 1; index < polygon.length; previousIndex = index, index += 1) {
-    const current = polygon[index];
-    const previous = polygon[previousIndex];
-    const intersects = current.y > point.y !== previous.y > point.y && point.x < ((previous.x - current.x) * (point.y - current.y)) / (previous.y - current.y || 0.000001) + current.x;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
-function segmentsIntersect(a: Vec2, b: Vec2, c: Vec2, d: Vec2): boolean {
-  const ab1 = cross(subtract(c, a), subtract(b, a));
-  const ab2 = cross(subtract(d, a), subtract(b, a));
-  const cd1 = cross(subtract(a, c), subtract(d, c));
-  const cd2 = cross(subtract(b, c), subtract(d, c));
-  return ab1 * ab2 <= 0 && cd1 * cd2 <= 0;
-}
-
-function boundsForPoints(points: Vec2[]): Rect {
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let maxY = Number.NEGATIVE_INFINITY;
-  for (const point of points) {
-    minX = Math.min(minX, point.x);
-    minY = Math.min(minY, point.y);
-    maxX = Math.max(maxX, point.x);
-    maxY = Math.max(maxY, point.y);
-  }
-  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY };
-}
-
-function rotateLocalPoint(center: Vec2, local: Vec2, rotation: number): Vec2 {
-  const cos = Math.cos(rotation);
-  const sin = Math.sin(rotation);
-  return {
-    x: center.x + local.x * cos - local.y * sin,
-    y: center.y + local.x * sin + local.y * cos,
-  };
-}
-
-function subtract(left: Vec2, right: Vec2): Vec2 {
-  return { x: left.x - right.x, y: left.y - right.y };
-}
-
-function cross(left: Vec2, right: Vec2): number {
-  return left.x * right.y - left.y * right.x;
-}
-
 function sharesLayer(collider: ColliderComponent, layerMask: string[]): boolean {
   if (collider.layerMask.length === 0 || layerMask.length === 0) return true;
   return collider.layerMask.some((layer) => layerMask.includes(layer));
-}
-
-function colliderCenter(entity: Entity): Vec2 {
-  const offset = entity.collider?.offset || { x: 0, y: 0 };
-  return {
-    x: entity.transform.position.x + offset.x,
-    y: entity.transform.position.y + offset.y,
-  };
-}
-
-function rotatedAabbSize(width: number, height: number, rotation: number): Vec2 {
-  const cos = Math.abs(Math.cos(rotation));
-  const sin = Math.abs(Math.sin(rotation));
-  return {
-    x: width * cos + height * sin,
-    y: width * sin + height * cos,
-  };
-}
-
-type OrientedBox = {
-  center: Vec2;
-  width: number;
-  height: number;
-  rotation: number;
-};
-
-function canUseOrientedBox(entity: Entity): boolean {
-  return Boolean(entity.collider && (!entity.collider.shape || entity.collider.shape === "box"));
-}
-
-function orientedBoxFor(entity: Entity): OrientedBox {
-  const size = entity.collider?.size || { x: 0, y: 0 };
-  const scale = entity.transform.scale || { x: 1, y: 1 };
-  return {
-    center: colliderCenter(entity),
-    width: size.x * Math.max(Math.abs(scale.x), 0.001),
-    height: size.y * Math.max(Math.abs(scale.y), 0.001),
-    rotation: (entity.transform.rotation || 0) + (entity.collider?.rotation || 0),
-  };
-}
-
-function rectAsBox(rect: Rect): OrientedBox {
-  return {
-    center: {
-      x: rect.x + rect.w / 2,
-      y: rect.y + rect.h / 2,
-    },
-    width: rect.w,
-    height: rect.h,
-    rotation: 0,
-  };
-}
-
-function boxAxes(box: OrientedBox): Vec2[] {
-  const cos = Math.cos(box.rotation);
-  const sin = Math.sin(box.rotation);
-  return [
-    { x: cos, y: sin },
-    { x: -sin, y: cos },
-  ];
-}
-
-function boxCorners(box: OrientedBox): Vec2[] {
-  const hw = box.width / 2;
-  const hh = box.height / 2;
-  return [
-    localToWorld(box, { x: -hw, y: -hh }),
-    localToWorld(box, { x: hw, y: -hh }),
-    localToWorld(box, { x: hw, y: hh }),
-    localToWorld(box, { x: -hw, y: hh }),
-  ];
-}
-
-function localToWorld(box: OrientedBox, local: Vec2): Vec2 {
-  const cos = Math.cos(box.rotation);
-  const sin = Math.sin(box.rotation);
-  return {
-    x: box.center.x + local.x * cos - local.y * sin,
-    y: box.center.y + local.x * sin + local.y * cos,
-  };
-}
-
-function projectCorners(corners: Vec2[], axis: Vec2): { min: number; max: number } {
-  let min = Number.POSITIVE_INFINITY;
-  let max = Number.NEGATIVE_INFINITY;
-  for (const corner of corners) {
-    const value = corner.x * axis.x + corner.y * axis.y;
-    min = Math.min(min, value);
-    max = Math.max(max, value);
-  }
-  return { min, max };
 }

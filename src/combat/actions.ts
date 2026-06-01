@@ -1,6 +1,6 @@
 import type { Entity } from "../project/schema";
+import { boundsFor } from "../project/entityGeometry";
 import type { Rect } from "../shared/types";
-import { boundsFor } from "../runtime/collision";
 import type {
   CombatActionDef,
   CombatActionId,

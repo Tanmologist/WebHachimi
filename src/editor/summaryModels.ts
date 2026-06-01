@@ -1,8 +1,56 @@
+// Owns small editor-facing view models for autonomous-test, timing-sweep, and
+// project-maintenance summaries. Inputs are structural data shapes so the
+// editor does not need to import concrete testing implementations.
 import type { AutonomyCycleResult } from "../ai/autonomyLoop";
 import type { ProjectMaintenanceReport } from "../project/maintenance";
 import type { Project, Task } from "../project/schema";
-import type { AutonomousTestSuiteReport } from "../testing/autonomousTesting";
-import type { ScriptedReactionRunResult } from "../testing/timingSweep";
+
+type ScriptedReactionRunSummarySource = {
+  status: string;
+  tickRate: number;
+  timeScale: number;
+  timeScaleMode?: "manual" | "ai-auto";
+  timeScaleReason?: string;
+  plan: {
+    impactFrame: number;
+    attackInputFrame: number;
+    attackStartedFrame?: number;
+    defenseInputFrame: number;
+    probeFrame: number;
+  };
+  script: { steps: unknown[] };
+  traceSummary: string;
+  timings: Array<{
+    label: string;
+    startTick: number;
+    endTick: number;
+    durationTicks: number;
+    durationMs: number;
+    scaledStartTimeMs: number;
+    scaledEndTimeMs: number;
+    scaledDurationMs: number;
+  }>;
+};
+
+type AutonomousSuiteReportSource = {
+  status: string;
+  usedFrozenSnapshot: boolean;
+  logs: { errors: number; warnings: number };
+  timings: { totalDurationMs: number; totalScaledDurationMs: number };
+  snapshots: unknown[];
+  traceSummary: string;
+  aiNextSteps: string[];
+  cases: Array<{
+    label: string;
+    kind: string;
+    status: string;
+    testRecordId?: string;
+    failureSnapshotRef?: string;
+    logs: { total: number; errors: number; warnings: number };
+    timings: { steps: number; totalDurationMs: number; totalScaledDurationMs: number };
+    aiNotes: string[];
+  }>;
+};
 
 export type SweepSummaryItem = { offset: number; status: string; expected?: string; label: string };
 export type ScriptedRunSummary = {
@@ -115,7 +163,7 @@ export function parseSweepSummary(summary: string): SweepSummaryItem[] {
     .filter((item) => Number.isFinite(item.offset));
 }
 
-export function scriptedRunSummary(result: ScriptedReactionRunResult): ScriptedRunSummary {
+export function scriptedRunSummary(result: ScriptedReactionRunSummarySource): ScriptedRunSummary {
   const timings = result.timings.map((timing) => ({
     label: timing.label,
     startTick: timing.startTick,
@@ -147,7 +195,7 @@ export function scriptedRunSummary(result: ScriptedReactionRunResult): ScriptedR
   };
 }
 
-export function autonomousSuiteSummary(report: AutonomousTestSuiteReport): AutonomousSuiteSummary {
+export function autonomousSuiteSummary(report: AutonomousSuiteReportSource): AutonomousSuiteSummary {
   return {
     status: report.status,
     usedFrozenSnapshot: report.usedFrozenSnapshot,

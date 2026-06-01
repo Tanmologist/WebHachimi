@@ -1,3 +1,3 @@
-export * from "../testing/simulationTestRunner";
-export * from "../testing/timingSweep";
-export * from "../testing/telemetry";
+export * from "../verification/simulationTestRunner";
+export * from "../verification/timingSweep";
+export * from "../verification/telemetry";

@@ -4,7 +4,7 @@ import { combatActionDefForEntity } from "../combat/actions";
 import type { CombatActionDef, CombatActionId, CombatWindowType } from "../combat/types";
 import { bodyModeLabel, escapeHtml, formatScale, typeLabel } from "./viewText";
 import type { CanvasTargetPart } from "./renderer";
-import { imageAttachments, isVisualResource, resourceAnimationLabel, resourceEffectPresetLabel, resourceEffectPresetOptions } from "./resourceAnimation";
+import { imageAttachments, isVisualResource, resourceAnimationLabel, resourceEffectPresetLabel, resourceEffectPresetOptions } from "../project/resourceAnimation";
 
 export function renderTreeItemHtml(
   entity: ReturnType<RuntimeWorld["allEntities"]>[number],

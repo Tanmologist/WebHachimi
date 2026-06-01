@@ -10,7 +10,7 @@ import {
   resourceFrameAtTime,
   resourceFrameCount,
   resourceHasTimelineEffect,
-} from "../editor/resourceAnimation";
+} from "../project/resourceAnimation";
 import { renderResourceLibraryHtml } from "../editor/panelViews";
 
 run("sheet animation selects equal grid frames without mutating the source image", () => {

@@ -1,3 +1,6 @@
+// Owns lightweight editor performance HUD state: render cadence, frame counters,
+// allocation-pool stats, and throttled text updates. It only consumes renderer
+// snapshots so the main editor loop can stay focused on simulation and UI work.
 import type { RendererStats } from "./renderer";
 
 export class EditorPerformanceController {
@@ -35,8 +38,8 @@ export class EditorPerformanceController {
     if (now - this.windowStartedAt < 500) return;
 
     const fps = Math.round((this.renderCount * 1000) / Math.max(1, now - this.windowStartedAt));
-    const created = stats.graphicsCreated + stats.spritesCreated;
-    const reused = stats.graphicsReused + stats.spritesReused;
+    const created = stats.graphicsCreated + stats.spritesCreated + stats.textsCreated;
+    const reused = stats.graphicsReused + stats.spritesReused + stats.textsReused;
     this.statsTextValue = `帧率 ${fps} · 渲染 ${stats.renderMs.toFixed(1)}毫秒 · 对象 ${stats.visibleObjects} · 池 ${reused}/${created}`;
     this.renderCount = 0;
     this.windowStartedAt = now;

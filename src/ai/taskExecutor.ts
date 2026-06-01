@@ -4,14 +4,14 @@ import type { ProjectStore } from "../project/projectStore";
 import { RuntimeWorld } from "../runtime/world";
 import { err, ok, type Result } from "../shared/types";
 import type { TaskId } from "../shared/types";
-import { SimulationTestRunner } from "../testing/simulationTestRunner";
-import { evaluateProjectChecks } from "../testing/projectVerification";
-import { MemoryTraceSink, summarizeTraceForAi, type TraceSink } from "../testing/telemetry";
+import { SimulationTestRunner } from "../verification/simulationTestRunner";
+import { evaluateProjectChecks } from "../verification/projectVerification";
+import { MemoryTraceSink, summarizeTraceForAi, type TraceSink } from "../verification/telemetry";
 import {
   runReactionWindowSweep as runTestingReactionWindowSweep,
   type ReactionWindowSweepConfig,
   type ReactionWindowSweepRunResult,
-} from "../testing/timingSweep";
+} from "../verification/timingSweep";
 import { createIntentPlan } from "./intentPlanner";
 import { decomposeTask } from "./taskDecomposition";
 import { validateExplicitTaskTargets } from "./taskTargets";

@@ -1,5 +1,5 @@
 import type { ColliderComponent, Entity, RenderComponent } from "../project/schema";
-import { boundsFor } from "../runtime/collision";
+import { boundsFor } from "../project/entityGeometry";
 import type { Transform2D, Vec2, EntityId } from "../shared/types";
 import type { CanvasTargetPart, TransformHandle } from "./renderer";
 import { clamp, computeMultiSelectionBounds, fromLocal, toLocal } from "./geometryMath";

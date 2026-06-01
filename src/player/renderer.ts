@@ -5,8 +5,8 @@ import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Text
 import { combatAttackRectForEntity } from "../combat/actions";
 import type { Entity, Resource, Scene } from "../project/schema";
 import { isAttackTouchEntity, isGameplayDebugEntity } from "../project/entityVisibility";
-import { isVisualResource, resourceFrameAtTime, type ResourceFrameRect } from "../editor/resourceAnimation";
-import { boundsFor } from "../runtime/collision";
+import { isVisualResource, resourceFrameAtTime, type ResourceFrameRect } from "../project/resourceAnimation";
+import { boundsFor } from "../project/entityGeometry";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Rect, Vec2 } from "../shared/types";
 import { playerCameraLayout } from "./cameraLayout";

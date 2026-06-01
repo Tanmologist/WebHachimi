@@ -117,13 +117,13 @@ import {
   resourceHasAnimation,
   resourceHasTimelineEffect,
   type ResourceEffectPresetOption,
-} from "./resourceAnimation";
+} from "../project/resourceAnimation";
 import { AutoSaveController } from "./autoSaveController";
 import { EditorTransactionController } from "./editorTransactionController";
 import { EditorPerformanceController } from "./editorPerformanceController";
 import { OutputLogController } from "./outputLogController";
 import { TaskSummaryController } from "./taskSummaryController";
-import { playerInputKeyForMouseButton, type PlayerInputKey } from "../player/input";
+import { playerInputKeyForMouseButton, type PlayerInputKey } from "../shared/playerInput";
 import {
   formatWorldSpeed,
   normalizeWorldSpeed,

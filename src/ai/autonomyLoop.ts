@@ -13,8 +13,8 @@ import type {
 import { createTask } from "../project/tasks";
 import { err, makeId, ok, type Result } from "../shared/types";
 import type { AutonomyRunId, EntityId, SnapshotId, TaskId, TestRecordId } from "../shared/types";
-import { runAutonomousTestSuite, type AutonomousTestCaseReport, type AutonomousTestSuiteReport } from "../testing/autonomousTesting";
-import type { TraceSink } from "../testing/telemetry";
+import { runAutonomousTestSuite, type AutonomousTestCaseReport, type AutonomousTestSuiteReport } from "../verification/autonomousTesting";
+import type { TraceSink } from "../verification/telemetry";
 import { AiTaskExecutor, type AiTaskExecutionResult } from "./taskExecutor";
 
 export type AutonomyLoopOptions = {

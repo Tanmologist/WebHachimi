@@ -1,3 +1,7 @@
+// Owns fixed-step gameplay simulation: entity lifetime, built-in behavior,
+// collision response, combat state, snapshots, and editor/game mode switching.
+// Rendering and input binding live in their own modules; this class keeps the
+// authoritative mutable runtime state for a single scene.
 import type {
   CombatEvent,
   Entity,
@@ -17,13 +21,14 @@ import {
   combatWindowIsOpen,
 } from "../combat/actions";
 import type { CombatActionId, CombatActionRuntime } from "../combat/types";
+import { boundsFor, overlaps } from "../project/entityGeometry";
 import { normalizeEntityDefaults, normalizeSceneSettings, normalizeSceneTimeScale } from "../project/schema";
 import { entityFollowsParentTransform } from "../project/entityHierarchy";
 import { stripVolatileRuntimeState } from "../project/runtimeState";
 import { cloneJson, makeId } from "../shared/types";
 import type { EntityId, RuntimeMode, SnapshotId } from "../shared/types";
 import type { Rect, SceneId, Vec2 } from "../shared/types";
-import { boundsFor, collectDynamicPairs, entityIntersectsRect, overlaps } from "./collision";
+import { collectDynamicPairs, entityIntersectsRect } from "./collision";
 import { RuntimeEntityStore } from "./entityStore";
 import { FixedStepClock } from "./time";
 
@@ -83,6 +88,7 @@ export class RuntimeWorld {
   screenShakeStartedMs = 0;
   screenShakeUntilMs = 0;
   screenShakeMagnitude = 0;
+  private hasParentTransformFollowers = false;
 
   constructor(options: RuntimeWorldOptions) {
     const settings = normalizeSceneSettings(cloneJson(options.scene.settings));
@@ -100,6 +106,7 @@ export class RuntimeWorld {
       this.normalizeRuntime(copy);
       if (copy.persistent) this.entityStore.setPersistent(copy);
     });
+    this.refreshParentTransformFollowerFlag();
     this.defaultInputActorId = defaultInputActorIdFor(this.entityStore.persistentValues());
   }
 
@@ -140,7 +147,7 @@ export class RuntimeWorld {
 
   stepFixed(): void {
     const dt = this.clock.fixedStepMs / 1000;
-    const beforeMovementPositions = this.captureEntityPositions();
+    const beforeMovementPositions = this.hasParentTransformFollowers ? this.captureEntityPositions() : undefined;
     this.beginFixedStep();
     const all = this.allEntities();
     for (const entity of all) {
@@ -156,10 +163,10 @@ export class RuntimeWorld {
       entity.transform.position.x += entity.body.velocity.x * dt;
       entity.transform.position.y += entity.body.velocity.y * dt;
     }
-    this.propagateChildTranslationFromParentDelta(beforeMovementPositions);
-    const beforeCollisionPositions = this.captureEntityPositions();
+    if (beforeMovementPositions) this.propagateChildTranslationFromParentDelta(beforeMovementPositions);
+    const beforeCollisionPositions = this.hasParentTransformFollowers ? this.captureEntityPositions() : undefined;
     this.resolveSimpleCollisions();
-    this.propagateChildTranslationFromParentDelta(beforeCollisionPositions);
+    if (beforeCollisionPositions) this.propagateChildTranslationFromParentDelta(beforeCollisionPositions);
     this.resolveCombatEvents();
     this.updateCombatPresentationStates();
     this.cleanupExpiredTransients();
@@ -181,6 +188,7 @@ export class RuntimeWorld {
     };
     this.normalizeRuntime(transient);
     this.entityStore.setTransient(transient);
+    this.refreshParentTransformFollowerFlag();
     return id;
   }
 
@@ -336,6 +344,7 @@ export class RuntimeWorld {
     this.combatEvents = cloneJson(snapshot.combatEvents || []);
     this.entityStore.replaceTransients(Object.values(cloneJson(snapshot.transientEntities)));
     this.transientEntities.forEach((entity) => this.normalizeRuntime(entity));
+    this.refreshParentTransformFollowerFlag();
     for (const state of Object.values(snapshot.entities)) {
       const entity = this.entityStore.byId(state.entityId);
       if (!entity) continue;
@@ -489,26 +498,25 @@ export class RuntimeWorld {
     const dtMs = this.clock.fixedStepMs;
     const timeMs = this.clock.timeMs;
     for (const entity of this.allEntities()) {
-      const flags = this.runtimeFlags(entity);
-      flags.wasGrounded = flags.grounded;
-      flags.grounded = false;
-      flags.ageMs += dtMs;
+      const runtime = entity.runtime || {};
+      const wasGrounded = Boolean(runtime.grounded);
       const dodgeShadowExpired = timeMs >= (entity.runtime?.dodgeShadowUntilMs ?? Number.POSITIVE_INFINITY);
       const perfectDodgeExpired = timeMs >= (entity.runtime?.perfectDodgeUntilMs ?? Number.POSITIVE_INFINITY);
-      entity.runtime = {
-        ...entity.runtime,
-        ageMs: flags.ageMs,
-        lifetimeMs: flags.lifetimeMs,
-        wasGrounded: flags.wasGrounded,
-        grounded: false,
-        patrolDirection: flags.patrolDirection,
-        dodgeShadowRect: dodgeShadowExpired ? undefined : entity.runtime?.dodgeShadowRect,
-        dodgeShadowUntilMs: dodgeShadowExpired ? undefined : entity.runtime?.dodgeShadowUntilMs,
-        dodgeShadowUntilFrame: dodgeShadowExpired ? undefined : entity.runtime?.dodgeShadowUntilFrame,
-        dodgeShadowHitIds: dodgeShadowExpired ? undefined : entity.runtime?.dodgeShadowHitIds,
-        perfectDodgeUntilMs: perfectDodgeExpired ? undefined : entity.runtime?.perfectDodgeUntilMs,
-        perfectDodgeUntilFrame: perfectDodgeExpired ? undefined : entity.runtime?.perfectDodgeUntilFrame,
-      };
+      runtime.ageMs = (runtime.ageMs ?? 0) + dtMs;
+      runtime.wasGrounded = wasGrounded;
+      runtime.grounded = false;
+      runtime.patrolDirection = runtime.patrolDirection === -1 ? -1 : 1;
+      if (dodgeShadowExpired) {
+        runtime.dodgeShadowRect = undefined;
+        runtime.dodgeShadowUntilMs = undefined;
+        runtime.dodgeShadowUntilFrame = undefined;
+        runtime.dodgeShadowHitIds = undefined;
+      }
+      if (perfectDodgeExpired) {
+        runtime.perfectDodgeUntilMs = undefined;
+        runtime.perfectDodgeUntilFrame = undefined;
+      }
+      entity.runtime = runtime;
     }
   }
 
@@ -1929,6 +1937,13 @@ export class RuntimeWorld {
 
   private invalidateEntityListCache(): void {
     this.entityStore.invalidate();
+    this.refreshParentTransformFollowerFlag();
+  }
+
+  private refreshParentTransformFollowerFlag(): void {
+    this.hasParentTransformFollowers = this.entityStore
+      .all()
+      .some((entity) => Boolean(entity.parentId && entityFollowsParentTransform(entity)));
   }
 }
 

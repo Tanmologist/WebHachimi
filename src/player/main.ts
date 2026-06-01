@@ -3,7 +3,8 @@
 // PlayerRenderer; simulation stays fixed-step inside RuntimeWorld.
 import "./styles.css";
 import { normalizeProjectDefaults, type Project } from "../project/schema";
-import { consumeEditorHandoff, createEditorHandoff, restoreWorldFromHandoff, saveEditorHandoff } from "../project/editorHandoff";
+import { consumeEditorHandoff, saveEditorHandoff } from "../project/editorHandoff";
+import { createEditorHandoff, restoreWorldFromHandoff } from "../runtime/editorHandoff";
 import { currentProjectEndpoint, currentProjectProfile, loadProject } from "../project/persistence";
 import { RuntimeWorld } from "../runtime/world";
 import { createStarterProject } from "../samples/starterProject";

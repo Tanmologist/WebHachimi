@@ -1,7 +1,10 @@
+// Owns the Pixi editor canvas: viewport transforms, picking, handles, overlays,
+// resource previews, and render-performance stats. Runtime simulation stays in
+// RuntimeWorld; this module focuses on low-allocation drawing and editor hit tests.
 import { Application, Assets, Container, Graphics, Rectangle, Sprite, Text, Texture } from "pixi.js";
 import { combatAttackRectForEntity } from "../combat/actions";
 import type { BrushContext, Entity, Resource, SceneSettings, Task } from "../project/schema";
-import { boundsFor } from "../runtime/collision";
+import { boundsFor } from "../project/entityGeometry";
 import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
 import { entityUsesAnchorLink } from "../project/entityHierarchy";
@@ -16,7 +19,7 @@ import {
   toLocal,
   type CanvasTargetPart,
 } from "./geometryMath";
-import { isVisualResource, resourceEffectFrameAtTime, resourceFrameAtTime, type ResourceFrameRect } from "./resourceAnimation";
+import { isVisualResource, resourceEffectFrameAtTime, resourceFrameAtTime, type ResourceFrameRect } from "../project/resourceAnimation";
 import {
   centerViewportOnScreenPoint,
   centerViewportOnWorldPoint,
@@ -84,6 +87,8 @@ export type RendererStats = {
   graphicsCreated: number;
   spritesReused: number;
   spritesCreated: number;
+  textsReused: number;
+  textsCreated: number;
   visibleObjects: number;
 };
 
@@ -112,6 +117,14 @@ type BodyMaterialStyle = {
   selectedTextureAlpha: number;
 };
 
+type RendererTextStyle = {
+  align?: "center" | "left" | "right";
+  fill: string;
+  fontFamily: string;
+  fontSize: number;
+  fontWeight: "700" | "800" | "900";
+};
+
 const emptyResources: Record<string, Resource> = {};
 
 export class V2Renderer {
@@ -123,6 +136,7 @@ export class V2Renderer {
   private readonly imageTextureLoads = new Map<string, Promise<void>>();
   private readonly graphicsPool: Graphics[] = [];
   private readonly spritePool: Sprite[] = [];
+  private readonly textPool: Text[] = [];
   private lastRender?: { world: RuntimeWorld; options: RenderOverlayOptions };
   private stats: RendererStats = {
     renderedAt: 0,
@@ -131,6 +145,8 @@ export class V2Renderer {
     graphicsCreated: 0,
     spritesReused: 0,
     spritesCreated: 0,
+    textsReused: 0,
+    textsCreated: 0,
     visibleObjects: 0,
   };
   private viewport = defaultViewportState();
@@ -193,6 +209,8 @@ export class V2Renderer {
     this.stats.graphicsCreated = 0;
     this.stats.spritesReused = 0;
     this.stats.spritesCreated = 0;
+    this.stats.textsReused = 0;
+    this.stats.textsCreated = 0;
     const showBodyMaterial = options.showBodyMaterial !== false;
     const showEditorDecorations = options.showEditorDecorations !== false;
     const selectedIds = options.selectedIds?.length
@@ -370,6 +388,9 @@ export class V2Renderer {
         resetDisplayObject(child);
         child.anchor.set(0, 0);
         this.spritePool.push(child);
+      } else if (child instanceof Text) {
+        resetText(child);
+        this.textPool.push(child);
       } else {
         child.destroy({ children: true });
       }
@@ -400,9 +421,23 @@ export class V2Renderer {
     return new Sprite(texture);
   }
 
+  private takeText(text: string, style: RendererTextStyle): Text {
+    const item = this.textPool.pop();
+    if (item) {
+      this.stats.textsReused += 1;
+      resetText(item);
+      item.text = text;
+      item.style = style;
+      return item;
+    }
+    this.stats.textsCreated += 1;
+    return new Text({ text, style });
+  }
+
   private destroyPools(): void {
     for (const item of this.graphicsPool.splice(0)) item.destroy();
     for (const item of this.spritePool.splice(0)) item.destroy();
+    for (const item of this.textPool.splice(0)) item.destroy();
   }
 
   private drawGrid(sceneSettings?: Pick<SceneSettings, "width" | "height">): void {
@@ -475,28 +510,22 @@ export class V2Renderer {
     line.stroke();
     this.overlayLayer.addChild(line);
 
-    const label = new Text({
-      text: `${formatMeters(meters)} · 1m = ${WORLD_UNITS_PER_METER}单位`,
-      style: {
-        fill: "#ece9df",
-        fontFamily: "Inter, Microsoft YaHei, sans-serif",
-        fontSize: 12 / zoom,
-        fontWeight: "800",
-      },
+    const label = this.takeText(`${formatMeters(meters)} · 1m = ${WORLD_UNITS_PER_METER}单位`, {
+      fill: "#ece9df",
+      fontFamily: "Inter, Microsoft YaHei, sans-serif",
+      fontSize: 12 / zoom,
+      fontWeight: "800",
     });
     label.anchor.set(0, 1);
     label.position.set(start.x, start.y - 10 / zoom);
     this.overlayLayer.addChild(label);
 
     if (!sceneSettings) return;
-    const worldSize = new Text({
-      text: `世界 ${formatMeters(sceneSettings.width / WORLD_UNITS_PER_METER)} x ${formatMeters(sceneSettings.height / WORLD_UNITS_PER_METER)}`,
-      style: {
-        fill: "#aeb8b3",
-        fontFamily: "Inter, Microsoft YaHei, sans-serif",
-        fontSize: 11 / zoom,
-        fontWeight: "700",
-      },
+    const worldSize = this.takeText(`世界 ${formatMeters(sceneSettings.width / WORLD_UNITS_PER_METER)} x ${formatMeters(sceneSettings.height / WORLD_UNITS_PER_METER)}`, {
+      fill: "#aeb8b3",
+      fontFamily: "Inter, Microsoft YaHei, sans-serif",
+      fontSize: 11 / zoom,
+      fontWeight: "700",
     });
     worldSize.anchor.set(0, 0);
     const worldSizePoint = screenToWorldPoint(this.viewport, screen, { x: left, y: bottom + 8 });
@@ -792,14 +821,11 @@ export class V2Renderer {
   private drawPresentationLabel(entity: Entity, selected: boolean): void {
     if (!entity.render || entity.render.visible === false) return;
     const geometry = targetGeometry(entity, "presentation");
-    const label = new Text({
-      text: entity.displayName,
-      style: {
-        fill: selected ? "#c9f2e7" : "#ece9df",
-        fontFamily: "Inter, Microsoft YaHei, sans-serif",
-        fontSize: 12,
-        fontWeight: "700",
-      },
+    const label = this.takeText(entity.displayName, {
+      fill: selected ? "#c9f2e7" : "#ece9df",
+      fontFamily: "Inter, Microsoft YaHei, sans-serif",
+      fontSize: 12,
+      fontWeight: "700",
     });
     label.anchor.set(0.5, 0.5);
     label.position.set(geometry.center.x, geometry.center.y);
@@ -809,14 +835,11 @@ export class V2Renderer {
 
   private drawCombatDebugLabel(entity: Entity, text: string): void {
     const geometry = targetGeometry(entity, "presentation");
-    const label = new Text({
-      text,
-      style: {
-        fill: "#fff1a8",
-        fontFamily: "Inter, Microsoft YaHei, sans-serif",
-        fontSize: 12,
-        fontWeight: "800",
-      },
+    const label = this.takeText(text, {
+      fill: "#fff1a8",
+      fontFamily: "Inter, Microsoft YaHei, sans-serif",
+      fontSize: 12,
+      fontWeight: "800",
     });
     label.anchor.set(0.5, 1);
     label.position.set(geometry.center.x, geometry.center.y - geometry.height / 2 - 4);
@@ -842,14 +865,11 @@ export class V2Renderer {
   }
 
   private drawCombatRectLabel(rect: { x: number; y: number; w: number; h: number }, text: string): void {
-    const label = new Text({
-      text,
-      style: {
-        fill: text.startsWith("ACTIVE") ? "#ffd9de" : "#ffe9a9",
-        fontFamily: "Inter, Microsoft YaHei, sans-serif",
-        fontSize: 11,
-        fontWeight: "800",
-      },
+    const label = this.takeText(text, {
+      fill: text.startsWith("ACTIVE") ? "#ffd9de" : "#ffe9a9",
+      fontFamily: "Inter, Microsoft YaHei, sans-serif",
+      fontSize: 11,
+      fontWeight: "800",
     });
     label.anchor.set(0.5, 1);
     label.position.set(rect.x + rect.w / 2, rect.y - 4);
@@ -861,14 +881,11 @@ export class V2Renderer {
     text: string,
     style: { fill: string; background: number; border: number },
   ): void {
-    const label = new Text({
-      text,
-      style: {
-        fill: style.fill,
-        fontFamily: "Inter, Microsoft YaHei, sans-serif",
-        fontSize: 11,
-        fontWeight: "900",
-      },
+    const label = this.takeText(text, {
+      fill: style.fill,
+      fontFamily: "Inter, Microsoft YaHei, sans-serif",
+      fontSize: 11,
+      fontWeight: "900",
     });
     label.anchor.set(0.5, 1);
     label.position.set(point.x, point.y);
@@ -1075,14 +1092,11 @@ export class V2Renderer {
   }
 
   private drawBrushAnnotation(text: string, position: Vec2, color: number, pixel: number, live: boolean): void {
-    const label = new Text({
-      text,
-      style: {
-        fill: live ? "#f6fffb" : "#fff5d8",
-        fontFamily: "Inter, Microsoft YaHei, sans-serif",
-        fontSize: 11,
-        fontWeight: "700",
-      },
+    const label = this.takeText(text, {
+      fill: live ? "#f6fffb" : "#fff5d8",
+      fontFamily: "Inter, Microsoft YaHei, sans-serif",
+      fontSize: 11,
+      fontWeight: "700",
     });
     label.position.set(position.x + 6 * pixel, position.y - 6 * pixel);
     label.scale.set(pixel);
@@ -1673,6 +1687,16 @@ function resetDisplayObject(item: Graphics | Sprite): void {
   item.alpha = 1;
   item.visible = true;
   if (item instanceof Sprite) item.tint = 0xffffff;
+}
+
+function resetText(item: Text): void {
+  item.text = "";
+  item.anchor.set(0, 0);
+  item.position.set(0, 0);
+  item.scale.set(1, 1);
+  item.rotation = 0;
+  item.alpha = 1;
+  item.visible = true;
 }
 
 function parseColor(value: string): number {

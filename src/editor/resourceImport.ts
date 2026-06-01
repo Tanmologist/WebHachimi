@@ -1,5 +1,5 @@
 import type { Resource, SpriteResourceMetadata } from "../project/schema";
-import { buildSequenceSpriteMetadata } from "./resourceAnimation";
+import { buildSequenceSpriteMetadata } from "../project/resourceAnimation";
 
 export type ResourceImportMetadata = {
   displayName: string;

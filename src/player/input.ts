@@ -1,36 +1,19 @@
+// Owns DOM input binding for the packaged player page. Shared input vocabulary
+// and device mapping live in shared/playerInput; this module only wires browser
+// events into RuntimeWorld and cleans those event connections back up.
 import type { RuntimeWorld } from "../runtime/world";
+import {
+  defaultPlayerInputMapper,
+  playerInputKeyForMouseButton,
+  type PlayerInputKey,
+} from "../shared/playerInput";
 
 export type PlayerInputBinding = {
   destroy(): void;
 };
 
-export type PlayerInputKey = "left" | "right" | "jump" | "attack" | "parry" | "dodge";
-
-const keyMap: Record<string, PlayerInputKey | undefined> = {
-  ArrowLeft: "left",
-  a: "left",
-  A: "left",
-  ArrowRight: "right",
-  d: "right",
-  D: "right",
-  ArrowUp: "jump",
-  w: "jump",
-  W: "jump",
-  " ": "jump",
-  j: "attack",
-  J: "attack",
-  k: "parry",
-  K: "parry",
-  Shift: "dodge",
-  l: "dodge",
-  L: "dodge",
-};
-
-export function playerInputKeyForMouseButton(button: number): Extract<PlayerInputKey, "attack" | "parry"> | undefined {
-  if (button === 0) return "attack";
-  if (button === 2) return "parry";
-  return undefined;
-}
+export { playerInputKeyForMouseButton };
+export type { PlayerInputKey };
 
 export function bindPlayerInput(root: HTMLElement, world: RuntimeWorld): PlayerInputBinding {
   const pressedPointers = new Map<number, PlayerInputKey>();
@@ -44,14 +27,14 @@ export function bindPlayerInput(root: HTMLElement, world: RuntimeWorld): PlayerI
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
-    const inputKey = keyMap[event.key];
+    const inputKey = defaultPlayerInputMapper.keyForKeyboardKey(event.key);
     if (!inputKey || isTypingTarget(event.target)) return;
     event.preventDefault();
     setInput(inputKey, true);
   };
 
   const onKeyUp = (event: KeyboardEvent) => {
-    const inputKey = keyMap[event.key];
+    const inputKey = defaultPlayerInputMapper.keyForKeyboardKey(event.key);
     if (!inputKey || isTypingTarget(event.target)) return;
     event.preventDefault();
     setInput(inputKey, false);
@@ -128,12 +111,7 @@ export function bindPlayerInput(root: HTMLElement, world: RuntimeWorld): PlayerI
       cleanup.forEach((dispose) => dispose());
       pressedPointers.clear();
       pressedMouseButtons.clear();
-      setInput("left", false);
-      setInput("right", false);
-      setInput("jump", false);
-      setInput("attack", false);
-      setInput("parry", false);
-      setInput("dodge", false);
+      defaultPlayerInputMapper.allKeys().forEach((key) => setInput(key, false));
     },
   };
 }

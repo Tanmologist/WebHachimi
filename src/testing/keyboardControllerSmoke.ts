@@ -1,5 +1,5 @@
 import { handleEditorKeyDown, handleEditorKeyUp } from "../editor/keyboardController";
-import { playerInputKeyForMouseButton } from "../player/input";
+import { playerInputKeyForMouseButton } from "../shared/playerInput";
 
 type CapturedInput = {
   key: string;
