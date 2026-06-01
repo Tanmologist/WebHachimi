@@ -1,5 +1,5 @@
 import { cloneJson, type SceneId } from "../shared/types";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { renderWorldManagerPopoverHtml } from "../editor/worldManagerViews";
 import {
   planAddWorldTransaction,

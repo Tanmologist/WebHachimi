@@ -1,7 +1,7 @@
 import { createIntentPlan } from "../ai/intentPlanner";
 import { createTask } from "../project/tasks";
 import { RuntimeWorld } from "../runtime/world";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { renderSceneTreeHtml } from "../editor/sceneTreeController";
 import type { Entity } from "../project/schema";
 import type { EntityId } from "../shared/types";

@@ -1,7 +1,7 @@
 import type { CombatEvent, Entity, Project, Scene } from "../project/schema";
 import type { EntityId } from "../shared/types";
 import { RuntimeWorld } from "../runtime/world";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { InteractiveTestRunner } from "./interactiveTestRunner";
 import { actorScopedKey } from "./timingSweep";
 

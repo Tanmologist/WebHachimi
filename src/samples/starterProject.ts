@@ -1,10 +1,19 @@
+// Owns the bundled workshop/sample project used when no saved project exists.
+// Keep this module outside editor/player so concrete example content stays data-like:
+// the editor can load and optimize it, but editor UI code should not own it.
+// Existing repair helpers are compatibility shims for older bundled sample saves.
 import type { Entity, Project, Resource } from "../project/schema";
 import { createEmptyProject } from "../project/schema";
 import { makeId, type EntityId, type ResourceId } from "../shared/types";
 
 type BuiltinBehavior = NonNullable<Entity["behavior"]>["builtin"];
 
-export function createStarterProject(): Project {
+export type StarterProjectOptions = {
+  resourceBasePath?: string;
+};
+
+export function createStarterProject(options: StarterProjectOptions = {}): Project {
+  const resourceBasePath = normalizeResourceBasePath(options.resourceBasePath);
   const created = createEmptyProject("WebHachimi v2 工作坊");
   if (!created.ok) throw new Error(created.error);
 
@@ -322,8 +331,8 @@ export function createStarterProject(): Project {
     attachments: [],
   };
 
-  project.resources[playerParryResourceId] = createParryCounterResource(playerParryResourceId);
-  project.resources[playerAttackResourceId] = createNormalAttackResource(playerAttackResourceId);
+  project.resources[playerParryResourceId] = createParryCounterResource(playerParryResourceId, resourceBasePath);
+  project.resources[playerAttackResourceId] = createNormalAttackResource(playerAttackResourceId, resourceBasePath);
 
   scene.entities[playerId].resources.push(
     makeResourceBinding(playerDeathResourceId, "death", "死亡淡出可视体"),
@@ -341,7 +350,8 @@ export function createStarterProject(): Project {
   return project;
 }
 
-export function repairKnownStarterLabels(project: Project): Project {
+export function repairKnownStarterLabels(project: Project, options: StarterProjectOptions = {}): Project {
+  const resourceBasePath = normalizeResourceBasePath(options.resourceBasePath);
   const scene = project.scenes[project.activeSceneId];
   if (!scene) return project;
 
@@ -422,17 +432,17 @@ export function repairKnownStarterLabels(project: Project): Project {
       }
     });
   });
-  ensureParryCounterResource(project);
-  ensureNormalAttackResource(project);
+  ensureParryCounterResource(project, resourceBasePath);
+  ensureNormalAttackResource(project, resourceBasePath);
 
   return project;
 }
 
-function ensureParryCounterResource(project: Project): void {
+function ensureParryCounterResource(project: Project, resourceBasePath: string): void {
   const resourceId = "res-player-parry-counter-sequence" as ResourceId;
   const existing = project.resources[resourceId];
   if (!existing || existing.type !== "animation" || (existing.attachments?.length ?? 0) < 22) {
-    project.resources[resourceId] = createParryCounterResource(resourceId);
+    project.resources[resourceId] = createParryCounterResource(resourceId, resourceBasePath);
   }
   for (const scene of Object.values(project.scenes)) {
     const player = Object.values(scene.entities).find((entity) => entity.internalName === "Player");
@@ -446,11 +456,11 @@ function ensureParryCounterResource(project: Project): void {
   }
 }
 
-function ensureNormalAttackResource(project: Project): void {
+function ensureNormalAttackResource(project: Project, resourceBasePath: string): void {
   const resourceId = "res-player-normal-attack-sequence" as ResourceId;
   const existing = project.resources[resourceId];
   if (!existing || existing.type !== "animation" || (existing.attachments?.length ?? 0) < 6) {
-    project.resources[resourceId] = createNormalAttackResource(resourceId);
+    project.resources[resourceId] = createNormalAttackResource(resourceId, resourceBasePath);
   }
   for (const scene of Object.values(project.scenes)) {
     const player = Object.values(scene.entities).find((entity) => entity.internalName === "Player");
@@ -757,7 +767,7 @@ function makeResourceBinding(resourceId: ResourceId, slot: string, description: 
   };
 }
 
-function createParryCounterResource(resourceId: ResourceId): Resource {
+function createParryCounterResource(resourceId: ResourceId, resourceBasePath: string): Resource {
   return {
     id: resourceId,
     internalName: "Player_Parry_Counter_Sequence",
@@ -766,16 +776,7 @@ function createParryCounterResource(resourceId: ResourceId): Resource {
     description: "振刀或蓄力转振刀时播放的弹反序列帧动作。",
     aiDescription: "玩家振刀动作序列帧，来自弹反0001.zip。",
     tags: ["player", "combat", "parry", "animation"],
-    attachments: Array.from({ length: 22 }, (_, index) => {
-      const frame = index + 1;
-      const padded = String(frame).padStart(4, "0");
-      return {
-        id: `att-parry-counter-${padded}`,
-        fileName: `parry-counter-alpha-${padded}.png`,
-        mime: "image/png",
-        path: `/games/hachimi-nanbei-lvdong/resources/parry-counter-alpha-${padded}.png`,
-      };
-    }),
+    attachments: sampleSequenceAttachments(resourceBasePath, "att-parry-counter", "parry-counter-alpha", 22),
     sprite: {
       mode: "sequence",
       frameCount: 22,
@@ -785,7 +786,7 @@ function createParryCounterResource(resourceId: ResourceId): Resource {
   };
 }
 
-function createNormalAttackResource(resourceId: ResourceId): Resource {
+function createNormalAttackResource(resourceId: ResourceId, resourceBasePath: string): Resource {
   return {
     id: resourceId,
     internalName: "Player_Normal_Attack_Sequence",
@@ -794,16 +795,7 @@ function createNormalAttackResource(resourceId: ResourceId): Resource {
     description: "玩家普通攻击时播放的 GPT 草稿序列帧动作。",
     aiDescription: "GPT 生成的玩家普通攻击 6 帧透明 PNG 序列。",
     tags: ["player", "combat", "attack", "animation", "gpt-draft"],
-    attachments: Array.from({ length: 6 }, (_, index) => {
-      const frame = index + 1;
-      const padded = String(frame).padStart(4, "0");
-      return {
-        id: `att-player-attack-${padded}`,
-        fileName: `player-attack-alpha-${padded}.png`,
-        mime: "image/png",
-        path: `/games/hachimi-nanbei-lvdong/resources/player-attack-alpha-${padded}.png`,
-      };
-    }),
+    attachments: sampleSequenceAttachments(resourceBasePath, "att-player-attack", "player-attack-alpha", 6),
     sprite: {
       mode: "sequence",
       frameCount: 6,
@@ -811,6 +803,31 @@ function createNormalAttackResource(resourceId: ResourceId): Resource {
       loop: false,
     },
   };
+}
+
+function normalizeResourceBasePath(value: string | undefined): string {
+  const clean = String(value || "").trim().replace(/\/+$/, "");
+  if (!clean || clean.includes("\0")) return "";
+  return clean;
+}
+
+function sampleAssetPath(resourceBasePath: string, fileName: string): string {
+  return resourceBasePath ? `${resourceBasePath}/${fileName}` : fileName;
+}
+
+function sampleSequenceAttachments(resourceBasePath: string, idPrefix: string, filePrefix: string, count: number): Resource["attachments"] {
+  if (!resourceBasePath) return [];
+  return Array.from({ length: count }, (_, index) => {
+    const frame = index + 1;
+    const padded = String(frame).padStart(4, "0");
+    const fileName = `${filePrefix}-${padded}.png`;
+    return {
+      id: `${idPrefix}-${padded}`,
+      fileName,
+      mime: "image/png",
+      path: sampleAssetPath(resourceBasePath, fileName),
+    };
+  });
 }
 
 function isBrokenLabel(value: string): boolean {

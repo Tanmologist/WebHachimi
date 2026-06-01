@@ -3,7 +3,7 @@ import { AiTaskExecutor } from "../ai/taskExecutor";
 import type { Project } from "../project/schema";
 import { ProjectStore } from "../project/projectStore";
 import { createTask } from "../project/tasks";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { autonomousRoundSummaryFromCycle, latestAutonomyRoundSummaryFromProject } from "../editor/summaryModels";
 
 const store = new ProjectStore(createStarterProject());

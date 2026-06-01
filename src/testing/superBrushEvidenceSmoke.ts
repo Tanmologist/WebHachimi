@@ -1,5 +1,5 @@
 import { AiTaskExecutor } from "../ai/taskExecutor";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { createSuperBrushStroke, createTaskFromSuperBrush, type SuperBrushDraft } from "../editor/superBrush";
 import { ProjectStore } from "../project/projectStore";
 import type { Entity, Project, Rect } from "../project/schema";

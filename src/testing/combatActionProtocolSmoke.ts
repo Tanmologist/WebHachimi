@@ -1,7 +1,7 @@
 import { combatActionDefForEntity, combatAttackRectForEntity, combatPhaseDurationMs } from "../combat/actions";
 import { planMovedAttackMovementOffsets, planMovedAttackTouchOffsets } from "../combat/hitboxEdit";
 import type { CombatEvent, Entity, Project, Scene } from "../project/schema";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { RuntimeWorld } from "../runtime/world";
 
 const project = createStarterProject();

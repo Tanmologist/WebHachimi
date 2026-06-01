@@ -1,7 +1,7 @@
 import type { CombatEvent, Entity, Project, Scene } from "../project/schema";
 import type { EntityId, Rect } from "../shared/types";
 import { RuntimeWorld } from "../runtime/world";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { buildProjectForSave } from "../editor/persistenceController";
 import { isGameplayDebugEntity } from "../project/entityVisibility";
 import { InteractiveTestRunner } from "./interactiveTestRunner";

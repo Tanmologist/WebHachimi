@@ -48,7 +48,7 @@ import {
   type MultiCanvasDragState,
   type ParentChildMoveState,
 } from "./canvasTransform";
-import { createStarterProject, repairKnownStarterLabels } from "./starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { geometryAabb, targetGeometry, V2Renderer, type CanvasTargetPart, type ShapeDraftPreview, type TransformHandle } from "./renderer";
 import type { ViewportScreenRect } from "./viewportMath";
 import { enterGameMode, leaveGameMode, mountEditorShell } from "./editorShell";
@@ -199,7 +199,7 @@ const root = rootMaybe;
 
 const handoff = consumeEditorHandoff();
 const initialProject = await loadInitialProject(handoff?.project);
-const project = normalizeProjectDefaults(repairKnownStarterLabels(initialProject.project));
+const project = normalizeProjectDefaults(initialProject.project);
 const store = new ProjectStore(project);
 let aiExecutorInstance: AiTaskExecutor | undefined;
 
@@ -402,10 +402,15 @@ async function loadInitialProject(handoffProject?: Project): Promise<{ project: 
   }
 
   return {
-    project: createStarterProject(),
+    project: createStarterProject(starterProjectOptionsFromPage()),
     notice: "未找到磁盘项目，已创建初始项目，自动保存已开启",
     loadedFromDisk: false,
   };
+}
+
+function starterProjectOptionsFromPage(): { resourceBasePath?: string } {
+  const resourceBasePath = document.querySelector<HTMLMetaElement>('meta[name="webhachimi-sample-resource-base"]')?.content.trim();
+  return resourceBasePath ? { resourceBasePath } : {};
 }
 
 async function getAiExecutor(): Promise<AiTaskExecutor> {
@@ -2843,7 +2848,7 @@ async function autoLoadProjectFromDisk(): Promise<void> {
 }
 
 function applyLoadedProjectFromDisk(projectFromDisk: Project, saveStatus: string, nextNotice: string): void {
-  const normalizedProject = normalizeProjectDefaults(repairKnownStarterLabels(projectFromDisk));
+  const normalizedProject = normalizeProjectDefaults(projectFromDisk);
   store.replace(normalizedProject);
   saveProjectLocallyFromEditor(normalizedProject);
   rebuildWorldFromStore();

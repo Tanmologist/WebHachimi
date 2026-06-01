@@ -1,5 +1,5 @@
 import { buildProjectForSave } from "../editor/persistenceController";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { cloneJson } from "../shared/types";
 
 const project = createStarterProject();

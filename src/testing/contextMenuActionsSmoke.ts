@@ -14,7 +14,7 @@ import {
   type ContextMenuTransactionPlan,
 } from "../editor/contextMenuActions";
 import { renderSceneTreeHtml } from "../editor/sceneTreeController";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 
 run("duplicate creates a persistent copy in the same folder and supports undo redo", () => {
   const store = new ProjectStore(createStarterProject());

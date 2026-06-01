@@ -49,8 +49,8 @@ Legacy direct file mode can still open `index.html`, with browser-local persiste
 
 ## Project Boundary
 
-- The generic editor shell lives at `apps/webhachimi/editor.html` and uses `/api/webhachimi/project`.
-- The Hachimi Nanbei Lvdong game lives under `games/hachimi-nanbei-lvdong/` and uses `/api/games/hachimi-nanbei-lvdong/project`.
+- The generic editor shell lives at `apps/webhachimi/editor.html` and declares `/api/webhachimi/project` through page metadata.
+- Concrete game entries declare their own project endpoint through page metadata; the Hachimi Nanbei Lvdong package lives under `games/hachimi-nanbei-lvdong/` and uses `/api/games/hachimi-nanbei-lvdong/project`.
 - The legacy `/api/v2/project` route remains as a compatibility alias for the Hachimi game project.
 - The Hachimi seed project lives in `games/hachimi-nanbei-lvdong/project.json`; runtime saves go to ignored `games/hachimi-nanbei-lvdong/local/project.json`.
 - Hachimi game resources live in `games/hachimi-nanbei-lvdong/resources/`.
@@ -110,6 +110,7 @@ The smoke suite currently includes:
 ```powershell
 npm run smoke:persistence
 npm run smoke:persistence-api
+npm run smoke:samples
 npm run smoke:folder-move
 npm run smoke:task-workflow
 npm run smoke:super-brush-evidence
@@ -137,7 +138,7 @@ npm run smoke:sweep
 npm run smoke:autonomy
 ```
 
-These cover the current rebuild spine: editor persistence and persistence API assembly, user transaction slices, canvas viewport and transform math, context menu/resource workflows, collision geometry, presentation labels, floating panel docking constraints, runtime-only template visibility, a conservative runtime performance budget, gameplay workshops, timing sweep expectations, and autonomous task/test records.
+These cover the current rebuild spine: editor persistence and persistence API assembly, sample project boundaries, user transaction slices, canvas viewport and transform math, context menu/resource workflows, collision geometry, presentation labels, floating panel docking constraints, runtime-only template visibility, a conservative runtime performance budget, gameplay workshops, timing sweep expectations, and autonomous task/test records.
 
 ## Toolchain
 
@@ -149,9 +150,10 @@ Development and editor tooling may use Node.js, TypeScript, downloaded assets, a
 
 ## Important Files
 
-- `apps/webhachimi/editor.html`, `src/editor/*`: generic editor shell.
+- `apps/webhachimi/editor.html`, `src/editor/*`: generic editor shell. It should not hard-code concrete game packages.
 - `games/hachimi-nanbei-lvdong/index.html`, `src/player/*`: concrete game player entry.
 - `games/hachimi-nanbei-lvdong/editor.html`: concrete game editor entry.
+- `src/samples/*`: bundled fallback/sample project data used by editor/player when no saved project exists.
 - `src/project/*`: project schema, transactions, diffs, persistence, tasks, and maintenance.
 - `src/runtime/*`: runtime world, collision, and timing.
 - `src/ai/*`: rule-based task planning and execution loop.

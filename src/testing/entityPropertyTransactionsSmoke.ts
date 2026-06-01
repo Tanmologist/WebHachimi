@@ -1,6 +1,6 @@
 import type { ProjectPatch, Scene } from "../project/schema";
 import { ProjectStore, type CreateTransactionInput } from "../project/projectStore";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import {
   planCombatLevelParamTransaction,
   planEntityBodyModeTransaction,

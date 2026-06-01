@@ -1,6 +1,6 @@
 import type { Task } from "../project/schema";
 import { createTask } from "../project/tasks";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { renderTaskPanelHtml } from "../editor/taskPanelViews";
 import type { EntityId, TaskId } from "../shared/types";
 

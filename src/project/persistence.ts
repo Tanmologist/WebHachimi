@@ -1,3 +1,6 @@
+// Owns browser-side project persistence routing and localStorage fallback.
+// Profile-specific project endpoints come from the hosting page metadata so
+// editor/player code can stay generic while concrete game packages supply data.
 import type { Project } from "./schema";
 
 export type LoadProjectResult = {
@@ -16,10 +19,9 @@ export type SaveProjectResult = {
 
 type ApiObject = Record<string, unknown>;
 const DEFAULT_PROJECT_PROFILE = "webhachimi";
-const PROJECT_ENDPOINT_BY_PROFILE: Record<string, string> = {
-  webhachimi: "/api/webhachimi/project",
-  "hachimi-nanbei-lvdong": "/api/games/hachimi-nanbei-lvdong/project",
-};
+const DEFAULT_PROJECT_ENDPOINT = "/api/webhachimi/project";
+const PROJECT_PROFILE_META_NAME = "webhachimi-project";
+const PROJECT_ENDPOINT_META_NAME = "webhachimi-project-endpoint";
 const LEGACY_V2_PROJECT_ENDPOINT = "/api/v2/project";
 
 export class ProjectPersistenceError extends Error {
@@ -35,16 +37,26 @@ export function currentProjectProfile(): string {
   const queryProfile = new URL(href).searchParams.get("project");
   const metaProfile = typeof document === "undefined"
     ? undefined
-    : document.querySelector<HTMLMetaElement>('meta[name="webhachimi-project"]')?.content;
+    : document.querySelector<HTMLMetaElement>(`meta[name="${PROJECT_PROFILE_META_NAME}"]`)?.content;
   return normalizeProjectProfile(queryProfile || metaProfile || DEFAULT_PROJECT_PROFILE);
 }
 
+export function currentProjectEndpoint(): string | undefined {
+  if (typeof window === "undefined") return undefined;
+  const href = window.location?.href || "http://localhost/";
+  const queryEndpoint = new URL(href).searchParams.get("projectEndpoint");
+  const metaEndpoint = typeof document === "undefined"
+    ? undefined
+    : document.querySelector<HTMLMetaElement>(`meta[name="${PROJECT_ENDPOINT_META_NAME}"]`)?.content;
+  return normalizeProjectEndpoint(queryEndpoint || metaEndpoint || "");
+}
+
 export function defaultProjectEndpoint(profile = currentProjectProfile()): string {
-  return PROJECT_ENDPOINT_BY_PROFILE[normalizeProjectProfile(profile)] || PROJECT_ENDPOINT_BY_PROFILE[DEFAULT_PROJECT_PROFILE];
+  return currentProjectEndpoint() || projectEndpointForProfile(profile);
 }
 
 export function projectLocalStorageKey(endpoint = defaultProjectEndpoint()): string {
-  return `webhachimi:project:${profileForEndpoint(endpoint) || currentProjectProfile()}`;
+  return `webhachimi:project:${profileForEndpoint(endpoint) || endpointStorageKey(endpoint)}`;
 }
 
 export async function loadProject(endpoint = defaultProjectEndpoint()): Promise<LoadProjectResult> {
@@ -218,7 +230,38 @@ function normalizeProjectProfile(value: string): string {
   return DEFAULT_PROJECT_PROFILE;
 }
 
+function normalizeProjectEndpoint(value: string): string | undefined {
+  const clean = value.trim();
+  if (!clean) return undefined;
+  if (clean.startsWith("/") && !clean.startsWith("//") && !clean.includes("\0")) return clean;
+  return undefined;
+}
+
+function projectEndpointForProfile(profile: string): string {
+  const normalized = normalizeProjectProfile(profile);
+  if (normalized === DEFAULT_PROJECT_PROFILE) return DEFAULT_PROJECT_ENDPOINT;
+  return `/api/projects/${encodeURIComponent(normalized)}/project`;
+}
+
 function profileForEndpoint(endpoint: string): string | undefined {
-  if (endpoint === LEGACY_V2_PROJECT_ENDPOINT) return "hachimi-nanbei-lvdong";
-  return Object.entries(PROJECT_ENDPOINT_BY_PROFILE).find(([, value]) => value === endpoint)?.[0];
+  if (endpoint === LEGACY_V2_PROJECT_ENDPOINT) return currentProjectProfile();
+  if (endpoint === DEFAULT_PROJECT_ENDPOINT) return DEFAULT_PROJECT_PROFILE;
+  const match =
+    /^\/api\/projects\/([a-z0-9_-]+)\/project$/.exec(endpoint) ||
+    /^\/api\/games\/([a-z0-9_-]+)\/project$/.exec(endpoint) ||
+    /^\/api\/([a-z0-9_-]+)\/project$/.exec(endpoint);
+  return match ? normalizeProjectProfile(decodeURIComponent(match[1])) : undefined;
+}
+
+function endpointStorageKey(endpoint: string): string {
+  return `endpoint-${endpointHash(endpoint)}`;
+}
+
+function endpointHash(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
 }

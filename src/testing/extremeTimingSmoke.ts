@@ -1,7 +1,7 @@
 import type { Entity, Project, RuntimeSnapshot, Scene } from "../project/schema";
 import type { EntityId } from "../shared/types";
 import { RuntimeWorld } from "../runtime/world";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { SimulationTestRunner } from "./simulationTestRunner";
 import {
   planScriptedReaction,

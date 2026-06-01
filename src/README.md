@@ -9,10 +9,14 @@
 - `project`: persisted project state, patches, transactions, rollback.
 - `editor`: desktop-only editing concepts such as selection and super brush.
 - `ai`: task execution and simulation testing orchestration.
+- `samples`: bundled example projects and compatibility repairs; editor/player may
+  use them only as fallback data.
 - `shared`: IDs, geometry, result helpers, and cross-layer types.
 
 The editor and AI layers must not mutate runtime or project state directly.
 Persistent changes go through transactions.
+Concrete games supply their own HTML entry metadata, project JSON, and assets;
+`src/editor` should not hard-code a game package.
 
 ## Super Brush Task Flow
 

@@ -4,9 +4,9 @@
 import "./styles.css";
 import { normalizeProjectDefaults, type Project } from "../project/schema";
 import { consumeEditorHandoff, createEditorHandoff, restoreWorldFromHandoff, saveEditorHandoff } from "../project/editorHandoff";
-import { currentProjectProfile, loadProject } from "../project/persistence";
+import { currentProjectEndpoint, currentProjectProfile, loadProject } from "../project/persistence";
 import { RuntimeWorld } from "../runtime/world";
-import { createStarterProject, repairKnownStarterLabels } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { bindPlayerInput } from "./input";
 import { PlayerRenderer } from "./renderer";
 
@@ -47,7 +47,7 @@ void boot().catch(showBootError);
 async function boot(): Promise<void> {
   setBootStatus("正在加载世界...");
   const resumeHandoff = consumeEditorHandoff();
-  const project = normalizeProjectDefaults(repairKnownStarterLabels(resumeHandoff?.project || (await loadPlayableProject())));
+  const project = normalizeProjectDefaults(resumeHandoff?.project || (await loadPlayableProject()));
   const scene = project.scenes[project.activeSceneId];
   if (!scene) throw new Error(`active scene not found: ${project.activeSceneId}`);
 
@@ -114,7 +114,12 @@ function bindEditorHandoffKey(project: Project, world: RuntimeWorld): () => void
 }
 
 async function loadPlayableProject(): Promise<Project> {
-  return embeddedProject() || (await savedProjectWithTimeout(savedProjectTimeoutMs)) || createStarterProject();
+  return embeddedProject() || (await savedProjectWithTimeout(savedProjectTimeoutMs)) || createStarterProject(starterProjectOptionsFromPage());
+}
+
+function starterProjectOptionsFromPage(): { resourceBasePath?: string } {
+  const resourceBasePath = document.querySelector<HTMLMetaElement>('meta[name="webhachimi-sample-resource-base"]')?.content.trim();
+  return resourceBasePath ? { resourceBasePath } : {};
 }
 
 function embeddedProject(): Project | null {
@@ -132,7 +137,13 @@ function embeddedProject(): Project | null {
 function editorHandoffUrl(): string {
   const editorUrl = document.querySelector<HTMLMetaElement>('meta[name="webhachimi-editor-url"]')?.content || "/apps/webhachimi/editor.html";
   const separator = editorUrl.includes("?") ? "&" : "?";
-  return `${editorUrl}${separator}from=player-freeze&project=${encodeURIComponent(currentProjectProfile())}`;
+  const params = new URLSearchParams({
+    from: "player-freeze",
+    project: currentProjectProfile(),
+  });
+  const projectEndpoint = currentProjectEndpoint();
+  if (projectEndpoint) params.set("projectEndpoint", projectEndpoint);
+  return `${editorUrl}${separator}${params.toString()}`;
 }
 
 async function savedProject(): Promise<Project | null> {

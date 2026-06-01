@@ -1,7 +1,7 @@
 import { AiTaskExecutor } from "../ai/taskExecutor";
 import { ProjectStore } from "../project/projectStore";
 import { planScriptedReaction } from "./timingSweep";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 
 const project = createStarterProject();
 const store = new ProjectStore(project);

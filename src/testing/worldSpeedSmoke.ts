@@ -1,4 +1,4 @@
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { formatWorldSpeed, parseWorldSpeedInput } from "../editor/worldSpeedControl";
 import { normalizeProjectDefaults, normalizeSceneTimeScale } from "../project/schema";
 import { RuntimeWorld } from "../runtime/world";

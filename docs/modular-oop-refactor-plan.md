@@ -24,6 +24,7 @@ src/
   editor/
   player/
   ai/
+  samples/
   testing/
 ```
 
@@ -129,6 +130,17 @@ src/
 - `AutonomyLoop`
 - `VerificationPlanner`
 
+### samples
+
+职责：
+- 内置示例、工作坊项目、演示资源绑定和兼容修复。
+- 只提供 project 数据或 project 数据修复函数，不依赖 editor/player UI。
+- editor/player 可以把 samples 作为空项目 fallback，但不能把样例结构当成通用工具能力。
+
+候选对象：
+- `StarterProjectFactory`
+- `SampleProjectRepair`
+
 ### testing
 
 职责：
@@ -178,6 +190,15 @@ testing
 - `editor` 可以组合所有模块。
 - `player` 不依赖 editor。
 - `ai` 通过 command/transaction 入口修改项目。
+- `samples` 只依赖 project/shared；不要反向依赖 editor/player/runtime。
+
+## 编辑器与具体游戏的边界
+
+- 通用编辑器入口通过页面 metadata 选择 project profile 和 persistence endpoint。
+- 具体游戏包负责提供 HTML entry、project JSON、资源目录和 API route。
+- `src/editor` 不应硬编码具体游戏 slug、资源路径或示例实体名。
+- `src/player` 不应依赖 editor UI；冻结进编辑器只通过 handoff 数据和 entry URL。
+- 样例项目放在 `src/samples`，它是 fallback 数据，不是编辑器能力本身。
 
 ## 数据与对象
 
@@ -272,6 +293,31 @@ export type EditorCommandPlan = {
 残余风险：
 - `RuntimeWorld.entities` 和 `RuntimeWorld.transientEntities` 当前仍是公开可变 `Map`，用于兼容现有调用方。
 - 后续应收窄为 `ReadonlyMap` 或统一 mutator，避免外部直接 `.set()` / `.delete()` 绕过 `RuntimeEntityStore` 的缓存失效。
+
+### 已落地：拆出 samples 与 profile metadata
+
+目标文件：
+- `src/samples/starterProject.ts`
+- `src/editor/main.ts`
+- `src/player/main.ts`
+- `src/project/persistence.ts`
+- `apps/webhachimi/editor.html`
+- `games/hachimi-nanbei-lvdong/index.html`
+- `games/hachimi-nanbei-lvdong/editor.html`
+
+验收：
+- editor/player 不再从 `src/editor/starterProject.ts` 导入样例内容。
+- project persistence 不再硬编码具体游戏 slug 到 endpoint map。
+- 页面通过 `webhachimi-project` 和 `webhachimi-project-endpoint` 声明当前 project profile。
+- starter/sample 兼容修复不再进入 editor/player 的通用项目加载路径。
+- sample 资源路径由 app entry 注入 `webhachimi-sample-resource-base`，sample factory 不硬编码具体游戏包。
+- 未知显式 endpoint 使用独立 localStorage 桶，避免不同项目 profile 串存档。
+- player 冻结进入 editor 时保留 `projectEndpoint` query，避免回到错误保存目标。
+- generic editor 没有 sample resource base 时不挂外部动画附件，避免 fallback sample 产生无效资源请求。
+- `npm run typecheck`
+- `npm run smoke:persistence-api`
+- `npm run smoke:persistence`
+- `npm run smoke:samples`
 
 ### 待执行：抽 transform transaction planner
 

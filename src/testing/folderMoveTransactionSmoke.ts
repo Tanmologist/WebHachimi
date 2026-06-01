@@ -2,7 +2,7 @@ import type { Project } from "../project/schema";
 import { ProjectStore } from "../project/projectStore";
 import { cloneJson, type EntityId } from "../shared/types";
 import { planPersistentFolderMoveTransaction } from "../editor/folderMoveTransaction";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 
 const store = new ProjectStore(createStarterProject());
 const project = store.project;

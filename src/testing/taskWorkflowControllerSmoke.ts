@@ -2,7 +2,7 @@ import { AiTaskExecutor } from "../ai/taskExecutor";
 import type { Project, ProjectPatch, Task } from "../project/schema";
 import { ProjectStore } from "../project/projectStore";
 import type { EntityId, Result, TaskId } from "../shared/types";
-import { createStarterProject } from "../editor/starterProject";
+import { createStarterProject } from "../samples/starterProject";
 import { createTaskWorkflowController } from "../editor/taskWorkflowController";
 import { planUpsertTaskTransaction } from "../editor/taskTransactions";
 import {
