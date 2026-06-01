@@ -66,6 +66,7 @@ npm run typecheck
 npm run build
 npm run build:editor
 npm run build:game
+npm run export:game
 npm run verify
 ```
 
@@ -76,6 +77,30 @@ dist-v2/
 ```
 
 `dist-v2/` is a build artifact and is not source.
+
+## Static Game Export
+
+To export the concrete game as a standalone static web package:
+
+```powershell
+npm run export:game
+```
+
+The exporter builds the game, writes `exports/hachimi-nanbei-lvdong/index.html`,
+copies bundled JS/CSS to `assets/`, copies referenced project resources to
+`resources/`, and embeds the project JSON directly into the page. The exported
+folder can be served by any static web server and does not require the local
+project API.
+
+To verify the export path with a fresh game build:
+
+```powershell
+npm run smoke:export-game
+```
+
+This smoke check inspects the generated package and boots it in Chromium from a
+temporary static server to catch missing files, local API requests, and player
+startup errors.
 
 For a production preview after building, run:
 
@@ -105,7 +130,8 @@ To run only smoke checks:
 npm run smoke
 ```
 
-The smoke suite currently includes:
+The smoke suite currently includes these fast checks. The export smoke is
+available separately because it performs its own game build.
 
 ```powershell
 npm run smoke:persistence

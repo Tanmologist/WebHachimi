@@ -2,6 +2,7 @@ node_modules/
 dist-v2/
 /dist-webhachimi/
 /dist-hachimi-nanbei-lvdong/
+/exports/
 /resources/
 logs/
 data/local/

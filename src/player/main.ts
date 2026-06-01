@@ -46,7 +46,7 @@ void boot().catch(showBootError);
 
 async function boot(): Promise<void> {
   setBootStatus("正在加载世界...");
-  const resumeHandoff = consumeEditorHandoff();
+  const resumeHandoff = editorHandoffDisabled() ? null : consumeEditorHandoff();
   const project = normalizeProjectDefaults(resumeHandoff?.project || (await loadPlayableProject()));
   const scene = project.scenes[project.activeSceneId];
   if (!scene) throw new Error(`active scene not found: ${project.activeSceneId}`);
@@ -101,6 +101,7 @@ function query<T extends HTMLElement>(selector: string): T {
 }
 
 function bindEditorHandoffKey(project: Project, world: RuntimeWorld): () => void {
+  if (editorHandoffDisabled()) return () => {};
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key.toLowerCase() !== "z" || isTypingTarget(event.target)) return;
     event.preventDefault();
@@ -111,6 +112,11 @@ function bindEditorHandoffKey(project: Project, world: RuntimeWorld): () => void
   };
   window.addEventListener("keydown", onKeyDown, { passive: false });
   return () => window.removeEventListener("keydown", onKeyDown);
+}
+
+function editorHandoffDisabled(): boolean {
+  const value = document.querySelector<HTMLMetaElement>('meta[name="webhachimi-disable-editor-handoff"]')?.content.trim().toLowerCase();
+  return value === "1" || value === "true";
 }
 
 async function loadPlayableProject(): Promise<Project> {
