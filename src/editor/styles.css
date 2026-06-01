@@ -194,6 +194,10 @@ input {
   border: 0;
   outline: 0;
   background: transparent;
+  cursor: default;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .window-controls {

@@ -124,7 +124,7 @@ export function mountEditorShell(root: HTMLElement): void {
         </nav>
         <div class="command-center" role="search">
           <span class="command-center__mark"></span>
-          <input type="text" value="WebHachimi：世界工作台预览" aria-label="命令中心" />
+          <input type="text" data-role="command-center" value="正在载入项目" aria-label="当前工作台状态" readonly />
         </div>
         <div class="window-controls" aria-hidden="true">
           <span></span>
@@ -195,7 +195,7 @@ export function mountEditorShell(root: HTMLElement): void {
         </div>
         <div class="stage-toolbar">
           <button class="tab-action" type="button" data-action="fit-world">适配世界</button>
-          <div class="zoom-control">100%</div>
+          <div class="zoom-control" data-role="zoom-control">100%</div>
         </div>
       </main>
 

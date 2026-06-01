@@ -2,7 +2,7 @@
   "kind": "webhachimi-v2-project",
   "version": 1,
   "meta": {
-    "name": "???????",
+    "name": "Hachimi Nanbei Lvdong",
     "createdAt": "2026-04-26T14:21:40.430Z",
     "updatedAt": "2026-04-28T14:30:39.600Z"
   },
@@ -184,8 +184,8 @@
             {
               "resourceId": "res-player-normal-attack-sequence",
               "slot": "attack",
-              "description": "??????",
-              "aiDescription": "??????",
+              "description": "普通攻击动作",
+              "aiDescription": "玩家普通攻击序列",
               "localOffset": {
                 "x": 0,
                 "y": 0
@@ -199,8 +199,8 @@
             {
               "resourceId": "res-player-parry-counter-sequence",
               "slot": "parry",
-              "description": "??????",
-              "aiDescription": "??????",
+              "description": "振刀弹反动作",
+              "aiDescription": "玩家振刀弹反序列",
               "localOffset": {
                 "x": 0,
                 "y": 0
@@ -1486,7 +1486,7 @@
         "ent-cc0-girl-sprite-demo": {
           "id": "ent-cc0-girl-sprite-demo",
           "internalName": "cc0_girl_sprite_demo",
-          "displayName": "CC0 ??????",
+          "displayName": "CC0 女孩精灵演示",
           "kind": "entity",
           "persistent": true,
           "transform": {
@@ -1566,8 +1566,8 @@
             }
           ],
           "tags": [
-            "??",
-            "??????"
+            "角色",
+            "精灵动画"
           ]
         }
       },
@@ -1712,13 +1712,13 @@
     "res-cc0-girl-sprite-sheet": {
       "id": "res-cc0-girl-sprite-sheet",
       "internalName": "cc0_girl_sprite_sheet",
-      "displayName": "CC0 4x4 ????",
+      "displayName": "CC0 4x4 女孩精灵",
       "type": "animation",
       "description": "OpenGameArt CC0 Girl RPG Sprite Sheet demo; original PNG is preserved and frames are metadata slices.",
       "tags": [
-        "???",
-        "???",
-        "16??"
+        "角色",
+        "动画",
+        "16帧"
       ],
       "attachments": [
         {
@@ -1744,10 +1744,10 @@
     "res-player-parry-counter-sequence": {
       "id": "res-player-parry-counter-sequence",
       "internalName": "Player_Parry_Counter_Sequence",
-      "displayName": "??????",
+      "displayName": "振刀弹反动作",
       "type": "animation",
-      "description": "????????????????????",
-      "aiDescription": "??????????????0001.zip?",
+      "description": "振刀或蓄力转振刀时播放的弹反序列帧动作。",
+      "aiDescription": "玩家振刀动作序列帧，来自弹反0001.zip。",
       "tags": [
         "player",
         "combat",
@@ -1898,10 +1898,10 @@
     "res-player-normal-attack-sequence": {
       "id": "res-player-normal-attack-sequence",
       "internalName": "Player_Normal_Attack_Sequence",
-      "displayName": "??????",
+      "displayName": "普通攻击动作",
       "type": "animation",
-      "description": "?????????? GPT ????????",
-      "aiDescription": "GPT ????????? 6 ??? PNG ???",
+      "description": "玩家普通攻击时播放的 GPT 草稿序列帧动作。",
+      "aiDescription": "GPT 生成的玩家普通攻击 6 帧透明 PNG 序列。",
       "tags": [
         "player",
         "combat",

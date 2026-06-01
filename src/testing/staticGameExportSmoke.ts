@@ -31,6 +31,7 @@ async function main(): Promise<void> {
   assert(!editorHtml.includes("../../assets/"), "exported editor should use root-level asset paths");
 
   const project = embeddedProjectFromHtml(html);
+  assert(!String(project.meta?.name || "").includes("???"), "exported project title should be readable");
   assertRuntimeOnlyProject(project);
 
   const attachmentPaths = Object.values(project.resources || {})
@@ -137,6 +138,14 @@ async function assertBrowserCanBoot(rootDir: string): Promise<void> {
       await page.waitForURL(`${baseUrl}/editor.html?**`, { timeout: 15000 });
       const editorCanvas = page.locator("#v2-root canvas");
       await editorCanvas.waitFor({ state: "visible", timeout: 15000 });
+      const commandCenter = page.locator('[data-role="command-center"]');
+      const commandCenterValue = await commandCenter.inputValue({ timeout: 5000 });
+      assert(commandCenterValue.includes("·"), `editor command center should show live project status, got ${commandCenterValue}`);
+      assert(!commandCenterValue.includes("正在载入项目"), "editor command center should not keep the static loading placeholder");
+      assert(!commandCenterValue.includes("???"), `editor command center should not expose corrupted project labels, got ${commandCenterValue}`);
+      assert(await commandCenter.getAttribute("readonly") !== null, "editor command center should be readonly status, not fake input");
+      const zoomText = await page.locator('[data-role="zoom-control"]').textContent({ timeout: 5000 });
+      assert(Boolean(zoomText?.includes("%")), `editor zoom control should show live zoom, got ${zoomText}`);
       const modeBefore = await page.locator('[data-role="mode"]').textContent({ timeout: 5000 });
       await page.keyboard.press("KeyZ");
       await page.waitForTimeout(300);

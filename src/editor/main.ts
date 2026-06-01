@@ -319,11 +319,13 @@ const inspectorNode = query<HTMLElement>('[data-role="inspector"]');
 const resourcesNode = query<HTMLElement>('[data-role="resources"]');
 const resourceLibraryNode = query<HTMLElement>('[data-role="resource-library"]');
 const outputNode = query<HTMLElement>('[data-role="output"]');
+const commandCenterInput = query<HTMLInputElement>('[data-role="command-center"]');
 const modeNode = query<HTMLElement>('[data-role="mode"]');
 const saveStatusNode = query<HTMLElement>('[data-role="save-status"]');
 const pointerNode = query<HTMLElement>('[data-role="pointer"]');
 const noticeNode = query<HTMLElement>('[data-role="notice"]');
 const frameNode = query<HTMLElement>('[data-role="frame"]');
+const zoomControlNode = query<HTMLElement>('[data-role="zoom-control"]');
 const worldSpeedControl = query<HTMLElement>('[data-role="world-speed-control"]');
 const worldSpeedRange = query<HTMLInputElement>('[data-role="world-speed-range"]');
 const worldSpeedInput = query<HTMLInputElement>('[data-role="world-speed-input"]');
@@ -3108,6 +3110,7 @@ function renderUi(projectSnapshot?: Project): void {
   renderOutput();
   renderWorldManager(snapshotProject);
   renderWorldSpeedControl();
+  renderWorkbenchChrome(snapshotProject);
   renderFrame();
   renderContextMenu();
   renderMinimizedTray();
@@ -3162,6 +3165,30 @@ function renderUi(projectSnapshot?: Project): void {
   root.dataset.outputPanel = panelLayout.panelState.output;
   root.dataset.activeSurface = activeSurface;
   applyPanelLayoutIfNeeded();
+}
+
+function renderWorkbenchChrome(projectSnapshot: Project): void {
+  const activeScene = projectSnapshot.scenes[projectSnapshot.activeSceneId] || scene;
+  const modeLabel = world.mode === "game" ? "运行" : "冻结";
+  const selectionLabel = commandCenterSelectionLabel();
+  const projectLabel = projectSnapshot.meta.name || "WebHachimi";
+  const sceneLabel = activeScene?.name || activeScene?.id || "未选择世界";
+  const zoomLabel = `${Math.round(renderer.viewportState().zoom * 100)}%`;
+  const commandText = `${projectLabel} · ${sceneLabel} · ${modeLabel} · ${selectionLabel}`;
+  const signature = `${commandText}|${notice}|${zoomLabel}`;
+  if (uiRenderState.chrome === signature) return;
+  uiRenderState.chrome = signature;
+  commandCenterInput.value = commandText;
+  commandCenterInput.title = notice ? `${commandText}\n${notice}` : commandText;
+  zoomControlNode.textContent = zoomLabel;
+}
+
+function commandCenterSelectionLabel(): string {
+  if (selectionArea) return "区域选择";
+  const selectedEntityIds = currentSelectedEntityIds();
+  if (selectedEntityIds.length > 1) return `${selectedEntityIds.length} 个对象`;
+  const selected = selectedEntityIds[0] ? editableEntity(selectedEntityIds[0]) : selectedEntity();
+  return selected ? selected.displayName : "无选择";
 }
 
 function applyPanelLayoutIfNeeded(): void {

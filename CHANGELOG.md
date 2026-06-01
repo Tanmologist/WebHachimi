@@ -22,3 +22,7 @@ public release note.
   quick speed settings.
 - Player and editor reconnect now support a full `Alt+R` hard reload so the
   frontend runtime and project API/bootstrap data restart after code changes.
+- Editor command center now reflects live project, world, mode, selection, and
+  zoom state instead of a static placeholder input.
+- Cleaned corrupted placeholder labels from the Hachimi sample project metadata
+  and animation resources.
