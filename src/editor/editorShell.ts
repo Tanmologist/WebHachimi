@@ -117,6 +117,7 @@ export function mountEditorShell(root: HTMLElement): void {
       <header class="workbench-titlebar">
         <nav class="workbench-menu" aria-label="主菜单">
           <button type="button" data-action="save-project">保存</button>
+          <button type="button" data-action="hard-reconnect" title="Alt+R 完全重新加载前端和项目数据">重新连接</button>
           <button type="button" data-action="toggle-run">运行</button>
           <button type="button" data-world-manager-toggle aria-expanded="false">世界</button>
           <button type="button" data-window-launcher aria-expanded="false">窗口</button>

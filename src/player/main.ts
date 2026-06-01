@@ -4,15 +4,16 @@
 import "./styles.css";
 import { embeddedProjectFromDocument } from "../project/embeddedProject";
 import { consumeEditorHandoff, saveEditorHandoff } from "../project/editorHandoff";
-import { currentProjectEndpoint, currentProjectProfile, loadProject } from "../project/persistence";
+import { currentProjectEndpoint, currentProjectProfile, loadProject, loadProjectFromDisk } from "../project/persistence";
 import { normalizeProjectDefaults, type Project } from "../project/schema";
 import { createEditorHandoff, restoreWorldFromHandoff } from "../runtime/editorHandoff";
+import { consumeHardReconnectRequest, hardReconnectCurrentPage, isHardReconnectShortcut } from "../runtime/hardReconnect";
 import { RuntimeWorld } from "../runtime/world";
 import { createStarterProject } from "../samples/starterProject";
 import { bindPlayerInput } from "./input";
 import { PlayerRenderer } from "./renderer";
 
-type ProjectSource = "auto" | "embedded" | "saved";
+type ProjectSource = "auto" | "backend" | "embedded" | "saved";
 
 const rootElement = document.querySelector<HTMLElement>("#player-root");
 if (!rootElement) throw new Error("missing #player-root");
@@ -28,7 +29,7 @@ root.innerHTML = `
   <aside class="player-toolbar" aria-label="player tools">
     <button class="player-tool-button is-primary" data-player-action="edit" type="button" title="按 Z 进入编辑器">编辑 Z</button>
     <button class="player-tool-button" data-player-action="reset-scene" type="button">重置场景</button>
-    <button class="player-tool-button" data-player-action="reconnect" type="button">重新连接</button>
+    <button class="player-tool-button" data-player-action="reconnect" type="button" title="Alt+R 完全重新加载前端和项目数据">重新连接 Alt+R</button>
     <details class="player-settings">
       <summary>快速设置</summary>
       <div class="player-settings-panel" aria-label="world speed">
@@ -61,8 +62,12 @@ const stage = query<HTMLElement>('[data-role="stage"]');
 const bootStatus = query<HTMLElement>('[data-role="boot-status"]');
 const toolStatus = query<HTMLElement>('[data-role="tool-status"]');
 const savedProjectTimeoutMs = 3000;
+const hardReconnectOnBoot = consumeHardReconnectRequest();
 
-void boot().catch(showBootError);
+void boot({
+  projectSource: hardReconnectOnBoot ? "backend" : "auto",
+  notice: hardReconnectOnBoot ? "已完全重新连接，前端和项目数据已重新加载" : undefined,
+}).catch(showBootError);
 
 async function boot(options: { projectSource?: ProjectSource; notice?: string } = {}): Promise<void> {
   cleanup();
@@ -150,7 +155,7 @@ function bindPlayerTools(project: Project, world: RuntimeWorld): () => void {
 
   if (reconnectButton) {
     const onReconnectClick = () => {
-      void boot({ projectSource: "saved", notice: "已重新连接项目数据" }).catch(showBootError);
+      hardReconnectCurrentPage({ beforeReconnect: cleanup, setStatus: setToolStatus });
     };
     reconnectButton.addEventListener("click", onReconnectClick);
     cleanupHandlers.push(() => reconnectButton.removeEventListener("click", onReconnectClick));
@@ -170,6 +175,12 @@ function bindPlayerTools(project: Project, world: RuntimeWorld): () => void {
   syncSpeedButtons(world.timeScale);
 
   const onKeyDown = (event: KeyboardEvent) => {
+    if (isHardReconnectShortcut(event) && !isTypingTarget(event.target)) {
+      event.preventDefault();
+      if (event.repeat) return;
+      hardReconnectCurrentPage({ beforeReconnect: cleanup, setStatus: setToolStatus });
+      return;
+    }
     if (event.key.toLowerCase() !== "z" || isTypingTarget(event.target) || editDisabled) return;
     event.preventDefault();
     if (event.repeat) return;
@@ -205,6 +216,15 @@ function editorHandoffDisabled(): boolean {
 
 async function loadPlayableProject(source: ProjectSource): Promise<Project> {
   if (source === "embedded") return embeddedProject() || createStarterProject(starterProjectOptionsFromPage());
+  if (source === "backend") {
+    if (staticExportMode()) return embeddedProject() || createStarterProject(starterProjectOptionsFromPage());
+    return (
+      (await diskProjectWithTimeout(savedProjectTimeoutMs)) ||
+      (await savedProjectWithTimeout(savedProjectTimeoutMs)) ||
+      embeddedProject() ||
+      createStarterProject(starterProjectOptionsFromPage())
+    );
+  }
   if (source === "saved") return (await savedProjectWithTimeout(savedProjectTimeoutMs)) || embeddedProject() || createStarterProject(starterProjectOptionsFromPage());
   return embeddedProject() || (await savedProjectWithTimeout(savedProjectTimeoutMs)) || createStarterProject(starterProjectOptionsFromPage());
 }
@@ -216,6 +236,10 @@ function starterProjectOptionsFromPage(): { resourceBasePath?: string } {
 
 function embeddedProject(): Project | null {
   return embeddedProjectFromDocument();
+}
+
+function staticExportMode(): boolean {
+  return Boolean(document.querySelector<HTMLMetaElement>('meta[name="webhachimi-static-export"]')?.content.trim());
 }
 
 function editorHandoffUrl(): string {
@@ -239,13 +263,30 @@ async function savedProject(): Promise<Project | null> {
   }
 }
 
+async function diskProject(): Promise<Project | null> {
+  try {
+    const result = await loadProjectFromDisk();
+    return result.project;
+  } catch {
+    return null;
+  }
+}
+
 async function savedProjectWithTimeout(timeoutMs: number): Promise<Project | null> {
+  return projectWithTimeout(savedProject(), timeoutMs);
+}
+
+async function diskProjectWithTimeout(timeoutMs: number): Promise<Project | null> {
+  return projectWithTimeout(diskProject(), timeoutMs);
+}
+
+async function projectWithTimeout(projectPromise: Promise<Project | null>, timeoutMs: number): Promise<Project | null> {
   let timeoutId = 0;
   const timeout = new Promise<null>((resolve) => {
     timeoutId = window.setTimeout(() => resolve(null), timeoutMs);
   });
   try {
-    return await Promise.race([savedProject(), timeout]);
+    return await Promise.race([projectPromise, timeout]);
   } finally {
     window.clearTimeout(timeoutId);
   }

@@ -20,3 +20,5 @@ public release note.
 - Static export now includes both player and editor pages, keeps `Z` handoff
   enabled, and adds player toolbar controls for edit, reset, reconnect, and
   quick speed settings.
+- Player and editor reconnect now support a full `Alt+R` hard reload so the
+  frontend runtime and project API/bootstrap data restart after code changes.

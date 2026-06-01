@@ -128,6 +128,9 @@ async function assertBrowserCanBoot(rootDir: string): Promise<void> {
       await resetButton.waitFor({ state: "visible", timeout: 5000 });
       const reconnectButton = page.locator('[data-player-action="reconnect"]');
       await reconnectButton.waitFor({ state: "visible", timeout: 5000 });
+      await reconnectButton.click();
+      await page.waitForFunction(() => document.querySelector('[data-role="tool-status"]')?.textContent?.includes("已完全重新连接"));
+      await page.locator(".player-canvas").waitFor({ state: "visible", timeout: 15000 });
       await resetButton.click();
       await page.locator(".player-canvas").waitFor({ state: "visible", timeout: 15000 });
       await page.keyboard.press("KeyZ");
@@ -139,6 +142,11 @@ async function assertBrowserCanBoot(rootDir: string): Promise<void> {
       await page.waitForTimeout(300);
       const modeAfter = await page.locator('[data-role="mode"]').textContent({ timeout: 5000 });
       assert(modeBefore !== modeAfter, `editor Z should toggle runtime mode, before=${modeBefore}, after=${modeAfter}`);
+      await page.keyboard.down("Alt");
+      await page.keyboard.press("KeyR");
+      await page.keyboard.up("Alt");
+      await page.locator("#v2-root canvas").waitFor({ state: "visible", timeout: 15000 });
+      await page.waitForFunction(() => document.querySelector('[data-role="notice"]')?.textContent?.includes("已完全重新连接"));
 
       assert(apiRequests.length === 0, `exported game should not request local APIs: ${apiRequests.join(", ")}`);
       assert(failedRequests.length === 0, `exported game should not have failed requests: ${failedRequests.join(", ")}`);

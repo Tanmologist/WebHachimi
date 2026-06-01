@@ -30,6 +30,7 @@ import {
 } from "./canvasGuidePanel";
 import { embeddedProjectFromDocument } from "../project/embeddedProject";
 import { RuntimeWorld } from "../runtime/world";
+import { consumeHardReconnectRequest, hardReconnectCurrentPage, isHardReconnectShortcut } from "../runtime/hardReconnect";
 import { cloneJson, makeId, type EntityId, type Rect, type ResourceId, type Result, type SceneId, type Transform2D, type Vec2 } from "../shared/types";
 import type { Resource, ResourceBinding, TargetRef, Task } from "../project/schema";
 import {
@@ -199,6 +200,7 @@ if (!rootMaybe) throw new Error("missing #v2-root");
 const root = rootMaybe;
 
 const handoff = consumeEditorHandoff();
+const hardReconnectOnBoot = consumeHardReconnectRequest();
 const initialProject = await loadInitialProject(handoff?.project);
 const project = normalizeProjectDefaults(initialProject.project);
 const store = new ProjectStore(project);
@@ -374,9 +376,17 @@ const taskWorkflow = createTaskWorkflowController({
 await renderer.init({ host: stageHost });
 
 bindUi();
+const hardReconnectBootNotice = hardReconnectOnBoot ? notice : "";
 focusSelectedOrFitWorld("initial", { render: false, zoom: 1 });
+if (hardReconnectBootNotice) notice = hardReconnectBootNotice;
 renderUi();
-window.requestAnimationFrame(() => focusSelectedOrFitWorld("initial", { zoom: 1 }));
+window.requestAnimationFrame(() => {
+  focusSelectedOrFitWorld("initial", { zoom: 1 });
+  if (hardReconnectBootNotice) {
+    notice = hardReconnectBootNotice;
+    renderUi();
+  }
+});
 loop(lastTime);
 const PROJECT_MAINTENANCE_INTERVAL_MS = 10 * 60 * 1000;
 window.setInterval(runScheduledProjectMaintenance, PROJECT_MAINTENANCE_INTERVAL_MS);
@@ -399,9 +409,20 @@ async function loadInitialProject(handoffProject?: Project): Promise<{ project: 
   if (staticExportMode() && embeddedProject) {
     return {
       project: embeddedProject,
-      notice: "已载入静态演示项目，本地浏览器会保存后续编辑",
+      notice: hardReconnectOnBoot ? "已完全重新连接，静态演示项目已重新加载" : "已载入静态演示项目，本地浏览器会保存后续编辑",
       loadedFromDisk: false,
     };
+  }
+
+  if (hardReconnectOnBoot) {
+    const result = await forceLoadProjectFromDiskForEditor({ writeLocal: true });
+    if (result.project) {
+      return {
+        project: result.project,
+        notice: `${result.notice} 已完成完全重新连接`,
+        loadedFromDisk: true,
+      };
+    }
   }
 
   const result = await loadProjectForEditor();
@@ -496,6 +517,9 @@ function bindUi(): void {
     button.addEventListener("click", () => {
       void saveCurrentProject();
     });
+  });
+  root.querySelectorAll('[data-action="hard-reconnect"]').forEach((button) => {
+    button.addEventListener("click", hardReconnectEditor);
   });
   root.querySelectorAll('[data-action="reload-project"]').forEach((button) => button.addEventListener("click", refreshProjectFromDisk));
   root.querySelectorAll('[data-action="force-reload-project"]').forEach((button) => {
@@ -2622,6 +2646,13 @@ function applyCreatedEntity(entity: Entity, diffSummary: string): void {
 }
 
 function onKeyDown(event: KeyboardEvent): void {
+  if (isHardReconnectShortcut(event) && !isTypingTarget(event.target)) {
+    event.preventDefault();
+    if (event.repeat) return;
+    hardReconnectEditor();
+    return;
+  }
+
   const isShortcut = (event.ctrlKey || event.metaKey) && !event.altKey && !isTypingTarget(event.target);
   if (isShortcut) {
     const key = event.key.toLowerCase();
@@ -2931,6 +2962,20 @@ function invalidateUiRenderCache(): void {
 
 function saveDirtyProjectLocallyNow(): void {
   autoSave.saveDirtyLocallyNow();
+}
+
+function hardReconnectEditor(): void {
+  hardReconnectCurrentPage({
+    beforeReconnect: () => {
+      releaseGameplayInputs();
+      saveDirtyProjectLocallyNow();
+    },
+    setStatus(message) {
+      notice = message;
+      autoSave.setStatus(message);
+      renderUi();
+    },
+  });
 }
 
 function resetTaskUiEvidence(): void {

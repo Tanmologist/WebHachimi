@@ -27,8 +27,10 @@ the same export path that maintainers can run locally:
 
 The demo includes a static player and a static editor entry. Press `Z` in the
 player to freeze into the editor, then press `Z` in the editor to toggle the
-runtime preview. It proves that a WebHachimi project can be exported into a
-standalone web package without the local project API.
+runtime preview. Press `Alt+R` or the reconnect button to hard-reload the
+current entry and rebuild the frontend/project bootstrap. It proves that a
+WebHachimi project can be exported into a standalone web package without the
+local project API.
 
 ## Project Snapshot
 
@@ -151,7 +153,8 @@ npm run smoke:export-game
 
 This smoke check inspects the generated package, boots it in Chromium, verifies
 the player toolbar, and confirms `Z` can hand off to the static editor and toggle
-the editor runtime preview.
+the editor runtime preview. It also checks the hard reconnect shortcut used when
+the frontend and project bootstrap need a clean restart after code changes.
 
 The Pages workflow uses the same exporter through:
 
