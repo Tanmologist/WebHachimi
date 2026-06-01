@@ -24,6 +24,7 @@ import { cloneJson, makeId } from "../shared/types";
 import type { EntityId, RuntimeMode, SnapshotId } from "../shared/types";
 import type { Rect, SceneId, Vec2 } from "../shared/types";
 import { boundsFor, collectDynamicPairs, entityIntersectsRect, overlaps } from "./collision";
+import { RuntimeEntityStore } from "./entityStore";
 import { FixedStepClock } from "./time";
 
 export type RuntimeWorldOptions = {
@@ -71,9 +72,9 @@ export class RuntimeWorld {
   readonly gravity: Vec2;
   timeScale: number;
   mode: RuntimeMode = "editorFrozen";
-  entities = new Map<string, Entity>();
-  transientEntities = new Map<string, Entity>();
-  private entityListCache?: Entity[];
+  private readonly entityStore = new RuntimeEntityStore();
+  readonly entities = this.entityStore.persistent;
+  readonly transientEntities = this.entityStore.transient;
   private readonly defaultInputActorId?: EntityId;
   input: Record<string, boolean> = {};
   actorInput: Record<string, Record<string, boolean>> = {};
@@ -97,9 +98,9 @@ export class RuntimeWorld {
       stripVolatileRuntimeState(copy);
       normalizeEntityDefaults(copy);
       this.normalizeRuntime(copy);
-      if (copy.persistent) this.entities.set(copy.id, copy);
+      if (copy.persistent) this.entityStore.setPersistent(copy);
     });
-    this.defaultInputActorId = defaultInputActorIdFor(this.entities.values());
+    this.defaultInputActorId = defaultInputActorIdFor(this.entityStore.persistentValues());
   }
 
   setMode(mode: RuntimeMode): RuntimeSnapshot | undefined {
@@ -168,7 +169,7 @@ export class RuntimeWorld {
     const transient = cloneJson(entity);
     normalizeEntityDefaults(transient);
     let id = transient.id;
-    if (this.entities.has(id) || this.transientEntities.has(id)) {
+    if (this.entityStore.has(id)) {
       id = makeId<"EntityId">("transient") as EntityId;
       transient.id = id;
     }
@@ -179,8 +180,7 @@ export class RuntimeWorld {
       lifetimeMs: lifetimeMs ?? transient.runtime?.lifetimeMs ?? numberParam(transient, "lifetimeMs") ?? numberParam(transient, "ttlMs"),
     };
     this.normalizeRuntime(transient);
-    this.transientEntities.set(id, transient);
-    this.invalidateEntityListCache();
+    this.entityStore.setTransient(transient);
     return id;
   }
 
@@ -334,11 +334,10 @@ export class RuntimeWorld {
     this.input = cloneJson(snapshot.input);
     this.actorInput = actorInputFromFlatInput(this.input);
     this.combatEvents = cloneJson(snapshot.combatEvents || []);
-    this.transientEntities = new Map(Object.entries(cloneJson(snapshot.transientEntities)));
-    this.invalidateEntityListCache();
+    this.entityStore.replaceTransients(Object.values(cloneJson(snapshot.transientEntities)));
     this.transientEntities.forEach((entity) => this.normalizeRuntime(entity));
     for (const state of Object.values(snapshot.entities)) {
-      const entity = this.entities.get(state.entityId) || this.transientEntities.get(state.entityId);
+      const entity = this.entityStore.byId(state.entityId);
       if (!entity) continue;
       entity.transform = cloneJson(state.transform);
       if (entity.body) entity.body.velocity = cloneJson(state.velocity);
@@ -450,23 +449,21 @@ export class RuntimeWorld {
       normalizeEntityDefaults(copy);
       this.normalizeRuntime(copy);
       if (!copy.persistent) return;
-      this.entities.set(copy.id, copy);
+      this.entityStore.setPersistent(copy);
       persistentIds.add(copy.id);
     });
     for (const entityId of [...this.entities.keys()]) {
-      if (!persistentIds.has(entityId)) this.entities.delete(entityId);
+      if (!persistentIds.has(entityId)) this.entityStore.deletePersistent(entityId);
     }
     this.invalidateEntityListCache();
   }
 
   entityById(entityId: EntityId | undefined): Entity | undefined {
-    if (!entityId) return undefined;
-    return this.entities.get(entityId) || this.transientEntities.get(entityId);
+    return this.entityStore.byId(entityId);
   }
 
   allEntities(): Entity[] {
-    if (!this.entityListCache) this.entityListCache = [...this.entities.values(), ...this.transientEntities.values()];
-    return this.entityListCache;
+    return this.entityStore.all();
   }
 
   private resolveSimpleCollisions(): void {
@@ -1848,7 +1845,7 @@ export class RuntimeWorld {
       const lifetimeMs = entity.runtime?.lifetimeMs;
       const ageMs = entity.runtime?.ageMs ?? 0;
       if (lifetimeMs !== undefined && ageMs >= lifetimeMs) {
-        this.transientEntities.delete(id);
+        this.entityStore.deleteTransient(id);
         removed = true;
       }
     }
@@ -1931,7 +1928,7 @@ export class RuntimeWorld {
   }
 
   private invalidateEntityListCache(): void {
-    this.entityListCache = undefined;
+    this.entityStore.invalidate();
   }
 }
 

@@ -2,7 +2,7 @@ import type { ColliderComponent, Entity, RenderComponent } from "../project/sche
 import { boundsFor } from "../runtime/collision";
 import type { Transform2D, Vec2, EntityId } from "../shared/types";
 import type { CanvasTargetPart, TransformHandle } from "./renderer";
-import { clamp, computeMultiSelectionBounds, fromLocal, toLocal } from "./renderer";
+import { clamp, computeMultiSelectionBounds, fromLocal, toLocal } from "./geometryMath";
 
 export type Bounds = { center: Vec2; width: number; height: number };
 

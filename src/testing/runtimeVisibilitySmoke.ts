@@ -15,6 +15,8 @@ assert(template, "starter project should keep at least one non-persistent templa
 
 const world = new RuntimeWorld({ scene });
 assert(!world.allEntities().some((entity) => entity.id === template.id), "non-persistent template should not appear before spawn");
+const stableEntityView = world.allEntities();
+assert(world.allEntities() === stableEntityView, "runtime entity view should reuse the merged cache until invalidated");
 
 const treeHtml = renderSceneTreeHtml(scene, [...world.entities.values()], "", "body", project.resources);
 assert(!treeHtml.includes(template.displayName), "non-persistent template should not appear in editor tree HTML");
@@ -22,6 +24,8 @@ assert(treeHtml.includes("↳"), "world tree should expose current presentation 
 
 const spawnedId = world.spawnTransient(template, 100);
 assert(world.allEntities().some((entity) => entity.id === spawnedId), "spawned transient should appear in runtime world");
+assert(world.allEntities() !== stableEntityView, "spawning a transient should invalidate the merged runtime entity view");
+assert(world.entityById(spawnedId) === world.transientEntities.get(spawnedId), "by-id lookup should include spawned transient entities");
 assert(![...world.entities.values()].some((entity) => entity.id === spawnedId), "spawned transient should not become editable persistent entity");
 const runtimeTreeHtml = renderSceneTreeHtml(scene, world.allEntities(), "", "body", project.resources);
 assert(runtimeTreeHtml.includes(template.displayName), "spawned runtime objects should appear in world tree for inspection");

@@ -6,6 +6,16 @@ import type { RuntimeWorld } from "../runtime/world";
 import type { Vec2 } from "../shared/types";
 import { entityUsesAnchorLink } from "../project/entityHierarchy";
 import { entityHasVisiblePresentation, isAttackMovementTargetEntity, isAttackTouchEntity, isGameplayDebugEntity } from "../project/entityVisibility";
+import {
+  clamp,
+  computeMultiSelectionBounds,
+  fromLocal,
+  geometryAabb,
+  MIN_SCALE_EPSILON,
+  targetGeometry,
+  toLocal,
+  type CanvasTargetPart,
+} from "./geometryMath";
 import { isVisualResource, resourceEffectFrameAtTime, resourceFrameAtTime, type ResourceFrameRect } from "./resourceAnimation";
 import {
   centerViewportOnScreenPoint,
@@ -20,7 +30,9 @@ import {
   type ViewportState,
 } from "./viewportMath";
 
-export type CanvasTargetPart = "body" | "presentation";
+export { GeometryMath, clamp, computeMultiSelectionBounds, fromLocal, geometryAabb, targetGeometry, toLocal } from "./geometryMath";
+export type { CanvasTargetPart } from "./geometryMath";
+
 export type CanvasSelection = {
   entityId: string;
   part: CanvasTargetPart;
@@ -101,8 +113,6 @@ type BodyMaterialStyle = {
 };
 
 const emptyResources: Record<string, Resource> = {};
-
-const MIN_SCALE_EPSILON = 0.08;
 
 export class V2Renderer {
   readonly app = new Application();
@@ -1393,56 +1403,6 @@ function cross(left: Vec2, right: Vec2): number {
   return left.x * right.y - left.y * right.x;
 }
 
-export function geometryAabb(geometry: { center: Vec2; rotation: number; width: number; height: number }): { x: number; y: number; w: number; h: number } {
-  const hw = geometry.width / 2;
-  const hh = geometry.height / 2;
-  const points = [
-    fromLocal(geometry.center, { x: -hw, y: -hh }, geometry.rotation),
-    fromLocal(geometry.center, { x: hw, y: -hh }, geometry.rotation),
-    fromLocal(geometry.center, { x: hw, y: hh }, geometry.rotation),
-    fromLocal(geometry.center, { x: -hw, y: hh }, geometry.rotation),
-  ];
-  let minX = points[0].x;
-  let maxX = points[0].x;
-  let minY = points[0].y;
-  let maxY = points[0].y;
-  for (let index = 1; index < points.length; index += 1) {
-    const point = points[index];
-    if (point.x < minX) minX = point.x;
-    if (point.x > maxX) maxX = point.x;
-    if (point.y < minY) minY = point.y;
-    if (point.y > maxY) maxY = point.y;
-  }
-  return {
-    x: minX,
-    y: minY,
-    w: maxX - minX,
-    h: maxY - minY,
-  };
-}
-
-export function computeMultiSelectionBounds(entities: Entity[]): { center: Vec2; width: number; height: number } {
-  let minX = Infinity;
-  let minY = Infinity;
-  let maxX = -Infinity;
-  let maxY = -Infinity;
-  for (const entity of entities) {
-    const geom = targetGeometry(entity, "body");
-    const aabb = geometryAabb(geom);
-    if (aabb.x < minX) minX = aabb.x;
-    if (aabb.y < minY) minY = aabb.y;
-    if (aabb.x + aabb.w > maxX) maxX = aabb.x + aabb.w;
-    if (aabb.y + aabb.h > maxY) maxY = aabb.y + aabb.h;
-  }
-  const width = maxX - minX;
-  const height = maxY - minY;
-  return {
-    center: { x: (minX + maxX) / 2, y: (minY + maxY) / 2 },
-    width: Math.max(width, 4),
-    height: Math.max(height, 4),
-  };
-}
-
 export function shouldDrawAnchorLineForEntity(entity: Entity, selectedIds: ReadonlySet<string> | undefined): boolean {
   return Boolean(entityUsesAnchorLink(entity) && selectedIds?.has(entity.id));
 }
@@ -1488,36 +1448,6 @@ function multiSelectionHandles(bounds: { center: Vec2; width: number; height: nu
 
 function rectsIntersect(left: { x: number; y: number; w: number; h: number }, right: { x: number; y: number; w: number; h: number }): boolean {
   return left.x < right.x + right.w && left.x + left.w > right.x && left.y < right.y + right.h && left.y + left.h > right.y;
-}
-
-export function targetGeometry(entity: Entity, part: CanvasTargetPart): { center: Vec2; rotation: number; width: number; height: number } {
-  const transformScale = entity.transform.scale || { x: 1, y: 1 };
-  if (part === "presentation") {
-    const bodySize = entity.collider?.size || { x: 60, y: 60 };
-    const size = entity.render?.size || { x: Math.max(12, bodySize.x), y: Math.max(12, bodySize.y) };
-    const scale = entity.render?.scale || { x: 1, y: 1 };
-    const offset = entity.render?.offset || { x: 0, y: 0 };
-    return {
-      center: {
-        x: entity.transform.position.x + offset.x,
-        y: entity.transform.position.y + offset.y,
-      },
-      rotation: (entity.transform.rotation || 0) + (entity.render?.rotation || 0),
-      width: size.x * Math.max(Math.abs(scale.x), MIN_SCALE_EPSILON) * Math.max(Math.abs(transformScale.x), MIN_SCALE_EPSILON),
-      height: size.y * Math.max(Math.abs(scale.y), MIN_SCALE_EPSILON) * Math.max(Math.abs(transformScale.y), MIN_SCALE_EPSILON),
-    };
-  }
-  const size = entity.collider?.size || entity.render?.size || { x: 60, y: 60 };
-  const offset = entity.collider?.offset || { x: 0, y: 0 };
-  return {
-    center: {
-      x: entity.transform.position.x + offset.x,
-      y: entity.transform.position.y + offset.y,
-    },
-    rotation: (entity.transform.rotation || 0) + (entity.collider?.rotation || 0),
-    width: size.x * Math.max(Math.abs(transformScale.x), MIN_SCALE_EPSILON),
-    height: size.y * Math.max(Math.abs(transformScale.y), MIN_SCALE_EPSILON),
-  };
 }
 
 function drawBodyShape(graphics: Graphics, entity: Entity): void {
@@ -1670,32 +1600,8 @@ function drawLocalLine(
   graphics.lineTo(end.x, end.y);
 }
 
-export function fromLocal(center: Vec2, local: Vec2, rotation: number): Vec2 {
-  const cos = Math.cos(rotation);
-  const sin = Math.sin(rotation);
-  return {
-    x: center.x + local.x * cos - local.y * sin,
-    y: center.y + local.x * sin + local.y * cos,
-  };
-}
-
-export function toLocal(center: Vec2, point: Vec2, rotation: number): Vec2 {
-  const dx = point.x - center.x;
-  const dy = point.y - center.y;
-  const cos = Math.cos(-rotation);
-  const sin = Math.sin(-rotation);
-  return {
-    x: dx * cos - dy * sin,
-    y: dx * sin + dy * cos,
-  };
-}
-
 function midpoint(a: Vec2, b: Vec2): Vec2 {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
-}
-
-export function clamp(value: number, min: number, max: number): number {
-  return Math.min(max, Math.max(min, value));
 }
 
 function gameplayAttackRect(entity: Entity): { x: number; y: number; w: number; h: number } {
