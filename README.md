@@ -1,8 +1,35 @@
 # WebHachimi Engine
 
-WebHachimi is a pure 2D web game editor and runtime workbench. The current main line is a rebuilt v2 TypeScript editor based on the legacy prototype's product direction, not a direct port of its structure.
+[![CI](https://github.com/Tanmologist/WebHachimi/actions/workflows/ci.yml/badge.svg)](https://github.com/Tanmologist/WebHachimi/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.x-blue.svg)](https://www.typescriptlang.org/)
 
-This workspace is the new main project. `E:\Hachimi\WebHachimi` is the reference implementation and idea source. Legacy files are kept here only as comparison material while the editor is rebuilt and expanded.
+WebHachimi is an open-source TypeScript/Pixi browser game editor, 2D runtime,
+static export pipeline, and verification workbench. It is built around a
+transactional project model, fixed-step runtime simulation, scripted smoke
+tests, autonomous verification records, and a concrete game package
+(`Hachimi Nanbei Lvdong`) that exercises the editor/runtime boundary.
+
+The project is early-stage, but actively maintained. Recent work focuses on
+module boundaries, runtime/editor handoff, static game export, automated smoke
+coverage, and making the codebase easier for maintainers and coding agents to
+review safely.
+
+## Project Snapshot
+
+- Public OSS repository maintained by `Tanmologist`.
+- Browser-first 2D game editor and player runtime with Pixi rendering.
+- Concrete playable/exportable game package under `games/hachimi-nanbei-lvdong/`.
+- Static game export path for hosting without the local project API.
+- Transactional project store with undo/redo, dry-run patches, rollback records,
+  task evidence, runtime snapshots, and autonomous verification reports.
+- Full smoke suite covering editor persistence, resource animation/import,
+  collision geometry, runtime visibility, performance budgets, combat action
+  protocol, gameplay workshops, timing sweeps, and autonomy records.
+- MIT licensed.
+
+This workspace is the new main project. Legacy files are kept here only as
+comparison material while the editor is rebuilt and expanded.
 
 ## Recommended Run
 
@@ -116,7 +143,7 @@ http://localhost:5577/apps/webhachimi/editor.html
 
 If `dist-v2/` is missing, `server.js` returns an explicit build-required error for rebuilt editor/game entries instead of silently serving source HTML that cannot load through the production static allowlist.
 
-## Smoke Checks
+## Verification
 
 Run the full smoke suite through the unified verification entry:
 
@@ -183,7 +210,8 @@ Development and editor tooling may use Node.js, TypeScript, downloaded assets, a
 - `src/project/*`: project schema, transactions, diffs, persistence, tasks, and maintenance.
 - `src/runtime/*`: runtime world, collision, and timing.
 - `src/ai/*`: rule-based task planning and execution loop.
-- `src/testing/*`: autonomous testing, timing sweep, telemetry, and smoke checks.
+- `src/verification/*`: autonomous verification, timing sweep, telemetry, and scripted runtime checks.
+- `src/testing/*`: smoke-test entry points and compatibility exports for verification helpers.
 - `index.html`, `styles.css`, `app.js`: legacy single-page editor/runtime kept as rebuild reference.
 - `server.js`: local static server plus legacy and v2 project persistence API.
 - `data/project.json`: legacy starter project data.

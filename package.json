@@ -1,7 +1,17 @@
 {
   "name": "webhachimi",
   "version": "0.1.0",
+  "description": "TypeScript/Pixi browser game editor, 2D runtime, static export pipeline, and verification workbench.",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Tanmologist/WebHachimi.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Tanmologist/WebHachimi/issues"
+  },
+  "homepage": "https://github.com/Tanmologist/WebHachimi#readme",
   "engines": {
     "node": ">=24.12.0 <25",
     "npm": ">=11.6.2 <12"
