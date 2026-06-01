@@ -41,6 +41,10 @@ npm run pages:build
 npm run pages:verify
 ```
 
+On the first repository setup, confirm GitHub Pages is configured to publish
+from GitHub Actions in repository settings. The workflow handles build,
+verification, artifact upload, and deployment after that.
+
 ## Release Checklist
 
 1. Confirm the default branch is green in CI.
